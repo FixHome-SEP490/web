@@ -113,7 +113,7 @@ const emptyText = computed(() => {
 });
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2';
-const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 active:scale-95 inline-flex items-center justify-center shrink-0 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
+const stepButton = `w-10 h-10 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 active:scale-95 inline-flex items-center justify-center shrink-0 transition-[background-color,border-color,color,transform] duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`;
 
 // ── Period Tab sliding indicator animation ──
 const periodListRef = ref<HTMLElement | null>(null);
@@ -174,7 +174,7 @@ onUnmounted(() => {
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <div class="flex items-center justify-between gap-4">
+    <div class="animate-slide-up flex items-center justify-between gap-4">
       <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Thu nhập</h1>
       <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="reload">
         <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
@@ -183,7 +183,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Period: what to total, and which one -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="animate-slide-up flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div
         ref="periodListRef"
         class="relative grid grid-cols-4 gap-1 p-1 bg-ink-100 rounded-full text-sm font-medium sm:w-auto select-none overflow-hidden"
@@ -240,7 +240,7 @@ onUnmounted(() => {
 
     <template v-else>
       <!-- Totals of the period and the wallet in one surface -->
-      <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+      <section class="animate-slide-up-delay-1 bg-white rounded-2xl border border-ink-200 overflow-hidden shadow-2xs">
         <div class="grid grid-cols-2 lg:grid-cols-5 gap-px bg-ink-100" data-testid="earnings-totals">
           <div class="p-5 space-y-1 min-w-0 bg-white">
             <div class="text-sm text-ink-500">Đơn hoàn thành</div>
@@ -259,10 +259,10 @@ onUnmounted(() => {
             <FhSkeleton v-if="totalsLoading || !summary" width="120px" height="28px" />
             <div v-else class="whitespace-nowrap" data-testid="earnings-gross"><FhMoney :amount="summary.totalGross" emphasis /></div>
           </div>
-          <div class="p-5 space-y-1 min-w-0 bg-white">
-            <div class="text-sm text-ink-500">Thực nhận sau phí</div>
+          <div class="p-5 space-y-1 min-w-0 bg-brand-50/40">
+            <div class="text-sm font-medium text-brand-700">Thực nhận sau phí</div>
             <FhSkeleton v-if="totalsLoading || !summary" width="120px" height="28px" />
-            <div v-else class="whitespace-nowrap" data-testid="earnings-net"><FhMoney :amount="summary.totalNet" emphasis /></div>
+            <div v-else class="whitespace-nowrap text-brand-900" data-testid="earnings-net"><FhMoney :amount="summary.totalNet" emphasis /></div>
           </div>
           <div class="p-5 space-y-1 min-w-0 bg-white col-span-2 lg:col-span-1">
             <div class="text-sm text-ink-500">Giá trị đơn</div>
@@ -274,7 +274,7 @@ onUnmounted(() => {
         <!-- Platform fees and withdrawals live in the wallet: one way there -->
         <button
           type="button"
-          class="w-full px-5 py-4 border-t border-ink-100 flex items-center gap-3 text-left hover:bg-ink-25 transition-colors"
+          class="group w-full px-5 py-4 border-t border-ink-100 flex items-center gap-3 text-left hover:bg-ink-25/80 transition-colors cursor-pointer"
           :class="focusRing"
           data-testid="earnings-wallet"
           @click="router.push('/tech/wallet')"
@@ -289,12 +289,12 @@ onUnmounted(() => {
           </span>
           <span class="shrink-0 text-sm font-medium text-brand-600 inline-flex items-center gap-1 whitespace-nowrap">
             Phí và rút tiền
-            <ChevronRight :size="16" aria-hidden="true" />
+            <ChevronRight :size="16" aria-hidden="true" class="transition-transform duration-150 group-hover:translate-x-0.5" />
           </span>
         </button>
       </section>
 
-      <section class="bg-white rounded-2xl border border-ink-200 overflow-hidden">
+      <section class="animate-slide-up-delay-2 bg-white rounded-2xl border border-ink-200 overflow-hidden shadow-2xs">
         <header class="px-5 sm:px-6 py-4 border-b border-ink-100">
           <h2 class="text-lg font-semibold text-ink-900">Đơn đã hoàn thành</h2>
         </header>
@@ -328,10 +328,10 @@ onUnmounted(() => {
           :class="{ 'opacity-60': changingPage }"
           :aria-busy="changingPage"
         >
-          <li v-for="payout in payouts" :key="payout.orderId">
+          <li v-for="(payout, idx) in payouts" :key="payout.orderId" class="animate-slide-up" :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }">
             <button
               type="button"
-              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25 active:scale-[0.99] transition-all duration-150"
+              class="w-full px-5 sm:px-6 py-4 flex items-center gap-3 text-left hover:bg-ink-25/80 active:scale-[0.99] transition-[background-color,transform] duration-150 cursor-pointer"
               :class="focusRing"
               :data-testid="`earning-row-${payout.orderId}`"
               @click="router.push(`/tech/jobs/${payout.orderId}`)"

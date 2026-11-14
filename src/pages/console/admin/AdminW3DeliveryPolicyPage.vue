@@ -157,7 +157,7 @@ async function saveLifecycle() {
     lifecycleFields.feeCeilingVnd = String(saved.state.policy.parameters.feeCeilingVnd);
     lifecycleFields.proposalReviewAfterMinutes = String(saved.state.policy.parameters.proposalReviewAfterMinutes);
     lifecycleFields.courierEvidenceReviewAfterMinutes = String(saved.state.policy.parameters.courierEvidenceReviewAfterMinutes);
-    lifecycleSuccess.value = 'Đã lưu phiên bản DRAFT. Cấu hình chưa được kích hoạt; tài chính vẫn bị khóa.';
+    lifecycleSuccess.value = 'Đã lưu phiên bản DRAFT. Cấu hình chưa được kích hoạt.';
     await refreshLifecycle();
   } catch (reason) { if (actor === actorEpoch) lifecycleFailed(reason); }
   finally { if (actor === actorEpoch) lifecycleSaving.value = false; }
@@ -190,7 +190,7 @@ async function activateLifecycle() {
     const active = await w3DeliveryPolicyApi.activate(version.id, version.state.revision, receipt.id);
     if (actor !== actorEpoch || !canReadPage.value) return;
     lifecycleCurrent.value = { ...lifecycleCurrent.value!, version: active }; lifecycleResult.value = null; lifecycleConfirmation.value = false;
-    lifecycleSuccess.value = 'Đã kích hoạt cấu hình vận hành. Tài chính 70/30 vẫn bị khóa.';
+    lifecycleSuccess.value = 'Đã kích hoạt cấu hình vận hành. Cấu hình không tự thu tiền.';
     await refreshLifecycle();
   } catch (reason) { if (actor === actorEpoch) lifecycleFailed(reason); }
   finally { if (actor === actorEpoch) lifecycleTransitioning.value = false; }
@@ -198,7 +198,7 @@ async function activateLifecycle() {
 async function retireLifecycle() {
   const version = lifecycleVersion.value;
   if (!canUpdateLifecycle.value || lifecycleBusy.value || !version || version.state.status !== 'ACTIVE') return;
-  if (!window.confirm(`Ngừng cấu hình vận hành phiên bản ${version.state.policy.version}? Finance vẫn bị khóa.`)) return;
+  if (!window.confirm(`Ngừng cấu hình vận hành phiên bản ${version.state.policy.version}? Hóa đơn đã chốt không thay đổi.`)) return;
   const actor = actorEpoch; lifecycleTransitioning.value = true; lifecycleError.value = ''; lifecycleSuccess.value = '';
   try {
     const retired = await w3DeliveryPolicyApi.retire(version.id, version.state.revision);
@@ -295,7 +295,7 @@ async function save() {
     if (requestActor !== actorEpoch || !canReadPage.value) return;
     current.value = { ...current.value!, draft: saved };
     for (const key of Object.keys(fields) as (keyof W3PolicyParameters)[]) fields[key] = String(saved.state.policy.parameters[key]);
-    success.value = 'Đã lưu bản nháp. Tài chính vẫn bị khóa.';
+    success.value = 'Đã lưu bản nháp.';
     await loadHistory();
   } catch (reason) { if (requestActor === actorEpoch) failed(reason); }
   finally { if (requestActor === actorEpoch) saving.value = false; }
@@ -349,7 +349,7 @@ onMounted(() => { load(); loadLifecycle(); });
       <template #actions><FhButton data-testid="reload" variant="secondary" :disabled="busy" @click="load">Tải lại</FhButton></template>
     </ConsolePageHeader>
     <section class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800" aria-label="Trạng thái tài chính">
-      <p class="font-semibold">Chỉ bản nháp và xem trước giả định · Tài chính bị khóa</p>
+      <p class="font-semibold">Chỉ bản nháp và xem trước giả định · Trang này không thu tiền</p>
       <p>Chưa có chính sách có hiệu lực. Ngưỡng phí chỉ dùng để xem xét, không phải phí giao thực tế được duyệt. Không thay đổi hóa đơn hoặc yêu cầu đặt lịch.</p>
     </section>
     <p v-if="loading" role="status">Đang tải…</p>
@@ -362,7 +362,7 @@ onMounted(() => { load(); loadLifecycle(); });
       <div class="max-w-4xl space-y-2">
         <h2 id="lifecycle-title" class="text-xl font-semibold text-ink-900">Vòng đời cấu hình vận hành giao linh kiện</h2>
         <div class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
-          <p class="font-semibold">ACTIVE chỉ là cấu hình vận hành · Tài chính 70/30 vẫn bị khóa.</p>
+          <p class="font-semibold">ACTIVE chỉ là cấu hình vận hành · Phí giao 70/30 thu trên hóa đơn khi phiếu đủ thỏa thuận hai bên và chứng từ.</p>
           <p>Không có legal hoặc ledger approval trong luồng này. Cấu hình không tạo payout, không thay đổi phí giao thực tế và không đặt giao hàng.</p>
         </div>
       </div>

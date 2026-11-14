@@ -78,36 +78,69 @@ function cancel() {
 </script>
 
 <template>
-  <div class="bg-white shadow-(--shadow-e1) rounded-md p-5 border border-ink-100" data-testid="change-password-card">
-    <div class="flex items-center gap-2 mb-3">
+  <div class="bg-white rounded-2xl border border-ink-200/80 p-5 shadow-xs space-y-3.5" data-testid="change-password-card">
+    <div class="flex items-center gap-2">
       <KeyRound :size="18" class="text-brand-600" />
-      <h2 class="text-lg font-bold text-ink-900">Đổi mật khẩu</h2>
+      <h2 class="text-base font-bold text-ink-900">Đổi mật khẩu</h2>
     </div>
+
     <template v-if="step === 'idle'">
-      <p class="text-sm text-ink-600 mb-4">Mã xác nhận sẽ được gửi tới email của tài khoản. Đổi xong bạn đăng nhập lại.</p>
-      <FhButton variant="secondary" size="sm" :loading="busy" :disabled="!email" @click="sendCode">Gửi mã xác nhận</FhButton>
+      <p class="text-xs text-ink-500 leading-relaxed">
+        Mã xác nhận sẽ được gửi tới email <span class="font-medium text-ink-800">{{ email }}</span>. Đổi xong bạn đăng nhập lại.
+      </p>
+      <FhButton variant="secondary" size="sm" :loading="busy" :disabled="!email" @click="sendCode">
+        Gửi mã xác nhận
+      </FhButton>
     </template>
-    <form v-else class="space-y-3" @submit.prevent="submit">
-      <p v-if="info" class="text-sm text-ink-600">{{ info }}</p>
-      <label class="flex flex-col gap-1 text-xs font-semibold text-ink-700">
-        Mã xác nhận
-        <input v-model="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 px-3 text-sm font-normal" />
+
+    <form v-else class="space-y-3 pt-1" @submit.prevent="submit">
+      <p v-if="info" class="text-xs text-brand-700 font-medium bg-brand-50/80 p-2.5 rounded-lg border border-brand-100">
+        {{ info }}
+      </p>
+      <label class="flex flex-col gap-1 text-xs font-medium text-ink-700">
+        Mã xác nhận (OTP)
+        <input
+          v-model="otp"
+          inputmode="numeric"
+          maxlength="6"
+          autocomplete="one-time-code"
+          placeholder="Nhập 6 chữ số"
+          class="h-9 rounded-xl border border-ink-200 bg-white px-3 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-brand-500 font-num"
+        />
       </label>
-      <label class="flex flex-col gap-1 text-xs font-semibold text-ink-700">
+      <label class="flex flex-col gap-1 text-xs font-medium text-ink-700">
         Mật khẩu mới
-        <input v-model="newPassword" type="password" autocomplete="new-password" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 px-3 text-sm font-normal" />
+        <input
+          v-model="newPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Tối thiểu 6 ký tự"
+          class="h-9 rounded-xl border border-ink-200 bg-white px-3 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-brand-500"
+        />
       </label>
-      <label class="flex flex-col gap-1 text-xs font-semibold text-ink-700">
+      <label class="flex flex-col gap-1 text-xs font-medium text-ink-700">
         Nhập lại mật khẩu mới
-        <input v-model="confirmPassword" type="password" autocomplete="new-password" class="h-10 rounded-[var(--radius-sm)] border border-ink-200 px-3 text-sm font-normal" />
+        <input
+          v-model="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Nhập lại mật khẩu mới"
+          class="h-9 rounded-xl border border-ink-200 bg-white px-3 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-brand-500"
+        />
       </label>
-      <p v-if="error" class="text-sm text-danger-700" role="alert">{{ error }}</p>
-      <div class="flex flex-wrap gap-2">
+
+      <p v-if="error" class="text-xs font-medium text-danger-700 bg-danger-50 p-2 rounded-lg border border-danger-100" role="alert">
+        {{ error }}
+      </p>
+
+      <div class="flex flex-wrap items-center gap-2 pt-1">
         <FhButton type="submit" size="sm" :loading="busy">Đổi mật khẩu</FhButton>
         <FhButton type="button" variant="ghost" size="sm" :disabled="busy" @click="sendCode">Gửi lại mã</FhButton>
         <FhButton type="button" variant="ghost" size="sm" :disabled="busy" @click="cancel">Huỷ</FhButton>
       </div>
     </form>
-    <p v-if="step === 'idle' && error" class="mt-3 text-sm text-danger-700" role="alert">{{ error }}</p>
+    <p v-if="step === 'idle' && error" class="text-xs font-medium text-danger-700 bg-danger-50 p-2 rounded-lg border border-danger-100" role="alert">
+      {{ error }}
+    </p>
   </div>
 </template>

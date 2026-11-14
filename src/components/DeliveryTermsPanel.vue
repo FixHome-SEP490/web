@@ -27,7 +27,7 @@ const isCurrentParty = computed(() => props.audience === 'customer'
   : props.audience === 'technician' ? props.technicianId === auth.user?.id : false);
 const contextValid = computed(() => isDeliveryPhysicalRequestId(props.requestId) && props.requestType === 'additional'
   && props.fulfillmentMethod === 'delivery' && typeof props.shippingFee === 'number' && Number.isSafeInteger(props.shippingFee)
-  && props.shippingFee > 0 && auth.user?.role === role[props.audience] && !!auth.user.id
+  && props.shippingFee > 0 && auth.userRole === role[props.audience] && !!auth.user?.id
   && (props.audience === 'manager' || isCurrentParty.value));
 const state = computed(() => data.value?.state ?? null);
 const currentShare = computed(() => props.audience === 'customer' ? state.value?.quote.customerShippingShare
@@ -159,7 +159,13 @@ async function submitConsent() {
           <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Phí thực tế đã ghi nhận</dt><dd class="font-num text-ink-900">{{ amount(state.actual.totalShippingFee) }}</dd></div>
           <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Khách hàng chịu thực tế (70%)</dt><dd class="font-num text-ink-900">{{ amount(state.actual.customerShippingShare) }}</dd></div>
           <div v-if="state.actual" class="flex justify-between gap-2"><dt class="text-ink-600">Kỹ thuật viên chịu thực tế (30%)</dt><dd class="font-num text-ink-900">{{ amount(state.actual.technicianShippingShare) }}</dd></div>
-          <div v-if="data.recordedConditionalCeilings" class="flex justify-between gap-2 sm:col-span-2"><dt class="text-ink-600">Tổng điều khoản đã ghi nhận</dt><dd class="font-num text-ink-900">{{ amount(data.recordedConditionalCeilings.shipping) }}</dd></div>
+          <!-- The four conditional ceilings of the order (CUSTOMER 67, TECH 62): trips, total, customer, technician. -->
+          <template v-if="data.recordedConditionalCeilings">
+            <div class="flex justify-between gap-2" data-testid="terms-ceiling-count"><dt class="text-ink-600">Số lượt giao đã có điều khoản</dt><dd class="font-num text-ink-900">{{ data.recordedConditionalCeilings.count }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-ink-600">Tổng phí giao các lượt</dt><dd class="font-num text-ink-900">{{ amount(data.recordedConditionalCeilings.shipping) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-ink-600">Tổng phần khách hàng</dt><dd class="font-num text-ink-900">{{ amount(data.recordedConditionalCeilings.customer) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-ink-600">Tổng phần kỹ thuật viên</dt><dd class="font-num text-ink-900">{{ amount(data.recordedConditionalCeilings.technician) }}</dd></div>
+          </template>
         </dl>
         <p v-if="state.actual" class="text-xs text-warning-800">Phí thực tế mới được ghi nhận, chưa xác minh độc lập.</p>
         <p v-if="data.invalidated" class="text-sm text-warning-800" role="status">Điều khoản đã mất hiệu lực; consent đã khóa.</p>

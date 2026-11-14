@@ -7,10 +7,6 @@ import {
   History,
   ChevronRight,
   Search,
-  Wrench,
-  User,
-  MapPin,
-  Calendar,
   AlertCircle,
   Sparkles,
 } from 'lucide-vue-next';
@@ -187,7 +183,7 @@ onUnmounted(() => {
 <template>
   <div class="w-full space-y-6 pb-16">
     <!-- Header banner -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up">
       <div>
         <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
           <History :size="28" class="text-brand-600 shrink-0" />
@@ -204,7 +200,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex max-w-full gap-2 overflow-x-auto pb-1" role="group" aria-label="Chọn loại lịch sử">
+    <div class="flex max-w-full gap-2 overflow-x-auto pb-1 animate-slide-up-delay-1" role="group" aria-label="Chọn loại lịch sử">
       <button
         v-for="choice in [{ key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa' }, { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị' }]"
         :key="choice.key"
@@ -219,7 +215,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Search input -->
-    <div class="relative">
+    <div class="relative animate-slide-up-delay-1">
       <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
       <input
         v-model="searchQuery"
@@ -235,7 +231,7 @@ onUnmounted(() => {
     <!-- Interactive animated sliding tab bar -->
     <div
       ref="tabListRef"
-      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 select-none scrollbar-none"
+      class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 select-none scrollbar-none animate-slide-up-delay-1"
       role="tablist"
       aria-label="Lọc lịch sử sửa chữa"
     >
@@ -272,7 +268,7 @@ onUnmounted(() => {
     <div
       v-if="historyList === 'orders' && error"
       role="alert"
-      class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3 shadow-xs"
+      class="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-sm text-danger-700 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-slide-up-delay-2"
     >
       <div class="flex items-center gap-2 min-w-0">
         <AlertCircle :size="18" class="text-danger-600 shrink-0" />
@@ -286,24 +282,22 @@ onUnmounted(() => {
     <!-- Skeleton Loading state -->
     <div
       v-if="historyList === 'orders' && loading"
-      class="rounded-2xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs"
+      class="rounded-2xl bg-white border border-ink-200/80 divide-y divide-ink-100 overflow-hidden animate-slide-up-delay-2"
       aria-busy="true"
       aria-label="Đang tải lịch sử sửa chữa"
     >
-      <div v-for="i in 4" :key="i" class="p-5 sm:p-6 space-y-3">
-        <div class="flex items-center justify-between gap-4">
-          <div class="flex items-center gap-3 w-3/4">
-            <FhSkeleton width="40px" height="40px" rounded="lg" />
-            <div class="space-y-1.5 flex-1">
-              <FhSkeleton width="60%" height="18px" />
-              <FhSkeleton width="40%" height="14px" />
-            </div>
+      <div v-for="i in 4" :key="i" class="p-4 sm:p-5 flex items-start justify-between gap-4">
+        <div class="space-y-2 flex-1">
+          <div class="flex items-center gap-2">
+            <FhSkeleton width="45%" height="18px" />
+            <FhSkeleton width="76px" height="22px" rounded="full" />
           </div>
-          <FhSkeleton width="80px" height="24px" rounded="full" />
+          <FhSkeleton width="55%" height="14px" />
+          <FhSkeleton width="70%" height="13px" />
         </div>
-        <div class="pt-2 flex justify-between items-center border-t border-ink-50">
-          <FhSkeleton width="45%" height="14px" />
-          <FhSkeleton width="100px" height="20px" />
+        <div class="space-y-1.5 text-right shrink-0">
+          <FhSkeleton width="88px" height="18px" />
+          <FhSkeleton width="110px" height="12px" />
         </div>
       </div>
     </div>
@@ -312,7 +306,7 @@ onUnmounted(() => {
     <div
       v-else-if="historyList === 'orders' && !error && items.length === 0"
       data-testid="history-empty"
-      class="py-14 px-6 bg-white rounded-3xl border border-ink-200/90 text-center space-y-3 shadow-xs"
+      class="py-14 px-6 bg-white rounded-2xl border border-ink-200/80 text-center space-y-3 animate-slide-up-delay-2"
     >
       <div class="mx-auto mb-2 max-w-[150px] sm:max-w-[170px] flex items-center justify-center">
         <img
@@ -338,7 +332,7 @@ onUnmounted(() => {
     <!-- History items list -->
     <ul
       v-else-if="historyList === 'orders' && items.length > 0"
-      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 overflow-hidden shadow-xs transition-opacity"
+      class="rounded-2xl bg-white border border-ink-200/80 divide-y divide-ink-100 overflow-hidden transition-opacity animate-slide-up-delay-2"
       :class="{ 'opacity-60': changingPage }"
       :aria-busy="changingPage"
     >
@@ -348,100 +342,83 @@ onUnmounted(() => {
         :data-testid="`history-item-${item.orderId}`"
         role="link"
         tabindex="0"
-        class="group p-5 sm:p-6 cursor-pointer hover:bg-brand-50/20 transition-all focus-visible:outline-none focus-visible:bg-brand-50/30"
+        class="group p-4 sm:p-5 cursor-pointer hover:bg-ink-50/70 transition-colors focus-visible:outline-none focus-visible:bg-ink-50/70"
         @click="router.push(`/app/orders/${item.orderId}`)"
         @keydown.enter="router.push(`/app/orders/${item.orderId}`)"
+        @keydown.space.prevent="router.push(`/app/orders/${item.orderId}`)"
       >
         <div class="flex items-start justify-between gap-4">
           <!-- Left info -->
-          <div class="flex items-start gap-3.5 min-w-0 flex-1">
-            <div
-              class="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105"
-              :class="isCancelled(item) ? 'bg-ink-100 text-ink-500 border-ink-200' : 'bg-brand-50 text-brand-600 border-brand-100'"
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-[15px] sm:text-base font-bold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty">
+                {{ item.serviceName || 'Dịch vụ sửa chữa' }}
+              </h2>
+              <FhStatusPill
+                :status="item.status"
+                :label="isCancelled(item) ? 'Đã hủy' : 'Hoàn thành'"
+              />
+            </div>
+
+            <!-- Clean typographic metadata -->
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500">
+              <span class="font-num font-medium text-ink-600">#{{ item.code }}</span>
+              <span aria-hidden="true">·</span>
+              <span class="font-num">
+                {{ isCancelled(item) ? 'Hủy' : 'Hoàn tất' }} {{ finishedAt(item) ? vnDateString(finishedAt(item)!) : '—' }}
+              </span>
+              <template v-if="item.technicianName">
+                <span aria-hidden="true">·</span>
+                <span class="text-ink-700 font-medium">{{ item.technicianName }}</span>
+              </template>
+            </div>
+
+            <p
+              v-if="item.addressSummary"
+              class="text-xs text-ink-400 truncate max-w-2xl"
+              :title="item.addressSummary"
             >
-              <Wrench :size="20" />
-            </div>
-
-            <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h2 class="text-base font-bold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty">
-                  {{ item.serviceName || 'Dịch vụ sửa chữa' }}
-                </h2>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-ink-100 text-ink-600 font-num">
-                  {{ item.code }}
-                </span>
-              </div>
-
-              <!-- Metadata lines -->
-              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500 pt-0.5">
-                <span class="inline-flex items-center gap-1 font-num">
-                  <Calendar :size="13" class="text-ink-400" />
-                  <span>{{ isCancelled(item) ? 'Hủy ngày' : 'Hoàn thành' }} {{ finishedAt(item) ? vnDateString(finishedAt(item)!) : '—' }}</span>
-                </span>
-                <span v-if="item.technicianName" class="inline-flex items-center gap-1 text-ink-700 font-medium">
-                  <User :size="13" class="text-ink-400" />
-                  <span>{{ item.technicianName }}</span>
-                </span>
-              </div>
-
-              <p
-                v-if="item.addressSummary"
-                class="text-xs text-ink-500 truncate flex items-center gap-1 pt-0.5"
-                :title="item.addressSummary"
-              >
-                <MapPin :size="13" class="text-ink-400 shrink-0" />
-                <span class="truncate">{{ item.addressSummary }}</span>
-              </p>
-            </div>
+              {{ item.addressSummary }}
+            </p>
           </div>
 
-          <!-- Status pill & arrow -->
-          <div class="flex items-start gap-2 shrink-0 pt-0.5">
-            <FhStatusPill
-              :status="item.status"
-              :label="isCancelled(item) ? 'Đã hủy' : 'Hoàn thành'"
-            />
-            <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 hidden sm:block" />
+          <!-- Cost summary & navigation cue -->
+          <div class="flex items-center gap-3 shrink-0 pt-0.5">
+            <div v-if="!isCancelled(item) || Number(item.grandTotal) > 0" class="text-right">
+              <span class="block text-sm sm:text-base font-bold text-ink-900 font-num whitespace-nowrap">
+                <FhMoney :amount="item.grandTotal" />
+              </span>
+              <span v-if="!isCancelled(item)" class="hidden sm:block text-[11px] text-ink-400 font-num whitespace-nowrap mt-0.5">
+                Công <FhMoney :amount="item.laborTotal" /> · Vật tư <FhMoney :amount="item.partsTotal" />
+              </span>
+            </div>
+            <ChevronRight :size="18" class="text-ink-300 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-[color,transform] shrink-0 hidden sm:block" />
           </div>
         </div>
 
-        <!-- Pricing details row -->
-        <div
-          v-if="!isCancelled(item) || Number(item.grandTotal) > 0"
-          class="mt-4 pt-3.5 border-t border-ink-100/80 flex flex-wrap items-center justify-between gap-3 text-xs"
+        <!-- Mobile cost breakdown -->
+        <p
+          v-if="!isCancelled(item)"
+          class="mt-2.5 pt-2 border-t border-ink-100/70 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-ink-500 sm:hidden font-num"
         >
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-ink-500">
-            <template v-if="!isCancelled(item)">
-              <span class="whitespace-nowrap">
-                Tiền công: <span class="font-semibold text-ink-800 font-num"><FhMoney :amount="item.laborTotal" /></span>
-              </span>
-              <span class="whitespace-nowrap">
-                Linh kiện: <span class="font-semibold text-ink-800 font-num"><FhMoney :amount="item.partsTotal" /></span>
-              </span>
-            </template>
-          </div>
-
-          <div class="flex items-baseline gap-1.5 ml-auto">
-            <span class="text-ink-500 text-xs">Tổng chi phí:</span>
-            <span class="text-base font-bold text-brand-700 font-num whitespace-nowrap">
-              <FhMoney :amount="item.grandTotal" />
-            </span>
-          </div>
-        </div>
+          <span>Tiền công: <strong class="text-ink-700 font-semibold"><FhMoney :amount="item.laborTotal" /></strong></span>
+          <span aria-hidden="true">·</span>
+          <span>Linh kiện: <strong class="text-ink-700 font-semibold"><FhMoney :amount="item.partsTotal" /></strong></span>
+        </p>
       </li>
     </ul>
 
-    <div v-if="historyList === 'visits' && visitGroupsError" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700">
+    <div v-if="historyList === 'visits' && visitGroupsError" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 animate-slide-up-delay-2">
       <span>{{ visitGroupsError }}</span>
       <FhButton variant="secondary" size="sm" @click="retryVisitGroups">Thử lại</FhButton>
     </div>
-    <div v-if="historyList === 'visits' && loadingVisitGroups" class="rounded-2xl border border-ink-200 bg-white p-5" aria-busy="true" aria-label="Đang tải lịch sử lượt sửa">
+    <div v-if="historyList === 'visits' && loadingVisitGroups" class="rounded-2xl border border-ink-200/80 bg-white p-5 animate-slide-up-delay-2" aria-busy="true" aria-label="Đang tải lịch sử lượt sửa">
       <div v-for="i in 3" :key="i" class="space-y-2 border-b border-ink-100 py-3 last:border-0">
         <FhSkeleton width="50%" height="18px" />
         <FhSkeleton width="75%" height="14px" />
       </div>
     </div>
-    <div v-else-if="historyList === 'visits' && !visitGroupsError && visitGroups.length === 0" data-testid="history-visit-empty" class="space-y-3 rounded-3xl border border-ink-200 bg-white px-6 py-12 text-center shadow-xs">
+    <div v-else-if="historyList === 'visits' && !visitGroupsError && visitGroups.length === 0" data-testid="history-visit-empty" class="space-y-3 rounded-2xl border border-ink-200/80 bg-white px-6 py-12 text-center animate-slide-up-delay-2">
       <div class="mx-auto mb-2 max-w-[130px] flex items-center justify-center">
         <img
           :src="'/images/ui/empty-state-search-service.png'"
@@ -453,18 +430,18 @@ onUnmounted(() => {
       <h2 class="font-semibold text-ink-900">Chưa có lượt sửa nhiều thiết bị đã kết thúc</h2>
       <p class="text-sm text-ink-500">Các lượt đã hoàn thành, hủy hoặc có thiết bị chưa sửa sẽ hiện ở đây.</p>
     </div>
-    <ul v-else-if="historyList === 'visits' && visitGroups.length > 0" data-testid="history-visit-groups" class="divide-y divide-ink-100 overflow-hidden rounded-3xl border border-ink-200 bg-white transition-opacity" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
+    <ul v-else-if="historyList === 'visits' && visitGroups.length > 0" data-testid="history-visit-groups" class="divide-y divide-ink-100 overflow-hidden rounded-2xl border border-ink-200/80 bg-white transition-opacity animate-slide-up-delay-2" :class="{ 'opacity-60': changingVisitGroupsPage }" :aria-busy="changingVisitGroupsPage">
       <li v-for="group in visitGroups" :key="group.id" :data-testid="`history-visit-group-${group.id}`" class="space-y-3 p-4 sm:p-5">
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 class="font-semibold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
-            <p class="mt-1 text-xs font-num text-ink-500">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
+            <h2 class="font-bold text-ink-900">Lượt sửa · {{ group.items.length }} thiết bị</h2>
+            <p class="mt-0.5 text-xs font-num text-ink-500">Tạo ngày {{ vnDateString(group.createdAt) }}</p>
           </div>
           <span class="shrink-0 rounded-full bg-ink-100 px-2.5 py-1 text-xs font-semibold text-ink-700">{{ groupStatusLabel(group.status) }}</span>
         </div>
-        <p class="text-sm text-ink-600">Lịch hẹn <span class="font-num">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
-        <ul class="grid gap-2 sm:grid-cols-2" aria-label="Đơn trong lượt sửa đã kết thúc">
-          <li v-for="item in group.items" :key="item.itemId" :data-testid="`history-visit-child-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl bg-ink-50 px-3 py-2">
+        <p class="text-xs sm:text-sm text-ink-600">Lịch hẹn <span class="font-num font-medium text-ink-800">{{ group.scheduledAt ? vnDateTimeString(group.scheduledAt) : 'Chưa xác định' }}</span></p>
+        <ul class="grid gap-2.5 sm:grid-cols-2" aria-label="Đơn trong lượt sửa đã kết thúc">
+          <li v-for="item in group.items" :key="item.itemId" :data-testid="`history-visit-child-${group.id}-${item.sequence}`" class="min-w-0 rounded-xl border border-ink-100 bg-ink-25/80 px-3.5 py-2.5 transition-colors hover:border-brand-200">
             <router-link v-if="item.orderId" :to="`/app/orders/${item.orderId}`" class="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
               <span class="block truncate text-sm font-semibold text-brand-700">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
               <span class="mt-1 block truncate text-xs text-ink-600">{{ item.serviceName || 'Dịch vụ sửa chữa' }} · {{ groupItemStatus(item) }}</span>
@@ -485,6 +462,7 @@ onUnmounted(() => {
       :page-size="PAGE_SIZE"
       :total="total"
       :disabled="loading"
+      class="animate-slide-up-delay-2"
       @prefetch="prefetch"
     />
     <FhPagination
@@ -493,6 +471,7 @@ onUnmounted(() => {
       :page-size="PAGE_SIZE"
       :total="visitGroupsTotal"
       :disabled="loadingVisitGroups"
+      class="animate-slide-up-delay-2"
       @prefetch="prefetchVisitGroups"
     />
   </div>

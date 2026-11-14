@@ -53,7 +53,7 @@ function editCampaign(campaign: VoucherOffer) {
     capVnd: campaign.discount.capVnd, minSpendVnd: campaign.minSpendVnd ?? 0,
     startsOn: localDatetime(campaign.startsAt), endsOn: localDatetime(campaign.expiresAt),
     successfulRedemptionLimit: campaign.successfulRedemptionLimit ?? 100,
-    perCustomerLimit: 1, scope: ['LABOR', 'PARTS'],
+    perCustomerLimit: campaign.perCustomerLimit ?? 1, scope: ['LABOR', 'PARTS'],
     categoryIds: [...(campaign.categoryIds ?? [])], serviceIds: [...(campaign.serviceIds ?? [])],
   });
   editingCampaignId.value = campaign.id;
@@ -99,7 +99,7 @@ function tabKey(event: KeyboardEvent) {
 
 <template>
   <div class="voucher-admin min-w-0 space-y-5" data-testid="console-voucher-workspace">
-    <p class="rounded-[var(--radius-sm)] border border-brand-100 bg-brand-50 px-4 py-3 text-sm leading-6 text-ink-700" role="note" data-testid="voucher-funding-gate">Tạo bản nháp, sau đó bấm Phát hành để khách sử dụng. Số lượng là lượt thanh toán thành công; một khách chỉ dùng mã chung một lần. Thanh toán chỉ giảm giá khi máy chủ xác nhận đủ điều kiện.</p>
+    <p class="rounded-[var(--radius-sm)] border border-brand-100 bg-brand-50 px-4 py-3 text-sm leading-6 text-ink-700" role="note" data-testid="voucher-funding-gate">Tạo bản nháp, sau đó bấm Phát hành để khách sử dụng. Số lượng là lượt thanh toán thành công; mỗi khách dùng mã chung theo số lần đặt cho chiến dịch. Thanh toán chỉ giảm giá khi máy chủ xác nhận đủ điều kiện.</p>
     <div role="tablist" aria-label="Quản lý ưu đãi" class="flex gap-2 border-b border-ink-200 pb-2" @keydown="tabKey">
       <button v-for="tab in (['campaigns', 'compensation'] as const)" :key="tab" type="button" role="tab" :id="`admin-voucher-tab-${tab}`" :data-console-voucher-tab="tab" :aria-label="tab === 'campaigns' ? 'Chiến dịch' : 'Cấp cá nhân'" :aria-controls="`admin-voucher-panel-${tab}`" :aria-selected="activeTab === tab" :tabindex="activeTab === tab ? 0 : -1" class="voucher-tab" @click="activeTab = tab">
         <TicketPercent v-if="tab === 'campaigns'" :size="18" aria-hidden="true" /><Gift v-else :size="18" aria-hidden="true" />
@@ -127,7 +127,7 @@ function tabKey(event: KeyboardEvent) {
             <label for="voucher-start-date">Bắt đầu (giờ Việt Nam)<input id="voucher-start-date" v-model="draft.startsOn" type="datetime-local" class="voucher-field" required /></label>
             <label for="voucher-end-date">Kết thúc (giờ Việt Nam)<input id="voucher-end-date" v-model="draft.endsOn" type="datetime-local" class="voucher-field" required /></label>
             <label for="voucher-paid-quota">Hạn mức thanh toán thành công<input id="voucher-paid-quota" v-model.number="draft.successfulRedemptionLimit" aria-label="Hạn mức thanh toán thành công" type="number" min="1" max="2147483647" class="voucher-field" required /><span class="voucher-help">Lưu vào ví không tiêu hao hạn mức này.</span></label>
-            <label for="voucher-per-customer">Số lần dùng mỗi khách<input id="voucher-per-customer" value="1" readonly class="voucher-field" /><span class="voucher-help">Ưu đãi chung: một lần cho mỗi khách.</span></label>
+            <label v-if="draft.kind !== 'PERSONAL'" for="voucher-per-customer">Số lần mỗi khách được dùng<input id="voucher-per-customer" v-model.number="draft.perCustomerLimit" aria-label="Số lần mỗi khách được dùng" type="number" min="1" max="100" class="voucher-field" required /><span class="voucher-help">1 là mỗi khách dùng một lần. Dùng xong khách lưu lại được tới khi hết số lần.</span></label>
           </fieldset>
           <fieldset :disabled="!canWrite || criteriaLoading || Boolean(criteriaError)" class="space-y-3 border-t border-ink-100 pt-4">
             <legend class="text-sm font-semibold text-ink-900">Điều kiện danh mục và dịch vụ</legend>

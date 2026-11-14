@@ -3,9 +3,33 @@
 </script>
 
 <template>
-  <div class="inline-flex items-center gap-1 px-3 py-2 bg-ink-100/80 rounded-full w-fit">
-    <span class="w-1.5 h-1.5 rounded-full bg-ink-400 animate-bounce" style="animation-delay: 0ms"></span>
-    <span class="w-1.5 h-1.5 rounded-full bg-ink-400 animate-bounce" style="animation-delay: 150ms"></span>
-    <span class="w-1.5 h-1.5 rounded-full bg-ink-400 animate-bounce" style="animation-delay: 300ms"></span>
+  <div class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white ring-1 ring-ink-200/80 rounded-2xl rounded-bl-sm shadow-2xs w-fit">
+    <span class="fh-typing-dot w-1.5 h-1.5 rounded-full bg-ink-400" style="animation-delay: 0ms"></span>
+    <span class="fh-typing-dot w-1.5 h-1.5 rounded-full bg-ink-400" style="animation-delay: 160ms"></span>
+    <span class="fh-typing-dot w-1.5 h-1.5 rounded-full bg-ink-400" style="animation-delay: 320ms"></span>
   </div>
 </template>
+
+<style scoped>
+@keyframes fhTypingWave {
+  0%, 60%, 100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2.5px);
+  }
+}
+
+.fh-typing-dot {
+  animation: fhTypingWave 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fh-typing-dot {
+    animation: none;
+    opacity: 0.65;
+  }
+}
+</style>

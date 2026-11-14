@@ -250,7 +250,7 @@ function handleHeaderClick() {
   >
     <!-- Thread Header -->
     <header
-      class="px-3.5 py-2.5 bg-white border-b border-ink-200 flex items-center justify-between gap-2 flex-shrink-0 shadow-xs z-10 transition-colors"
+      class="px-4 py-3 bg-white/95 backdrop-blur-sm border-b border-ink-100 flex items-center justify-between gap-2 flex-shrink-0 z-10 transition-colors"
       :class="isMinimized ? 'cursor-pointer hover:bg-ink-50 select-none' : ''"
       @click="handleHeaderClick"
     >
@@ -259,17 +259,17 @@ function handleHeaderClick() {
         <button
           v-if="showBackButton && !isMinimized"
           type="button"
-          class="p-1 -ml-1 text-ink-500 hover:text-ink-900 rounded-md hover:bg-ink-100 transition-colors flex-shrink-0"
+          class="w-8 h-8 -ml-1 flex items-center justify-center text-ink-500 hover:text-ink-900 rounded-full hover:bg-ink-100 transition-colors flex-shrink-0"
           @click.stop="emit('back')"
           title="Quay lại danh sách"
           aria-label="Quay lại danh sách"
         >
-          <ArrowLeft :size="18" />
+          <ArrowLeft :size="17" />
         </button>
 
         <!-- Avatar -->
         <div class="relative flex-shrink-0">
-          <div class="w-9 h-9 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden border border-brand-200">
+          <div class="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-semibold text-sm overflow-hidden ring-1 ring-brand-200/80">
             <img
               v-if="conversation?.counterpart?.avatarUrl"
               :src="conversation.counterpart.avatarUrl"
@@ -280,7 +280,7 @@ function handleHeaderClick() {
           </div>
           <!-- Online status dot -->
           <span
-            class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
+            class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-white"
             :class="chatStore.isSocketConnected ? 'bg-success-600' : 'bg-ink-300'"
             :title="chatStore.isSocketConnected ? 'Đã kết nối' : 'Đang kết nối lại…'"
           ></span>
@@ -294,9 +294,9 @@ function handleHeaderClick() {
             </h3>
             <span
               v-if="!isMinimized"
-              class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-ink-100 text-ink-600 leading-none flex-shrink-0"
+              class="inline-flex items-center gap-0.5 px-2 py-0.5 text-[10.5px] font-medium rounded-full bg-ink-100/80 text-ink-600 leading-none flex-shrink-0"
             >
-              <Wrench v-if="conversation?.counterpart?.role === 'TECHNICIAN'" :size="10" />
+              <Wrench v-if="conversation?.counterpart?.role?.toUpperCase() === 'TECHNICIAN'" :size="10" />
               <UserCheck v-else :size="10" />
               {{ counterpartRoleLabel }}
             </span>
@@ -312,65 +312,65 @@ function handleHeaderClick() {
       </div>
 
       <!-- Header Actions: Phone -> Vào trang chat -> Thu gọn -> Thoát -->
-      <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+      <div class="flex items-center gap-0.5 flex-shrink-0">
         <!-- 1. Phone (Voice call) -->
         <button
           v-if="canSend && !isMinimized"
           type="button"
-          class="p-1.5 text-ink-500 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-brand-600 rounded-full hover:bg-brand-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           :disabled="callStore.isBusy || !chatStore.isSocketConnected"
           :title="callButtonTitle"
           :aria-label="callButtonTitle"
           @click.stop="startVoiceCall"
         >
-          <Phone :size="17" />
+          <Phone :size="16" />
         </button>
 
         <!-- 2. Vào trang chat (Mở trang tin nhắn đầy đủ) -->
         <button
           v-if="showExpandButton && !isMinimized"
           type="button"
-          class="p-1.5 text-ink-500 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors"
+          class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-brand-600 rounded-full hover:bg-brand-50 transition-colors"
           @click.stop="emit('expand')"
           title="Mở trong trang Tin nhắn đầy đủ"
           aria-label="Mở trong trang Tin nhắn đầy đủ"
         >
-          <ExternalLink :size="17" />
+          <ExternalLink :size="16" />
         </button>
 
         <!-- 3. Thu gọn / Mở rộng -->
         <button
           v-if="showMinimizeButton"
           type="button"
-          class="p-1.5 text-ink-500 hover:text-ink-900 rounded-lg hover:bg-ink-100 transition-colors"
+          class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-ink-900 rounded-full hover:bg-ink-100 transition-colors"
           @click.stop="isMinimized ? emit('restore') : emit('minimize')"
           :title="isMinimized ? 'Mở rộng khung chat' : 'Thu gọn khung chat'"
           :aria-label="isMinimized ? 'Mở rộng khung chat' : 'Thu gọn khung chat'"
         >
-          <ChevronUp v-if="isMinimized" :size="17" />
-          <Minus v-else :size="17" />
+          <ChevronUp v-if="isMinimized" :size="16" />
+          <Minus v-else :size="16" />
         </button>
 
         <!-- 4. Thoát (Đóng chat) -->
         <button
           v-if="showCloseButton"
           type="button"
-          class="p-1.5 text-ink-500 hover:text-danger-600 rounded-lg hover:bg-danger-50 transition-colors"
+          class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-danger-600 rounded-full hover:bg-danger-50 transition-colors"
           @click.stop="emit('close')"
           title="Đóng chat"
           aria-label="Đóng chat"
         >
-          <X :size="17" />
+          <X :size="16" />
         </button>
       </div>
     </header>
 
     <!-- Body Content (Stream & Composer, hidden when minimized) -->
     <transition
-      enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+      enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
       enter-from-class="opacity-0 -translate-y-2"
       enter-to-class="opacity-100 translate-y-0"
-      leave-active-class="transition-all duration-200 ease-in"
+      leave-active-class="transition-all duration-200 ease-in motion-reduce:transition-none"
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-2"
     >
@@ -407,7 +407,7 @@ function handleHeaderClick() {
         <!-- Message Stream -->
         <div
           ref="scrollContainer"
-          class="flex-1 overflow-y-auto p-4 bg-ink-25 relative"
+          class="flex-1 overflow-y-auto px-3.5 py-4 sm:px-4 bg-ink-50/40 relative"
           @scroll="handleScroll"
         >
           <!-- Loading older indicator -->
@@ -420,11 +420,11 @@ function handleHeaderClick() {
             v-if="!chatStore.loadingMessages && messages.length === 0"
             class="h-full flex flex-col items-center justify-center text-center p-6 text-ink-500"
           >
-            <div class="w-12 h-12 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mb-2">
+            <div class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-2.5 ring-1 ring-brand-100">
               <Send :size="20" />
             </div>
             <p class="text-sm font-semibold text-ink-800">Chưa có tin nhắn nào</p>
-            <p class="text-xs text-ink-500 mt-1 max-w-[220px]">
+            <p class="text-xs text-ink-500 mt-1 max-w-[220px] leading-relaxed">
               Hãy gửi tin nhắn để trao đổi chi tiết về tình trạng thiết bị và thời gian sửa chữa.
             </p>
           </div>
@@ -455,23 +455,25 @@ function handleHeaderClick() {
           </div>
 
           <!-- Scroll to bottom pill button -->
-          <button
-            v-if="showScrollToBottom"
-            type="button"
-            class="sticky bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-brand-600 text-white text-xs font-semibold shadow-md flex items-center gap-1 hover:bg-brand-700 transition-all z-10"
-            @click="scrollToBottom(true)"
-          >
-            <span>Tin nhắn mới</span>
-            <ChevronDown :size="14" />
-          </button>
+          <Transition name="fh-fade-slide">
+            <button
+              v-if="showScrollToBottom"
+              type="button"
+              class="sticky bottom-2 left-1/2 -translate-x-1/2 px-3.5 py-1.5 rounded-full bg-white text-brand-700 ring-1 ring-brand-200/90 text-xs font-semibold shadow-(--shadow-e2) flex items-center gap-1 hover:bg-brand-50 transition-colors z-10"
+              @click="scrollToBottom(true)"
+            >
+              <span>Tin nhắn mới</span>
+              <ChevronDown :size="14" />
+            </button>
+          </Transition>
         </div>
 
         <!-- Message Composer / Input Area -->
-        <footer class="p-3 bg-white border-t border-ink-200 flex-shrink-0">
+        <footer class="px-3.5 py-2.5 bg-white border-t border-ink-100 flex-shrink-0">
           <p v-if="canSend && attachError" class="mb-2 text-xs text-danger-700" role="alert" data-testid="chat-attach-error">{{ attachError }}</p>
           <form
             v-if="canSend"
-            class="flex items-end gap-2"
+            class="flex items-end gap-1.5 rounded-2xl bg-ink-100/70 border border-transparent px-1.5 py-1.5 focus-within:bg-white focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-500/15 transition-all"
             @submit.prevent="handleSend"
           >
             <input
@@ -484,39 +486,37 @@ function handleHeaderClick() {
             />
             <button
               type="button"
-              class="p-2.5 rounded-xl border border-ink-200 bg-white text-ink-600 hover:bg-ink-50 hover:text-ink-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+              class="w-9 h-9 rounded-full text-ink-500 hover:bg-ink-100 hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
               title="Gửi ảnh hoặc video"
               aria-label="Gửi ảnh hoặc video"
               :disabled="sending"
               data-testid="chat-attach"
               @click="pickAttachment"
             >
-              <Paperclip :size="18" />
+              <Paperclip :size="17" />
             </button>
-            <div class="flex-1 bg-ink-50 border border-ink-200 rounded-xl focus-within:border-brand-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-brand-500 transition-all px-3 py-2">
-              <textarea
-                v-model="messageInput"
-                rows="1"
-                placeholder="Nhập tin nhắn... (Enter để gửi)"
-                class="w-full bg-transparent border-none outline-none text-sm text-ink-900 placeholder:text-ink-400 resize-none max-h-24"
-                :disabled="sending"
-                @keydown="onInputKeyup"
-              ></textarea>
-            </div>
+            <textarea
+              v-model="messageInput"
+              rows="1"
+              placeholder="Nhập tin nhắn... (Enter để gửi)"
+              class="flex-1 min-w-0 bg-transparent border-none outline-none px-1.5 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 resize-none max-h-24"
+              :disabled="sending"
+              @keydown="onInputKeyup"
+            ></textarea>
 
             <button
               type="submit"
               :disabled="!messageInput.trim() || sending"
-              class="p-2.5 rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs flex-shrink-0"
+              class="w-9 h-9 rounded-full bg-brand-600 text-white hover:bg-brand-700 disabled:bg-ink-300 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center justify-center flex-shrink-0"
               title="Gửi tin nhắn"
             >
-              <Send :size="18" />
+              <Send :size="16" />
             </button>
           </form>
 
           <div
             v-else
-            class="py-2 text-center text-xs text-ink-400 bg-ink-50 rounded-lg border border-ink-200"
+            class="py-2 text-center text-xs text-ink-500 bg-ink-50 rounded-xl"
           >
             {{ closedByCompletion ? 'Cuộc trò chuyện đã khoá vì đơn đã hoàn tất' : 'Khung trò chuyện đã đóng' }}
           </div>

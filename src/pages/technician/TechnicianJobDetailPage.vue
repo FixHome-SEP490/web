@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
+import TechnicianPrivateNote from '../../components/technician/TechnicianPrivateNote.vue';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
+import TechnicianJobStepper from '../../components/technician/TechnicianJobStepper.vue';
 import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { computed, ref, reactive, provide, onMounted, onUnmounted, watch, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -82,6 +85,8 @@ import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { chatSocketService, type NotificationNewEvent } from '../../services/chat-socket.service';
 import { billingAmount, orderBilling } from '../../utils/order-billing';
 import { suggestReceivedStock } from '../../utils/quotation-stock';
+import { useQuotationPartsSourcing } from '../../composables/useQuotationPartsSourcing';
+import QuotationPartsSourcingNote from '../../components/QuotationPartsSourcingNote.vue';
 import { technicianApprovedParts, technicianPreRepairLabel } from '../../utils/technician-workflow';
 import { heldSpareParts as computeHeldSpareParts } from '../../utils/held-parts';
 import { partsCompletionBlockers } from '../../utils/parts-completion';
@@ -398,6 +403,8 @@ const retryQuoteStock = async () => {
 // Labor warranty for this quote; starts from what the order took from the technician's default (PO 10/10/2026).
 const quoteLaborWarranty = ref<number | ''>('');
 const editingQuotation = ref(false);
+// F3 (TECH 66): the customer cannot approve a quote whose FixHome parts no warehouse holds; show the way out.
+const { sourcing: quoteSourcing, checking: quoteSourcingChecking, refresh: refreshQuoteSourcing } = useQuotationPartsSourcing(() => job.value?.quotation);
 const quoteEditorDismissed = ref(false);
 
 // Additional cost (chi phí phát sinh)
@@ -2075,6 +2082,13 @@ function costLineLabel(item: { type: string; description: string; quantity: numb
 }
 const quotationStatusLabel = computed(() => ({ approved: 'Khách đã duyệt', accepted: 'Khách đã duyệt', sent: 'Chờ khách duyệt', pending: 'Chờ khách duyệt', rejected: 'Khách từ chối', superseded: 'Đã thay bằng bản mới', draft: 'Bản nháp' } as Record<string, string>)[String(job.value?.quotation?.status ?? '').toLowerCase()] ?? '');
 const jobBilling = computed(() => orderBilling(job.value, jobInvoice.value, additionalCosts.value, receivedRequests.value));
+// W-17: a paid W3 delivery puts the shipping fee on the invoice, split customer / technician.
+const invoiceShipping = computed(() => {
+  const fee = Number(jobInvoice.value?.shippingFee ?? 0);
+  if (!jobInvoice.value || !Number.isFinite(fee) || fee <= 0) return null;
+  const share = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+  return { fee, customer: share(jobInvoice.value.customerShippingShare), technician: share(jobInvoice.value.technicianShippingShare) };
+});
 const financialStage = computed(() => jobInvoice.value ? (isPaid.value ? 'Hóa đơn · Đã thanh toán' : 'Hóa đơn cuối cùng')
   : String(job.value?.quotation?.status).toLowerCase() === 'approved' ? 'Báo giá đã duyệt · Tạm tính' : 'Báo giá dự kiến');
 const proposedParts = computed(() => [
@@ -2683,16 +2697,28 @@ const toggleMore = async () => {
 
     <!-- Loading: the shape of the page that is coming -->
     <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải công việc" data-testid="technician-job-loading-skeleton">
-      <FhSkeleton height="28px" width="55%" />
-      <FhSkeleton height="18px" width="35%" />
-      <div class="bg-white rounded-xl border border-ink-200 p-5 sm:p-6 space-y-3">
-        <FhSkeleton height="22px" width="60%" />
-        <FhSkeleton height="16px" width="80%" />
-        <FhSkeleton height="44px" width="200px" rounded="md" />
+      <div class="rounded-2xl border border-ink-200 bg-white p-5 space-y-2.5">
+        <FhSkeleton height="28px" width="55%" />
+        <FhSkeleton height="18px" width="35%" />
       </div>
-      <div class="bg-white rounded-xl border border-ink-200 p-5 sm:p-6 space-y-3">
-        <FhSkeleton height="18px" width="40%" />
-        <FhSkeleton height="16px" :count="3" />
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start">
+        <div class="space-y-4">
+          <div class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-3">
+            <FhSkeleton height="10px" width="100%" rounded="full" />
+            <FhSkeleton height="22px" width="60%" />
+            <FhSkeleton height="16px" width="80%" />
+            <FhSkeleton height="44px" width="200px" rounded="md" />
+          </div>
+          <div class="bg-white rounded-2xl border border-ink-200 p-5 sm:p-6 space-y-3">
+            <FhSkeleton height="18px" width="40%" />
+            <FhSkeleton height="16px" :count="3" />
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-ink-200 p-5 space-y-3">
+          <FhSkeleton height="18px" width="45%" />
+          <FhSkeleton height="56px" width="100%" rounded="md" />
+          <FhSkeleton height="40px" width="100%" rounded="md" />
+        </div>
       </div>
     </div>
 
@@ -2700,7 +2726,7 @@ const toggleMore = async () => {
     <div
       v-else-if="historicalJob"
       data-testid="technician-historical-detail"
-      class="rounded-xl border border-ink-200 bg-white p-5 sm:p-6 space-y-3 shadow-(--shadow-e1)"
+      class="animate-slide-up rounded-2xl border border-ink-200/90 bg-white p-5 sm:p-6 space-y-3 shadow-2xs"
     >
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h1 class="text-lg font-bold text-ink-900">Công việc <span class="font-num whitespace-nowrap">{{ historicalJob.code }}</span></h1>
@@ -2716,26 +2742,29 @@ const toggleMore = async () => {
     </div>
 
     <!-- Could not load at all: one friendly line and a retry -->
-    <div v-else-if="loadFailed && !job" class="rounded-xl border border-ink-200 bg-white p-6 text-center space-y-3" role="alert">
+    <div v-else-if="loadFailed && !job" class="rounded-2xl border border-ink-200 bg-white p-6 text-center space-y-3 shadow-2xs" role="alert">
       <p class="text-sm text-ink-700">Chưa tải được công việc. Vui lòng thử lại.</p>
       <FhButton variant="secondary" @click="loadJob(jobId)">Thử lại</FhButton>
     </div>
 
     <template v-else-if="job">
       <!-- 1. Header: title, code, status, one overflow menu -->
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
-          <div class="mt-1.5 flex flex-wrap items-center gap-2">
-            <span class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.code }}</span>
+      <div class="animate-slide-up flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs">
+        <div class="min-w-0 space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2">
             <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
+            <span class="rounded-md bg-ink-100/90 px-2 py-0.5 text-xs font-semibold text-ink-700 font-num whitespace-nowrap">#{{ job.code }}</span>
           </div>
+          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance leading-snug">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
+          <p class="text-xs sm:text-sm text-ink-500">
+            {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
+          </p>
         </div>
 
         <div class="relative shrink-0" data-more-menu>
           <button
             type="button"
-            class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
             aria-haspopup="menu"
             :aria-expanded="moreOpen"
             data-testid="job-more-button"
@@ -2745,71 +2774,80 @@ const toggleMore = async () => {
             Thêm
           </button>
           <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
-          <div
-            v-if="moreOpen"
-            role="menu"
-            class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+          <Transition
+            enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+            enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+            enter-to-class="opacity-100 scale-100 translate-y-0"
+            leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+            leave-from-class="opacity-100 scale-100 translate-y-0"
+            leave-to-class="opacity-0 scale-95 -translate-y-1.5"
           >
-            <button type="button" role="menuitem" class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left" @click="refreshJobStatus">
-              <RefreshCw :size="16" class="text-ink-500" :class="{ 'animate-spin': refreshingStatus }" />
-              Làm mới
-            </button>
-            <button
-              v-if="canCreateTypedTechnicianReport"
-              type="button"
-              role="menuitem"
-              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="job-cannot-continue-menu"
-              @click="openCannotContinue"
+            <div
+              v-if="moreOpen"
+              role="menu"
+              class="absolute right-0 mt-2 w-60 origin-top-right bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
             >
-              <Flag :size="16" class="shrink-0 text-ink-500" />
-              Báo cáo vấn đề sửa chữa
-            </button>
-            <button
-              v-if="canReport && !gpsCheckedIn"
-              type="button"
-              role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              @click="openReport"
-            >
-              <Flag :size="16" class="text-ink-500" />
-              Báo cáo vấn đề
-            </button>
-            <button
-              v-if="canReportRepairFailed"
-              type="button"
-              role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left"
-              data-testid="job-repair-failed-menu"
-              @click="openRepairFailed"
-            >
-              <AlertTriangle :size="16" />
-              Không sửa được máy này
-            </button>
-            <button
-              v-if="overrun?.eligible"
-              type="button"
-              role="menuitem"
-              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left"
-              data-testid="overrun-release-menu"
-              @click="moreOpen = false; showOverrunModal = true"
-            >
-              <Calendar :size="16" class="text-ink-500" />
-              Không kịp tới, nhả đơn
-            </button>
-            <template v-if="canWithdraw">
-              <div class="my-1.5 border-t border-ink-100" />
+              <button type="button" role="menuitem" class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors" @click="refreshJobStatus">
+                <RefreshCw :size="16" class="text-ink-500" :class="{ 'animate-spin': refreshingStatus }" />
+                Làm mới
+              </button>
               <button
+                v-if="canCreateTypedTechnicianReport"
                 type="button"
                 role="menuitem"
-                class="w-full h-11 px-4 flex items-center gap-3 text-danger-600 hover:bg-danger-50 text-left"
-                @click="openWithdraw"
+                class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left transition-colors"
+                data-testid="job-cannot-continue-menu"
+                @click="openCannotContinue"
               >
-                <Ban :size="16" />
-                Huỷ đơn
+                <Flag :size="16" class="shrink-0 text-ink-500" />
+                Báo cáo vấn đề sửa chữa
               </button>
-            </template>
-          </div>
+              <button
+                v-if="canReport && !gpsCheckedIn"
+                type="button"
+                role="menuitem"
+                class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
+                @click="openReport"
+              >
+                <Flag :size="16" class="text-ink-500" />
+                Báo cáo vấn đề
+              </button>
+              <button
+                v-if="canReportRepairFailed"
+                type="button"
+                role="menuitem"
+                class="w-full h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left transition-colors"
+                data-testid="job-repair-failed-menu"
+                @click="openRepairFailed"
+              >
+                <AlertTriangle :size="16" />
+                Không sửa được máy này
+              </button>
+              <button
+                v-if="overrun?.eligible"
+                type="button"
+                role="menuitem"
+                class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
+                data-testid="overrun-release-menu"
+                @click="moreOpen = false; showOverrunModal = true"
+              >
+                <Calendar :size="16" class="text-ink-500" />
+                Không kịp tới, nhả đơn
+              </button>
+              <template v-if="canWithdraw">
+                <div class="my-1.5 border-t border-ink-100" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="w-full h-11 px-4 flex items-center gap-3 text-danger-600 hover:bg-danger-50 text-left transition-colors"
+                  @click="openWithdraw"
+                >
+                  <Ban :size="16" />
+                  Huỷ đơn
+                </button>
+              </template>
+            </div>
+          </Transition>
         </div>
       </div>
       <section
@@ -2873,13 +2911,47 @@ const toggleMore = async () => {
       </section>
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
-      <section data-testid="job-cost-summary" class="order-2 min-w-0 lg:col-start-2 lg:row-span-3 lg:sticky lg:top-4 rounded-xl border border-ink-200 bg-white p-4 text-sm space-y-3">
-        <h2 class="font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
-        <dl class="flex flex-wrap gap-x-6 gap-y-2">
-          <div><dt class="text-ink-600">Tiền công</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" /><span v-else>Chưa xác định</span></dd></div>
-          <div><dt class="text-ink-600">Linh kiện</dt><dd><FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" /><span v-else>Chưa xác định</span></dd></div>
-          <div><dt class="text-ink-600">{{ jobInvoice ? 'Tổng hóa đơn' : 'Tổng báo giá' }}</dt><dd><FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis /><span v-else>Chưa xác định</span></dd></div>
-        </dl>
+      <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-4 space-y-4">
+      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 rounded-2xl border border-ink-200/90 bg-white p-5 text-sm space-y-3.5 shadow-2xs">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
+        </div>
+
+        <div class="rounded-xl border border-ink-200/70 bg-ink-50/80 px-4 py-3 space-y-2.5">
+          <div class="flex items-baseline justify-between gap-3">
+            <span class="text-xs font-medium uppercase tracking-wide text-ink-500">{{ jobInvoice ? 'Tổng hóa đơn' : 'Tổng báo giá' }}</span>
+            <span class="font-num text-xl font-bold text-ink-900">
+              <FhMoney v-if="(showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total) !== null" :amount="showQuotationForm ? laborTotal() + partsTotal() : jobBilling.total" emphasis />
+              <span v-else class="text-sm font-medium text-ink-500">Chưa xác định</span>
+            </span>
+          </div>
+          <dl class="grid grid-cols-2 gap-3 border-t border-ink-200/60 pt-2.5 text-xs">
+            <div class="min-w-0">
+              <dt class="text-ink-500">Tiền công</dt>
+              <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900">
+                <FhMoney v-if="(showQuotationForm ? laborTotal() : jobBilling.labor) !== null" :amount="showQuotationForm ? laborTotal() : jobBilling.labor" />
+                <span v-else class="font-normal text-ink-500">Chưa xác định</span>
+              </dd>
+            </div>
+            <div class="min-w-0">
+              <dt class="text-ink-500">Linh kiện</dt>
+              <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900">
+                <FhMoney v-if="(showQuotationForm ? partsTotal() : jobBilling.parts) !== null" :amount="showQuotationForm ? partsTotal() : jobBilling.parts" />
+                <span v-else class="font-normal text-ink-500">Chưa xác định</span>
+              </dd>
+            </div>
+            <template v-if="invoiceShipping">
+              <div class="min-w-0">
+                <dt class="text-ink-500">Phí giao (khách trả)</dt>
+                <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900"><FhMoney :amount="invoiceShipping.customer ?? invoiceShipping.fee" /></dd>
+              </div>
+              <div v-if="invoiceShipping.technician" class="min-w-0">
+                <dt class="text-ink-500">Phí giao (bạn chịu)</dt>
+                <dd class="mt-0.5 font-num text-sm font-semibold text-ink-900"><FhMoney :amount="invoiceShipping.technician" /></dd>
+              </div>
+            </template>
+          </dl>
+        </div>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
         <details v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-3 text-xs" data-testid="cost-lines">
           <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Xem chi tiết báo giá và phát sinh</summary>
@@ -2917,7 +2989,7 @@ const toggleMore = async () => {
           <h3 class="font-medium text-ink-800">Đã cấp và thực tế đã dùng</h3>
           <ul class="mt-1 space-y-1 text-ink-700">
             <li v-for="request in receivedRequests" :key="request.id">
-              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận qua QR', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' })[request.status] }}
+              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' } as Record<string, string>)[displayPartRequestStatus(request)] }}
               <ul class="pl-3"><li v-for="item in request.items" :key="item.id">
                 {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
                 <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>
@@ -2938,11 +3010,13 @@ const toggleMore = async () => {
         </div>
         </details>
       </section>
+      <TechnicianPrivateNote :order-id="jobIdRef" class="animate-slide-up-delay-1" />
+      </aside>
 
       <!-- Result of the last action -->
       <div
         v-if="actionMessage"
-        class="px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
+        class="lg:col-start-1 px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
         :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-700 border-danger-200'"
         :role="actionMessage.type === 'success' ? 'status' : 'alert'"
       >
@@ -2955,13 +3029,16 @@ const toggleMore = async () => {
       </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
-      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
+      <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="lg:col-start-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
         <p class="font-semibold">{{ !partsReturnsKnown ? 'Chưa xác nhận được tình trạng hoàn trả linh kiện.' : returnsToDeclare > 0 ? `Còn ${returnsToDeclare} linh kiện cần trả kho` : `${returnsAwaitingManager} linh kiện đã khai, chờ Quản lý Dịch vụ xác nhận` }}</p>
         <p v-if="partsReturnsKnown && returnsToDeclare > 0 && returnsAwaitingManager > 0">{{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế.</p>
         <p v-else-if="!partsReturnsKnown && pendingPartsReturns > 0">Đã ghi nhận {{ pendingPartsReturns }} linh kiện còn nghĩa vụ trả kho.</p>
         <button type="button" class="mt-1 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
       </div>
-      <FhCard v-if="nowStep" data-testid="job-now" class="order-1 lg:col-start-1">
+      <FhCard v-if="nowStep" data-testid="job-now" class="animate-slide-up order-1 lg:col-start-1">
+        <div v-if="!isCancelled" class="mb-4 pb-3.5 border-b border-ink-100">
+          <TechnicianJobStepper :steps="steps" />
+        </div>
         <h2 class="text-lg font-semibold text-ink-900 text-balance">{{ nowStep.title }}</h2>
         <p v-if="nowStep.hint" class="mt-1 text-sm text-ink-600 text-pretty">{{ nowStep.hint }}</p>
         <div v-if="isRepairing && !completionRequested && pendingPartsUsage > 0" class="mt-3 p-3 rounded-xl border border-warning-200 bg-warning-50/70 text-sm text-warning-900 flex flex-wrap items-center justify-between gap-2" role="status" data-testid="pending-parts-usage">
@@ -3001,17 +3078,17 @@ const toggleMore = async () => {
           <p v-if="quoteStockError && !fixedVisitBase" data-testid="quote-stock-error" role="alert" class="text-sm text-danger-700">
             {{ quoteStockError }} <button type="button" class="font-semibold underline" @click="retryQuoteStock">Thử lại</button>
           </p>
-          <details class="text-xs text-ink-600 rounded-lg bg-ink-50 px-3 py-2">
+          <details class="text-xs text-ink-600 rounded-xl border border-ink-200/70 bg-ink-50/75 px-3 py-2">
             <summary class="cursor-pointer font-medium text-brand-700"><Info :size="15" aria-hidden="true" class="inline-block align-middle mr-1" /> Thông tin báo giá</summary>
             <p class="mt-2">Chọn linh kiện trong danh mục FixHome để dùng đơn giá và bảo hành hiện hành. Điều chỉnh số lượng trước khi gửi. Chỉ ghi nhận sử dụng khi đã bắt đầu sửa.</p>
           </details>
           <div
             v-for="(item, idx) in quotationItems"
             :key="idx"
-            class="p-3 sm:p-0 rounded-xl sm:rounded-none border border-ink-200 sm:border-0 bg-ink-50/50 sm:bg-transparent flex flex-wrap items-center gap-2"
+            class="p-3 rounded-xl border border-ink-200/90 bg-ink-50/45 flex flex-wrap items-center gap-2.5"
           >
-            <span v-if="item.type === 'LABOR'" class="shrink-0 w-20 text-xs font-semibold text-brand-700 bg-brand-50 px-2 py-1 rounded-md sm:bg-transparent sm:px-0 sm:py-0 sm:text-ink-500 sm:font-medium whitespace-nowrap">Tiền công</span>
-            <button v-else type="button" class="min-w-0 flex-1 sm:flex-1 h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm text-left truncate font-medium text-ink-800" @click="openQuotationPartPicker(idx)">
+            <span v-if="item.type === 'LABOR'" class="shrink-0 w-20 text-xs font-semibold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg whitespace-nowrap text-center">Tiền công</span>
+            <button v-else type="button" class="min-w-0 flex-1 h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm text-left truncate font-medium text-ink-800 hover:border-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors" @click="openQuotationPartPicker(idx)">
               {{ item.partCatalogId ? item.description : 'Chọn linh kiện FixHome' }}
             </button>
             <input
@@ -3020,7 +3097,7 @@ const toggleMore = async () => {
               type="text"
               placeholder="Mô tả công việc hoặc tên linh kiện..."
               :aria-label="item.type === 'LABOR' ? 'Mô tả công việc' : 'Tên linh kiện'"
-              class="flex-1 min-w-[140px] h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
+              class="flex-1 min-w-[140px] h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             />
 
             <details v-if="item.type === 'PARTS' && item.warrantyDays != null" class="text-xs shrink-0">
@@ -3033,7 +3110,7 @@ const toggleMore = async () => {
                 v-if="item.type === 'PARTS'"
                 v-model.number="item.quantity"
                 type="number" min="1" step="1" aria-label="Số lượng linh kiện"
-                class="w-16 h-10 px-2 rounded-xl border border-ink-200 bg-white text-sm text-center"
+                class="w-16 h-10 px-2 rounded-xl border border-ink-200 bg-white text-sm text-center font-num focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
               <input
                 v-model.number="item.unitPrice"
@@ -3044,11 +3121,11 @@ const toggleMore = async () => {
                 inputmode="numeric"
                 placeholder="Đơn giá"
                 aria-label="Đơn giá"
-                class="w-32 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right"
+                class="w-32 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:bg-ink-100/70"
               />
               <button
                 type="button"
-                class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center ml-auto sm:ml-0"
+                class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center ml-auto sm:ml-0 transition-colors"
                 v-if="!fixedVisitBase" aria-label="Xoá dòng này"
                 @click="removeItem(idx)"
               >
@@ -3098,6 +3175,10 @@ const toggleMore = async () => {
         >
           Gửi lại báo giá khác
         </button>
+        <QuotationPartsSourcingNote
+          v-if="currentStepNumber === 3 && !skipsQuote && quotationSubmitted && !quotationRejected && !showQuotationForm"
+          class="mt-3" :sourcing="quoteSourcing" audience="technician" :checking="quoteSourcingChecking" @recheck="refreshQuoteSourcing"
+        />
 
         <!-- Display-only historical gross; actual payment remains server-authoritative. -->
         <section
@@ -3129,13 +3210,13 @@ const toggleMore = async () => {
 
         <!-- Payment: how the customer pays, then the cash amount -->
         <div v-if="showPaymentChoice" class="mt-4 space-y-3" data-testid="payment-choice">
-          <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Khách trả bằng cách nào">
+          <div class="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Khách trả bằng cách nào">
             <button
               type="button"
               role="radio"
               :aria-checked="hasCashPayment === 'YES'"
-              class="h-11 px-3 rounded-xl border text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-              :class="hasCashPayment === 'YES' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+              class="h-11 px-3 rounded-xl border text-sm font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 cursor-pointer"
+              :class="hasCashPayment === 'YES' ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
               @click="hasCashPayment = 'YES'; if (!declaredCashAmount && jobBilling.total) declaredCashAmount = jobBilling.total"
             >
               <Banknote :size="16" /> Có thu tiền mặt
@@ -3144,8 +3225,8 @@ const toggleMore = async () => {
               type="button"
               role="radio"
               :aria-checked="hasCashPayment === 'NO'"
-              class="h-11 px-3 rounded-xl border text-sm font-medium inline-flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-              :class="hasCashPayment === 'NO' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+              class="h-11 px-3 rounded-xl border text-sm font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 cursor-pointer"
+              :class="hasCashPayment === 'NO' ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
               @click="hasCashPayment = 'NO'"
             >
               <Smartphone :size="16" /> Khách trả online
@@ -3255,30 +3336,36 @@ const toggleMore = async () => {
             </button>
           </div>
           <Transition name="fh-fade-slide">
-            <ol v-if="stepsExpanded" id="job-steps" class="mt-2 space-y-1" data-testid="job-steps">
-              <li v-for="step in steps" :key="step.n" class="text-sm">
+            <ol v-if="stepsExpanded" id="job-steps" class="mt-3 space-y-0.5" data-testid="job-steps">
+              <li v-for="(step, sIdx) in steps" :key="step.n" class="relative text-sm">
+                <span
+                  v-if="sIdx < steps.length - 1"
+                  aria-hidden="true"
+                  class="pointer-events-none absolute left-[18px] top-8 bottom-0 w-px"
+                  :class="step.state === 'done' ? 'bg-brand-200' : 'bg-ink-200/80'"
+                />
                 <button
                   type="button"
-                  class="w-full flex items-center gap-3 py-1.5 text-left rounded-lg disabled:cursor-default"
+                  class="relative z-10 w-full flex items-center gap-3 px-2 py-2 text-left rounded-xl transition-colors hover:bg-ink-50/75 disabled:hover:bg-transparent disabled:cursor-default cursor-pointer"
                   :disabled="step.state === 'todo'"
                   :aria-expanded="openStep === step.n"
                   :data-testid="`step-row-${step.n}`"
                   @click="toggleStep(step.n)"
                 >
-                  <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 text-success-600" />
-                  <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] rounded-full border-[5px] border-brand-600 ring-3 ring-brand-100" />
-                  <Circle v-else :size="18" class="shrink-0 text-ink-300" />
+                  <CheckCircle2 v-if="step.state === 'done'" :size="18" class="shrink-0 bg-white text-success-600" />
+                  <span v-else-if="step.state === 'current'" class="shrink-0 w-[18px] h-[18px] bg-white rounded-full border-[5px] border-brand-600 ring-3 ring-brand-100" />
+                  <Circle v-else :size="18" class="shrink-0 bg-white text-ink-300" />
                   <span
                     class="flex-1 min-w-0"
-                    :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'text-ink-600' : 'text-ink-500'"
+                    :class="step.state === 'current' ? 'font-semibold text-ink-900' : step.state === 'done' ? 'font-medium text-ink-700' : 'text-ink-400'"
                   >
                     {{ step.label }}
                   </span>
-                  <span v-if="step.state === 'current'" class="shrink-0 text-xs font-medium text-brand-700 whitespace-nowrap">Đang làm</span>
+                  <span v-if="step.state === 'current'" class="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 whitespace-nowrap">Đang làm</span>
                   <ChevronDown v-if="step.state !== 'todo'" :size="16" class="shrink-0 text-ink-400 transition-transform duration-200" :class="{ 'rotate-180': openStep === step.n }" />
                 </button>
                 <Transition name="fh-fade-slide">
-                  <div v-if="openStep === step.n" class="ml-[30px] mb-2 space-y-2 text-ink-700" :data-testid="`step-detail-${step.n}`">
+                  <div v-if="openStep === step.n" class="ml-[34px] mb-2.5 rounded-xl bg-ink-50/80 px-3.5 py-2.5 space-y-2 text-ink-700" :data-testid="`step-detail-${step.n}`">
                     <template v-if="step.n === 1">
                       <p>{{ reachedAt('en_route') ? `Xuất phát lúc ${vnDateTimeString(reachedAt('en_route')!)}` : 'Chưa xuất phát.' }}</p>
                     </template>
@@ -3336,13 +3423,15 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 3. Customer and job: secondary actions appear once, here -->
-      <FhCard data-testid="job-summary" class="order-3 lg:col-start-1">
-        <div class="space-y-3">
-          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <p class="text-base font-semibold text-ink-900">{{ job.customerName }}</p>
-            <span v-if="job.customerPhone" class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.customerPhone }}</span>
+      <FhCard data-testid="job-summary" class="animate-slide-up-delay-1 order-3 lg:col-start-1">
+        <div class="space-y-3.5">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p class="text-base font-semibold text-ink-900">{{ job.customerName }}</p>
+              <span v-if="job.customerPhone" class="text-sm text-ink-500 font-num whitespace-nowrap">{{ job.customerPhone }}</span>
+            </div>
           </div>
-          <ul class="space-y-2 text-sm text-ink-700">
+          <ul class="rounded-xl bg-ink-50/80 p-3.5 space-y-2 text-sm text-ink-700">
             <li class="flex items-start gap-2.5">
               <FileText :size="16" class="shrink-0 mt-0.5 text-ink-400" />
               <span class="min-w-0 font-medium text-ink-900">{{ job.serviceName }}</span>
@@ -3356,36 +3445,17 @@ const toggleMore = async () => {
               <span class="min-w-0 text-pretty">{{ job.addressSummary }}</span>
             </li>
           </ul>
-          <p v-if="bookingDescription" class="text-sm text-ink-700 whitespace-pre-line text-pretty" data-testid="booking-description">
-            <span class="text-ink-500">Khách mô tả:</span> {{ bookingDescription }}
-          </p>
-          <button
-            v-if="aiSummary"
-            type="button"
-            class="h-10 px-3.5 rounded-xl border border-brand-200 bg-brand-50 text-sm font-medium text-brand-700 hover:bg-brand-100 inline-flex items-center gap-2 whitespace-nowrap"
-            data-testid="ai-summary-button"
-            @click="showAiSummary = true"
-          >
-            <Sparkles :size="16" class="shrink-0" /> Xem tóm tắt vấn đề từ AI
-          </button>
-          <p
-            v-if="job.customerNote"
-            class="text-sm text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-3 py-2 text-pretty"
-            data-testid="customer-note"
-          >
-            Ghi chú của khách: {{ job.customerNote }}
-          </p>
-          <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 pt-1">
+          <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
             <a
               v-if="job.customerPhone"
               :href="'tel:' + job.customerPhone"
-              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 hover:border-ink-300 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <Phone :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Gọi
             </a>
             <button
               type="button"
-              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 hover:border-ink-300 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               @click="handleChatWithCustomer"
             >
               <MessageSquare :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Nhắn tin
@@ -3395,11 +3465,30 @@ const toggleMore = async () => {
               :href="googleMapsUrl"
               target="_blank"
               rel="noopener noreferrer"
-              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              class="h-10 min-w-0 px-1.5 sm:px-3.5 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 hover:border-ink-300 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <Navigation :size="16" class="shrink-0 text-ink-500 hidden min-[380px]:block" /> Chỉ đường
             </a>
           </div>
+          <p v-if="bookingDescription" class="text-sm text-ink-700 whitespace-pre-line text-pretty" data-testid="booking-description">
+            <span class="text-ink-500">Khách mô tả:</span> {{ bookingDescription }}
+          </p>
+          <button
+            v-if="aiSummary"
+            type="button"
+            class="h-10 px-3.5 rounded-xl border border-brand-200 bg-brand-50/90 text-sm font-semibold text-brand-700 hover:bg-brand-100 active:scale-[0.98] transition-[background-color,transform] duration-150 inline-flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            data-testid="ai-summary-button"
+            @click="showAiSummary = true"
+          >
+            <Sparkles :size="16" class="shrink-0" /> Xem tóm tắt vấn đề từ AI
+          </button>
+          <p
+            v-if="job.customerNote"
+            class="text-sm text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-3.5 py-2.5 text-pretty"
+            data-testid="customer-note"
+          >
+            Ghi chú của khách: {{ job.customerNote }}
+          </p>
 
           <!-- Fixed price saved with the booking: no quotation for these jobs -->
           <div v-if="isFixedPriceOrder" data-testid="fixed-price-order-summary" class="pt-3 border-t border-ink-100 space-y-1.5 text-sm">
@@ -3426,23 +3515,24 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
-      <FhCard v-if="!isCancelled || visitDeviceFailed" padding="none" data-testid="job-details" class="order-4 lg:col-start-1">
+      <FhCard v-if="!isCancelled || visitDeviceFailed" padding="none" data-testid="job-details" class="animate-slide-up-delay-2 order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->
           <section>
             <button
               type="button"
-              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6 cursor-pointer"
               :aria-expanded="sections.photos"
               aria-controls="job-photos"
               @click="sections.photos = !sections.photos"
             >
               <span class="text-base font-semibold text-ink-900">Ảnh hiện trường</span>
               <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
-                {{ beforeEvidences.length + afterEvidences.length }} ảnh
-                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.photos }" />
+                <span class="rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-medium text-ink-700">{{ beforeEvidences.length + afterEvidences.length }} ảnh</span>
+                <ChevronDown :size="18" class="transition-transform duration-200" :class="{ 'rotate-180': sections.photos }" />
               </span>
             </button>
+            <Transition name="fh-fade-slide">
             <div v-show="sections.photos" id="job-photos" class="px-5 sm:px-6 pb-5 space-y-4">
               <div class="space-y-2">
                 <p class="text-sm font-medium text-ink-700">Trước khi sửa</p>
@@ -3468,12 +3558,12 @@ const toggleMore = async () => {
                       </button>
                     </div>
                   </TransitionGroup>
-                  <div
+                  <button
                     v-if="!isCompleted && !completionRequested"
+                    type="button"
                     class="w-20 h-20 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 text-xs font-medium transition-colors"
                     :class="!canAddBeforePhoto ? 'border-ink-200 text-ink-400 bg-ink-25 cursor-not-allowed' : 'border-ink-300 text-ink-600 hover:border-brand-500 hover:text-brand-700 cursor-pointer'"
                     data-testid="before-evidence-picker"
-                    role="button"
                     :aria-label="!gpsCheckedIn ? 'Check-in xong mới thêm được ảnh' : !hasFacePhoto ? 'Chụp khuôn mặt check-in xong mới thêm được ảnh' : statusUpper !== 'EN_ROUTE' ? 'Không thể thêm ảnh trước sửa ở trạng thái hiện tại' : remainingEvidenceSlots === 0 ? 'Đã đạt giới hạn 20 ảnh' : 'Chụp thêm ảnh trước khi sửa'"
                     :tabindex="canAddBeforePhoto ? 0 : -1"
                     :aria-disabled="!canAddBeforePhoto"
@@ -3484,7 +3574,7 @@ const toggleMore = async () => {
                     <Loader2 v-if="uploadingPhase === 'BEFORE'" :size="18" class="animate-spin" />
                     <Camera v-else :size="18" />
                     Thêm
-                  </div>
+                  </button>
                 </div>
               </div>
               <div v-if="currentStepNumber >= 4 || afterEvidences.length > 0" class="space-y-2">
@@ -3527,13 +3617,14 @@ const toggleMore = async () => {
                 </div>
               </div>
             </div>
+            </Transition>
           </section>
 
           <!-- Parts -->
           <section>
             <button
               type="button"
-              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6 cursor-pointer"
               :aria-expanded="sections.parts"
               aria-controls="job-parts"
               @click="sections.parts = !sections.parts"
@@ -3541,10 +3632,11 @@ const toggleMore = async () => {
               <span class="min-w-0 text-sm font-semibold text-ink-900 sm:text-base">{{ visitGroupId ? 'Linh kiện của máy này' : 'Linh kiện' }}</span>
               <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
                 <span v-if="partsSummary.needsAction" class="px-2 py-0.5 rounded-full bg-warning-50 text-warning-800 text-xs font-medium">Cần xử lý</span>
-                <template v-else-if="partsSummary.count > 0">{{ partsSummary.count }} yêu cầu</template>
-                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.parts }" />
+                <span v-else-if="partsSummary.count > 0" class="rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-medium text-ink-700">{{ partsSummary.count }} yêu cầu</span>
+                <ChevronDown :size="18" class="transition-transform duration-200" :class="{ 'rotate-180': sections.parts }" />
               </span>
             </button>
+            <Transition name="fh-fade-slide">
             <div v-show="sections.parts" id="job-parts" class="px-5 sm:px-6 pb-5">
               <DeliveryTermsPanel
                 v-for="request in deliveryTermsRequests"
@@ -3575,23 +3667,25 @@ const toggleMore = async () => {
                 @custody="custodyByItem = $event"
               />
             </div>
+            </Transition>
           </section>
 
           <!-- Additional costs: only once the repair has started -->
           <section v-if="isRepairing || isCompleted">
             <button
               type="button"
-              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6"
+              class="flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-ink-25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 sm:px-6 cursor-pointer"
               :aria-expanded="sections.extra"
               aria-controls="job-extra-costs"
               @click="sections.extra = !sections.extra"
             >
               <span class="text-base font-semibold text-ink-900">Chi phí phát sinh</span>
               <span class="flex items-center gap-2 text-sm text-ink-500 whitespace-nowrap">
-                <template v-if="additionalCosts.length > 0">{{ additionalCosts.length }} yêu cầu</template>
-                <ChevronDown :size="18" class="transition-transform" :class="{ 'rotate-180': sections.extra }" />
+                <span v-if="additionalCosts.length > 0" class="rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-medium text-ink-700">{{ additionalCosts.length }} yêu cầu</span>
+                <ChevronDown :size="18" class="transition-transform duration-200" :class="{ 'rotate-180': sections.extra }" />
               </span>
             </button>
+            <Transition name="fh-fade-slide">
             <div v-show="sections.extra" id="job-extra-costs" class="px-5 sm:px-6 pb-5 space-y-3 text-sm">
               <ul v-if="additionalCosts.length > 0" class="divide-y divide-ink-100">
                 <li v-for="cost in additionalCosts" :key="cost.id" class="py-3 first:pt-0 space-y-1">
@@ -3649,14 +3743,14 @@ const toggleMore = async () => {
                   <p v-if="acReasonError" id="additional-cost-reason-error" class="mt-1 text-sm text-danger-700" role="alert" data-testid="additional-cost-reason-error">{{ acReasonError }}</p>
                 </label>
 
-                <div class="space-y-2">
+                <div class="space-y-2.5">
                   <div
                     v-for="(item, idx) in acItems"
                     :key="idx"
-                    class="flex flex-wrap sm:flex-nowrap items-center gap-2"
+                    class="rounded-xl border border-ink-200/80 bg-ink-50/45 p-2.5 sm:p-3 flex flex-wrap sm:flex-nowrap items-center gap-2"
                   >
-                    <span v-if="item.type === 'PARTS'" class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Kho FixHome</span>
-                    <span v-else class="shrink-0 w-32 text-xs font-medium text-ink-500 whitespace-nowrap">Tiền công</span>
+                    <span v-if="item.type === 'PARTS'" class="shrink-0 w-24 text-xs font-semibold text-ink-600 whitespace-nowrap">Kho FixHome</span>
+                    <span v-else class="shrink-0 w-24 text-xs font-semibold text-brand-700 whitespace-nowrap">Tiền công</span>
 
                     <!-- FixHome part picked from the catalog -->
                     <div
@@ -3665,14 +3759,14 @@ const toggleMore = async () => {
                     >
                       <span class="min-w-0 truncate font-medium text-ink-900" :title="item.warrantyPolicy || item.description">{{ item.description }}</span>
 
-                      <button type="button" class="shrink-0 h-10 px-2 text-sm font-medium text-brand-700 hover:underline whitespace-nowrap" @click="openAcPartPicker(idx)">
+                      <button type="button" class="shrink-0 h-9 px-2 text-xs font-semibold text-brand-700 hover:underline whitespace-nowrap" @click="openAcPartPicker(idx)">
                         Đổi
                       </button>
                     </div>
                     <button
                       v-else-if="item.type === 'PARTS' && !item.partCatalogId"
                       type="button"
-                      class="flex-1 min-w-0 h-10 px-3 rounded-xl border border-dashed border-ink-300 text-ink-700 hover:border-brand-500 hover:text-brand-700 text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      class="flex-1 min-w-0 h-10 px-3 rounded-xl border border-dashed border-ink-300 bg-white text-ink-700 hover:border-brand-500 hover:text-brand-700 text-sm font-medium inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
                       @click="openAcPartPicker(idx)"
                     >
                       <Search :size="14" /> Chọn linh kiện FixHome
@@ -3683,7 +3777,7 @@ const toggleMore = async () => {
                       type="text"
                       :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
                       :aria-label="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
-                      class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm"
+                      class="flex-1 min-w-0 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
 
                     <input
@@ -3692,11 +3786,11 @@ const toggleMore = async () => {
                       min="1"
                       inputmode="numeric"
                       aria-label="Số lượng"
-                      class="shrink-0 w-14 h-10 px-2 bg-white border border-ink-200 rounded-xl text-sm text-center font-num"
+                      class="shrink-0 w-14 h-10 px-2 bg-white border border-ink-200 rounded-xl text-sm text-center font-num focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                     <span
                       v-if="item.partSource === 'fixhome' && item.partCatalogId"
-                      class="shrink-0 w-28 text-right font-num text-ink-900 whitespace-nowrap"
+                      class="shrink-0 w-28 text-right font-num font-semibold text-ink-900 whitespace-nowrap"
                     >
                       <FhMoney :amount="item.unitPrice" />
                     </span>
@@ -3708,11 +3802,11 @@ const toggleMore = async () => {
                       inputmode="numeric"
                       placeholder="Đơn giá"
                       aria-label="Đơn giá"
-                      class="shrink-0 w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right"
+                      class="shrink-0 w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-right focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                     />
                     <button
                       type="button"
-                      class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center"
+                      class="shrink-0 w-10 h-10 rounded-xl text-ink-400 hover:text-danger-600 hover:bg-danger-50 inline-flex items-center justify-center transition-colors"
                       aria-label="Xoá dòng này"
                       @click="removeAcItem(idx)"
                     >
@@ -3750,14 +3844,20 @@ const toggleMore = async () => {
                 <!-- How FixHome parts reach the technician -->
                 <div v-if="acItems.some((i) => i.type === 'PARTS' && i.partSource === 'fixhome') && acNeedsWarehouse" class="space-y-2">
                   <p class="font-medium text-ink-700">Nhận linh kiện FixHome</p>
-                  <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
-                    <label class="inline-flex items-center gap-2 min-h-10 cursor-pointer">
-                      <input v-model="acFulfillmentMethod" type="radio" value="pickup" />
-                      <span class="text-ink-700">Tự lấy tại kho</span>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <label
+                      class="inline-flex items-center gap-2 min-h-10 px-3 rounded-xl border text-sm font-medium cursor-pointer transition-colors"
+                      :class="acFulfillmentMethod === 'pickup' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+                    >
+                      <input v-model="acFulfillmentMethod" type="radio" value="pickup" class="accent-brand-600" />
+                      <span>Tự lấy tại kho</span>
                     </label>
-                    <label class="inline-flex items-center gap-2 min-h-10 cursor-pointer">
-                      <input v-model="acFulfillmentMethod" type="radio" value="delivery" />
-                      <span class="text-ink-700">Giao tới nơi</span>
+                    <label
+                      class="inline-flex items-center gap-2 min-h-10 px-3 rounded-xl border text-sm font-medium cursor-pointer transition-colors"
+                      :class="acFulfillmentMethod === 'delivery' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+                    >
+                      <input v-model="acFulfillmentMethod" type="radio" value="delivery" class="accent-brand-600" />
+                      <span>Giao tới nơi</span>
                     </label>
                     <label v-if="acFulfillmentMethod === 'delivery'" class="inline-flex items-center gap-2">
                       <span class="text-ink-600 whitespace-nowrap">Phí giao (₫)</span>
@@ -3766,7 +3866,7 @@ const toggleMore = async () => {
                         type="number"
                         step="5000"
                         inputmode="numeric"
-                        class="w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num"
+                        class="w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                       />
                     </label>
                   </div>
@@ -3827,26 +3927,29 @@ const toggleMore = async () => {
                 </div>
               </div>
             </div>
+            </Transition>
           </section>
         </div>
       </FhCard>
 
       <!-- Reports already sent; the form opens from the "Thêm" menu -->
-      <OrderComplaintPanel
-        ref="complaintPanel"
-        :order-id="job.id"
-        :order-status="workStopped ? 'CANCELLED' : job.status"
-        :completed-at="job.completedAt"
-        role="technician"
-        inline
-      />
+      <div class="order-5 lg:col-start-1">
+        <OrderComplaintPanel
+          ref="complaintPanel"
+          :order-id="job.id"
+          :order-status="workStopped ? 'CANCELLED' : job.status"
+          :completed-at="job.completedAt"
+          role="technician"
+          inline
+        />
+      </div>
       </div>
     </template>
 
     <!-- Phones: the one primary action sits above the tab bar, always in reach -->
     <div
       v-if="job && nowStep?.action && !canQuoteAdditional && !historicalJob && !loading"
-      class="sm:hidden fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-white border-t border-ink-200 px-4 py-3"
+      class="sm:hidden fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-white/95 backdrop-blur-md border-t border-ink-200/80 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] px-4 py-3"
       data-testid="job-action-bar"
     >
       <FhButton
@@ -4053,7 +4156,7 @@ const toggleMore = async () => {
         class="fixed inset-0 z-50 bg-ink-900/85 backdrop-blur-xs flex items-center justify-center p-4"
         @click.self="previewModalUrl = null"
       >
-        <div role="dialog" aria-modal="true" aria-label="Xem ảnh" class="fh-modal-panel relative max-w-3xl w-full bg-white rounded-3xl overflow-hidden p-3 sm:p-4 space-y-3 shadow-2xl">
+        <div role="dialog" aria-modal="true" aria-label="Xem ảnh" class="fh-modal-panel fh-modal-panel--sheet relative max-w-3xl w-full bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden p-3 sm:p-4 space-y-3 shadow-(--shadow-e3)">
           <div class="flex items-center justify-end gap-2">
             <FhButton
               v-if="activePreviewEvidence && !isCompleted"

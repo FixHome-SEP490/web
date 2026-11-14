@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { Check, Clock3, TicketPercent } from 'lucide-vue-next';
-import FhButton from '../FhButton.vue';
+import { AlertCircle, ChevronDown, Clock3 } from 'lucide-vue-next';
+import { FhButton, FhCard, FhStatusPill } from '..';
 import {
   formatVoucherAmount,
   formatVoucherCountdown,
@@ -12,6 +12,8 @@ import {
   voucherStatusLabels,
   type VoucherOffer,
 } from './voucher-model';
+
+const WALLET_PREVIEW_NOTICE = 'Điều kiện sử dụng sẽ được xác nhận từ máy chủ khi xem trước.';
 
 const props = withDefaults(defineProps<{
   offer: VoucherOffer;
@@ -72,6 +74,49 @@ const reservationText = computed(() => reservationSeconds.value === null
   ? ''
   : formatVoucherCountdown(reservationSeconds.value));
 
+const scopeLabel = computed(() => (
+  props.offer.scope.includes('LABOR') && props.offer.scope.includes('PARTS')
+    ? 'Tiền công và linh kiện'
+    : 'Phạm vi chưa đầy đủ'
+));
+const extraTargets = computed(() => [...props.offer.categoryNames, ...props.offer.serviceNames].filter(Boolean).join(', '));
+const isTerminalWallet = computed(() => ['USED', 'EXPIRED', 'REVOKED'].includes(props.offer.walletStatus ?? ''));
+
+const pillMeta = computed<{ status: string; label: string } | null>(() => {
+  if (props.offer.walletStatus === 'USED') return { status: 'INACTIVE', label: 'Đã sử dụng' };
+  if (props.offer.walletStatus === 'RESERVED') return { status: 'PENDING', label: 'Đang giữ chỗ' };
+  if (props.offer.walletStatus === 'EXPIRED' || props.offer.status === 'EXPIRED') return { status: 'INACTIVE', label: 'Đã hết hạn' };
+  if (props.offer.walletStatus === 'REVOKED' || props.offer.status === 'REVOKED') return { status: 'REJECTED', label: 'Đã thu hồi' };
+  if (props.offer.status === 'PAUSED' || props.offer.status === 'EXHAUSTED') {
+    return { status: 'INACTIVE', label: voucherStatusLabels[props.offer.status] };
+  }
+  if (props.offer.status === 'SCHEDULED') return { status: 'PENDING', label: voucherStatusLabels.SCHEDULED };
+  return null;
+});
+
+const rawFirstReason = computed(() => (
+  !props.offer.eligibility.eligible && props.offer.eligibility.reasons.length
+    ? props.offer.eligibility.reasons[0]
+    : ''
+));
+const isWalletPreviewNotice = computed(() => (
+  props.offer.walletStatus === 'AVAILABLE' && rawFirstReason.value === WALLET_PREVIEW_NOTICE
+));
+const visibleEligibilityReason = computed(() => (isWalletPreviewNotice.value ? '' : rawFirstReason.value));
+const walletEligibilityNote = computed(() => (isWalletPreviewNotice.value ? rawFirstReason.value : ''));
+const showActionReason = computed(() => (
+  !visibleEligibilityReason.value
+  && actionDisabled.value
+  && !props.offer.walletStatus
+  && (Boolean(props.disabledReason) || !props.connected)
+));
+const hasExtraDetails = computed(() => Boolean(
+  props.offer.description
+  || extraTargets.value
+  || props.offer.perCustomerLimit !== null
+  || walletEligibilityNote.value,
+));
+
 function activate() {
   if (actionDisabled.value) return;
   emit('activate', props.offer.id);
@@ -79,93 +124,115 @@ function activate() {
 </script>
 
 <template>
-  <article class="voucher-card relative overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white shadow-[var(--shadow-e1)]">
-    <div class="flex min-w-0 flex-col gap-4 p-4 sm:flex-row sm:items-start sm:gap-5 sm:p-5">
-      <div class="flex shrink-0 items-center gap-3 sm:w-32 sm:flex-col sm:items-start sm:gap-2">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-brand-50 text-brand-700" aria-hidden="true">
-          <TicketPercent :size="23" :stroke-width="1.75" />
-        </div>
+  <FhCard
+    as="article"
+    padding="none"
+    class="voucher-card rounded-[var(--radius-md)]! shadow-none!"
+    :class="isTerminalWallet ? 'opacity-75' : ''"
+  >
+    <div class="flex min-w-0 flex-col sm:flex-row">
+      <!-- Left Stub: Discount Focal Anchor -->
+      <div
+        class="flex shrink-0 items-center justify-between gap-3 border-b border-dashed border-ink-200 px-4 py-3.5 sm:w-44 sm:flex-col sm:items-start sm:justify-center sm:gap-1.5 sm:border-b-0 sm:border-r sm:px-5 sm:py-4"
+        :class="isTerminalWallet ? 'bg-ink-50' : 'bg-brand-50/55'"
+      >
         <div class="min-w-0">
-          <p class="text-xl font-semibold leading-7 text-brand-800">{{ voucherDiscountLabel(offer) }}</p>
-          <p class="mt-0.5 text-xs text-ink-600">{{ offer.kind === 'PERSONAL' ? 'Ưu đãi cá nhân' : 'Ưu đãi chung' }}</p>
+          <p
+            class="font-num text-xl sm:text-[22px] font-bold leading-tight tracking-tight tabular-nums"
+            :class="isTerminalWallet ? 'text-ink-600' : 'text-brand-700'"
+          >
+            {{ voucherDiscountLabel(offer) }}
+          </p>
+          <p v-if="offer.discount.capVnd !== null" class="mt-1 text-xs font-medium text-ink-600 tabular-nums">
+            Tối đa {{ formatVoucherAmount(offer.discount.capVnd) }}
+          </p>
         </div>
+
+        <span
+          class="shrink-0 rounded-[var(--radius-sm)] text-[11px] font-medium"
+          :class="offer.kind === 'PERSONAL' ? 'bg-white px-2 py-0.5 text-brand-700' : 'text-ink-500'"
+        >
+          {{ offer.kind === 'PERSONAL' ? 'Ưu đãi cá nhân' : 'Ưu đãi chung' }}
+        </span>
       </div>
 
-      <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <div class="min-w-0">
-            <h3 class="text-base font-semibold leading-6 text-ink-900">{{ offer.title }}</h3>
-            <p class="mt-1 text-sm leading-5 text-ink-600">{{ offer.description }}</p>
+      <!-- Right Body: Concise Terms & Action -->
+      <div class="flex min-w-0 flex-1 flex-col justify-between gap-3 p-4 sm:p-5">
+        <div class="space-y-2">
+          <div class="flex items-start justify-between gap-2.5">
+            <h3 class="min-w-0 break-words text-base font-semibold leading-snug text-ink-900">
+              {{ offer.title }}
+            </h3>
+            <FhStatusPill v-if="pillMeta" :status="pillMeta.status" :label="pillMeta.label" />
           </div>
-          <span class="shrink-0 rounded-full border border-ink-200 bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-700">
-            {{ voucherStatusLabels[offer.status] ?? 'Trạng thái chưa xác định' }}
-          </span>
-        </div>
 
-        <dl class="mt-4 grid grid-cols-1 gap-x-5 gap-y-2 text-sm sm:grid-cols-2">
-          <div class="flex min-w-0 justify-between gap-3 sm:justify-start">
-            <dt class="shrink-0 text-ink-600">Đơn tối thiểu</dt>
-            <dd class="text-right font-medium text-ink-900">{{ formatVoucherAmount(offer.minSpendVnd) }}</dd>
-          </div>
-          <div class="flex min-w-0 justify-between gap-3 sm:justify-start">
-            <dt class="shrink-0 text-ink-600">Giảm tối đa</dt>
-            <dd class="text-right font-medium text-ink-900">{{ formatVoucherAmount(offer.discount.capVnd) }}</dd>
-          </div>
-          <div class="flex min-w-0 justify-between gap-3 sm:justify-start">
-            <dt class="shrink-0 text-ink-600">Phạm vi</dt>
-            <dd class="text-right font-medium text-ink-900">{{ offer.scope.includes('LABOR') && offer.scope.includes('PARTS') ? 'Tiền công và linh kiện' : 'Phạm vi chưa đầy đủ' }}</dd>
-          </div>
-          <div class="flex min-w-0 justify-between gap-3 sm:justify-start">
-            <dt class="shrink-0 text-ink-600">Hạn dùng</dt>
-            <dd class="text-right font-medium text-ink-900">{{ formatVoucherDate(offer.expiresAt) }}</dd>
-          </div>
-        </dl>
+          <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-[13px] text-ink-600">
+            <span v-if="offer.minSpendVnd !== null">
+              Đơn từ <strong class="font-semibold text-ink-800 font-num">{{ formatVoucherAmount(offer.minSpendVnd) }}</strong>
+            </span>
+            <span v-if="offer.minSpendVnd !== null" class="text-ink-300" aria-hidden="true">·</span>
+            <span>{{ scopeLabel }}</span>
+            <span class="text-ink-300" aria-hidden="true">·</span>
+            <span>HSD <span class="font-num font-medium text-ink-700">{{ formatVoucherDate(offer.expiresAt) }}</span></span>
+          </p>
 
-        <p class="mt-3 text-xs leading-5 text-ink-600">
-          Áp dụng cho {{ [...offer.categoryNames, ...offer.serviceNames].filter(Boolean).join(', ') || 'dịch vụ theo điều kiện chương trình' }}
-          <span v-if="offer.perCustomerLimit !== null"> · Tối đa {{ offer.perCustomerLimit }} lượt mỗi khách</span>
-        </p>
-        <p class="mt-1 text-xs font-medium text-ink-700" aria-label="Hạn mức thanh toán thành công">
-          <template v-if="offer.remainingSuccessfulRedemptions !== null">
+          <p v-if="offer.remainingSuccessfulRedemptions !== null" class="text-xs font-medium text-ink-700" aria-label="Hạn mức thanh toán thành công">
             {{ offer.remainingSuccessfulRedemptions }} / {{ offer.successfulRedemptionLimit ?? '—' }} lượt thanh toán thành công còn lại
-          </template>
-          <template v-else>Số lượt còn lại chưa được xác nhận</template>
-        </p>
+          </p>
 
-        <p v-if="reservationText" class="mt-2 inline-flex min-h-8 items-center gap-2 rounded-[var(--radius-sm)] bg-warning-50 px-2.5 py-1 text-sm font-medium text-warning-800" data-testid="voucher-reservation-countdown" role="timer" aria-live="off" aria-atomic="true">
-          <Clock3 :size="16" aria-hidden="true" />
-          <span>Giữ chỗ còn {{ reservationText }}</span>
-        </p>
-        <p v-else-if="reservationSeconds === 0" class="mt-2 text-sm text-ink-600" role="status">Thời gian giữ chỗ đã hết.</p>
-        <p v-else-if="offer.reservation" class="mt-2 text-sm text-ink-600">Thời gian giữ chỗ chưa xác định.</p>
+          <p v-if="reservationText" class="inline-flex min-h-7 items-center gap-1.5 rounded-[var(--radius-sm)] bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-800" data-testid="voucher-reservation-countdown" role="timer" aria-live="off" aria-atomic="true">
+            <Clock3 :size="14" aria-hidden="true" />
+            <span>Giữ chỗ còn {{ reservationText }}</span>
+          </p>
+          <p v-else-if="reservationSeconds === 0" class="text-xs text-ink-500" role="status">Thời gian giữ chỗ đã hết.</p>
+          <p v-else-if="offer.reservation" class="text-xs text-ink-500">Thời gian giữ chỗ chưa xác định.</p>
 
-        <p v-if="!offer.eligibility.eligible && offer.eligibility.reasons.length" class="mt-3 flex items-start gap-2 text-sm text-warning-800" data-testid="voucher-eligibility-reason">
-          <Check class="mt-0.5 shrink-0" :size="16" aria-hidden="true" />
-          <span>{{ offer.eligibility.reasons[0] }}</span>
-        </p>
-        <p v-else-if="actionDisabled" class="mt-3 text-sm text-ink-600" data-testid="voucher-action-reason">{{ actionReason }}</p>
-      </div>
+          <p v-if="visibleEligibilityReason" class="flex items-start gap-1.5 text-xs sm:text-[13px] text-warning-800" data-testid="voucher-eligibility-reason">
+            <AlertCircle class="mt-0.5 shrink-0" :size="15" aria-hidden="true" />
+            <span>{{ visibleEligibilityReason }}</span>
+          </p>
+          <p v-else-if="showActionReason" class="text-xs text-ink-500" data-testid="voucher-action-reason">
+            {{ actionReason }}
+          </p>
+        </div>
 
-      <div class="sm:w-40 sm:shrink-0 sm:self-center">
-        <FhButton
-          class="w-full"
-          variant="primary"
-          size="md"
-          :disabled="actionDisabled"
-          :aria-label="actionText"
-          :aria-describedby="actionDisabled ? `voucher-reason-${offer.id}` : undefined"
-          @click="activate"
-        >{{ actionText }}</FhButton>
-        <span v-if="actionDisabled" class="sr-only" :id="`voucher-reason-${offer.id}`">{{ actionReason }}</span>
+        <div class="flex flex-wrap items-end justify-between gap-2.5 pt-1">
+          <details v-if="hasExtraDetails" class="group/details min-w-0 text-xs text-ink-600">
+            <summary class="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-ink-600 hover:text-brand-700 select-none [&::-webkit-details-marker]:hidden">
+              <span>Điều kiện</span>
+              <ChevronDown :size="14" class="transition-transform group-open/details:rotate-180" aria-hidden="true" />
+            </summary>
+            <div class="mt-2 space-y-1 border-t border-ink-100 pt-2 leading-relaxed text-ink-600">
+              <p v-if="offer.description">{{ offer.description }}</p>
+              <p v-if="extraTargets || offer.perCustomerLimit !== null">
+                Áp dụng cho {{ extraTargets || 'dịch vụ theo điều kiện chương trình' }}
+                <span v-if="offer.perCustomerLimit !== null"> · Tối đa {{ offer.perCustomerLimit }} lượt mỗi khách</span>
+              </p>
+              <p v-if="walletEligibilityNote">{{ walletEligibilityNote }}</p>
+            </div>
+          </details>
+          <span v-else />
+
+          <FhButton
+            :variant="offer.walletStatus ? 'secondary' : 'primary'"
+            size="md"
+            class="shrink-0 ml-auto"
+            :disabled="actionDisabled"
+            :aria-label="actionText"
+            :aria-describedby="actionDisabled ? `voucher-reason-${offer.id}` : undefined"
+            @click="activate"
+          >{{ actionText }}</FhButton>
+          <span v-if="actionDisabled" class="sr-only" :id="`voucher-reason-${offer.id}`">{{ actionReason }}</span>
+        </div>
       </div>
     </div>
-  </article>
+  </FhCard>
 </template>
 
 <style scoped>
 .voucher-card { transition: box-shadow 120ms ease, border-color 120ms ease; }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .voucher-card:hover { border-color: var(--color-ink-300); box-shadow: var(--shadow-e2); }
+  .voucher-card:hover { border-color: var(--color-ink-300); box-shadow: var(--shadow-e1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .voucher-card { transition: none; }

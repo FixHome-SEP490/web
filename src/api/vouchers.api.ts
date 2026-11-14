@@ -22,6 +22,8 @@ export interface VoucherCampaign {
   active: boolean;
   quota: number;
   redeemed: number;
+  /** BUG 62: how many times one customer may use a general voucher (1 = once). */
+  perCustomerLimit?: number;
   status?: VoucherCampaignLifecycle;
   version?: number;
   publishedAt?: string | null;
@@ -55,6 +57,7 @@ export interface CreateVoucherCampaign {
   startsAt: string;
   endsAt: string;
   quota: number;
+  perCustomerLimit?: number;
 }
 export type VoucherCampaignEdit = CreateVoucherCampaign & { version: number; commandId: string };
 export type VoucherCampaignTransition = { version: number; commandId: string; status: 'PUBLISHED' | 'PAUSED' | 'ARCHIVED' };
@@ -165,16 +168,16 @@ export const vouchersApi = {
   },
   async create(input: CreateVoucherCampaign & { commandId?: string }): Promise<VoucherCampaign> {
     // Explicit DTO allowlist: UI flags, counters and financial values are never sent.
-    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, commandId } = input;
+    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, perCustomerLimit, commandId } = input;
     return unwrap((await apiClient.post<unknown>('/vouchers/campaigns', {
-      code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota,
+      code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, perCustomerLimit,
       ...(commandId ? { commandId } : {}),
     })).data, campaign);
   },
   async updateCampaign(id: string, input: VoucherCampaignEdit): Promise<VoucherCampaign> {
-    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, version, commandId } = input;
+    const { code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, perCustomerLimit, version, commandId } = input;
     const updated = unwrap((await apiClient.patch<unknown>(`/vouchers/campaigns/${encodeURIComponent(id)}`, {
-      code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, version, commandId,
+      code, name, kind, discount, value, capVnd, minimumVnd, categoryIds, serviceIds, startsAt, endsAt, quota, perCustomerLimit, version, commandId,
     })).data, campaign);
     if (updated.id !== id || updated.status !== 'DRAFT') invalid();
     return updated;

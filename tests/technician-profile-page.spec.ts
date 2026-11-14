@@ -138,6 +138,50 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
     expect(buttonsWith(wrapper, 'Lưu thay đổi')).toHaveLength(1);
   });
 
+  it('moves between sections with keyboard and mobile navigation while retaining drafts', async () => {
+    const wrapper = await mountPage();
+    await wrapper.get('#tp-bio').setValue('Giới thiệu đang chỉnh sửa');
+    await wrapper.get('#profile-tab-info').trigger('keydown', { key: 'ArrowDown' });
+    expect(wrapper.get('#profile-tab-services').attributes('aria-selected')).toBe('true');
+    expect(wrapper.get('[role="tabpanel"]').attributes('id')).toBe('profile-panel-services');
+    await wrapper.get('#profile-section').setValue('info');
+    expect((wrapper.get('#tp-bio').element as HTMLTextAreaElement).value).toBe('Giới thiệu đang chỉnh sửa');
+    expect(wrapper.get('.profile-save').text()).toContain('Có thay đổi chưa lưu');
+    await wrapper.get('#profile-tab-info').trigger('keydown', { key: 'End' });
+    expect(wrapper.get('#profile-tab-reviews').attributes('tabindex')).toBe('0');
+    expect(wrapper.get('#profile-tab-info').attributes('tabindex')).toBe('-1');
+    wrapper.unmount();
+  });
+
+  it('keeps the dirty indicator after a rejected save and clears it only after success', async () => {
+    const wrapper = await mountPage();
+    await wrapper.get('#tp-bio').setValue('Giới thiệu mới');
+    profileApi.updateMe.mockResolvedValue({ fullName: 'Phạm Đức Toàn' });
+    technicianProfileApi.updateMyProfile.mockRejectedValueOnce(new Error('Save failed'));
+    await buttonsWith(wrapper, 'Lưu thay đổi')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.profile-save').text()).toContain('Có thay đổi chưa lưu');
+    technicianProfileApi.updateMyProfile.mockResolvedValueOnce({ ...PROFILE, bio: 'Giới thiệu mới' });
+    await buttonsWith(wrapper, 'Lưu thay đổi')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.profile-save').text()).toContain('Không có thay đổi chưa lưu');
+    wrapper.unmount();
+  });
+
+  it('does not discard a personal draft when saving the weekly schedule', async () => {
+    const wrapper = await mountPage();
+    await wrapper.get('#tp-bio').setValue('Bản nháp cần giữ lại');
+    await wrapper.get('#profile-section').setValue('schedule');
+    await buttonsWith(wrapper, 'Cả tuần')[0].trigger('click');
+    technicianProfileApi.updateMySchedule.mockResolvedValueOnce(undefined);
+    await buttonsWith(wrapper, 'Lưu lịch làm việc')[0].trigger('click');
+    await flushPromises();
+    await wrapper.get('#profile-section').setValue('info');
+    expect((wrapper.get('#tp-bio').element as HTMLTextAreaElement).value).toBe('Bản nháp cần giữ lại');
+    expect(wrapper.get('.profile-save').text()).toContain('Có thay đổi chưa lưu');
+    wrapper.unmount();
+  });
+
   it('a service row offers "Lưu" only after it is changed', async () => {
     technicianProfileApi.setSkillPricing.mockResolvedValue({ ...OFFERING, listedLaborPrice: 200000 });
     const wrapper = await mountPage();

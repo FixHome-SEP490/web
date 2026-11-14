@@ -405,6 +405,28 @@ describe('Service Manager nhận hoàn trả (P1 custody)', () => {
     wrapper.unmount();
   });
 
+  it('reads the warehouse mark from the queue itself, with no allocation call per request', async () => {
+    partRequestsApi.getPendingReturns
+      .mockResolvedValueOnce([
+        returnRecord({ declaredQty: 2, warehouseAllocated: true }),
+        returnRecord({ partRequestId: 'pr-2', partRequestItemId: 'item-2', declaredQty: 1, warehouseAllocated: false }),
+      ])
+      .mockResolvedValueOnce([]);
+    partRequestsApi.acceptReturn.mockResolvedValue(null);
+
+    const wrapper = mount(ConsolePartReturnsPage, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await flushPromises();
+    expect(partRequestsApi.getWarehouseAllocation).not.toHaveBeenCalled();
+
+    await wrapper.findAll('[data-testid="accept-return"]')[0].trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain('Đã nhận linh kiện tại kho và cập nhật tồn thực tế.');
+    expect(partRequestsApi.getWarehouseAllocation).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('prevents a double submit while the acceptance is in flight', async () => {
     partRequestsApi.getPendingReturns.mockResolvedValue([returnRecord({ declaredQty: 2 })]);
     const pending = deferred<null>();

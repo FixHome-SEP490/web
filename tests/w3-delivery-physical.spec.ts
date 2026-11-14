@@ -29,7 +29,8 @@ function preview(requestId = id) {
     eligibility: 'PENDING_ASSISTANCE', reason: 'SHIPPING_APPROVAL_SOURCE_UNVERIFIED', lastAssessment: null,
     physicalExecution: 'BLOCKED', financialExecution: 'BLOCKED', evidence: 'NOT_RECORDED',
     actualCourierCost: null, courierPayment: 'NOT_RECORDED', blockers: [...blockers],
-    actions: { reserve: 'BLOCKED', issueToCourier: 'BLOCKED', dispatch: 'BLOCKED', technicianReceipt: 'BLOCKED' } };
+    actions: { reserve: 'BLOCKED', issueToCourier: 'BLOCKED', dispatch: 'BLOCKED', technicianReceipt: 'BLOCKED' },
+    progress: null as null | Record<string, unknown> };
 }
 const envelope = (data: unknown) => ({ data: { success: true, statusCode: 200, message: 'Success', data } });
 function signIn(role = UserRole.CUSTOMER, userId = 'customer-a') {
@@ -40,6 +41,18 @@ beforeEach(() => { setActivePinia(createPinia()); signIn(); });
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
 describe('W3 delivery physical read boundary', () => {
+  it('reads the paid W3 progress and an older answer without it (W-16)', async () => {
+    const paid = { ...preview(), lastAssessment: { version: 4, status: 'TECHNICIAN_RECEIVED', reason: null }, evidence: 'RECORDED_NOT_EXTERNALLY_VERIFIED',
+      progress: { status: 'TECHNICIAN_RECEIVED', actualShippingFee: 35000, customerShippingShare: 24500, technicianShippingShare: 10500 } };
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(paid));
+    expect((await w3DeliveryPhysicalApi.preview(id)).progress).toEqual(paid.progress);
+    const older: Record<string, unknown> = { ...preview() };
+    delete older.progress;
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(older));
+    expect((await w3DeliveryPhysicalApi.preview(id)).progress).toBeNull();
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...paid, progress: { ...paid.progress, actualShippingFee: -1 } }));
+    await expect(w3DeliveryPhysicalApi.preview(id)).rejects.toThrow();
+  });
   it('reads only the canonical GET and never emits a physical or financial command', async () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue(envelope(preview()));
     const post = vi.spyOn(apiClient, 'post'); const patch = vi.spyOn(apiClient, 'patch');

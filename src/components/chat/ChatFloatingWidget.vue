@@ -96,19 +96,19 @@ function handleToggleWidget() {
   <div v-if="authStore.isAuthenticated && !onMessagesPage">
     <!-- Chat Window Popup (Anchored at bottom, located to the left of the round FAB icon) -->
     <transition
-      enter-active-class="transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-bottom sm:origin-bottom-right"
+      enter-active-class="transition duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-bottom sm:origin-bottom-right motion-reduce:transition-none"
       enter-from-class="opacity-0 translate-y-8 scale-90 sm:scale-95"
       enter-to-class="opacity-100 translate-y-0 scale-100"
-      leave-active-class="transition duration-200 ease-[cubic-bezier(0.4,0,1,1)] transform-gpu origin-bottom sm:origin-bottom-right"
+      leave-active-class="transition duration-200 ease-[cubic-bezier(0.4,0,1,1)] transform-gpu origin-bottom sm:origin-bottom-right motion-reduce:transition-none"
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-8 scale-90 sm:scale-95"
     >
       <div
         v-if="chatStore.isWidgetOpen"
-        class="fixed z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] bottom-[var(--fh-dock,0px)] right-2 left-2 sm:left-auto sm:right-22 md:right-24 sm:bottom-0 w-auto sm:w-[380px] md:w-[400px] bg-white rounded-2xl sm:rounded-b-none sm:rounded-t-2xl border border-ink-200 sm:border-b-0 shadow-2xl flex flex-col overflow-hidden"
+        class="fixed z-40 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none bottom-[var(--fh-dock,0px)] right-2 left-2 sm:left-auto sm:right-22 md:right-24 sm:bottom-0 w-auto sm:w-[380px] md:w-[400px] bg-white rounded-2xl sm:rounded-b-none sm:rounded-t-2xl ring-1 ring-ink-900/[0.08] shadow-(--shadow-e3) flex flex-col overflow-hidden"
         :class="[
           isMinimized
-            ? 'h-[57px] shadow-lg'
+            ? 'h-[57px]'
             : 'h-[520px] max-h-[calc(100dvh_-_var(--fh-dock,0px)_-_1rem)] sm:max-h-[calc(100dvh_-_2rem)]'
         ]"
       >
@@ -133,13 +133,13 @@ function handleToggleWidget() {
         <div v-else class="flex flex-col h-full bg-white">
           <!-- Inbox Header -->
           <div
-            class="px-3.5 py-2.5 border-b border-ink-200 bg-white flex items-center justify-between transition-colors select-none"
+            class="px-4 py-3 border-b border-ink-100 bg-white/95 backdrop-blur-sm flex items-center justify-between transition-colors select-none"
             :class="isMinimized ? 'cursor-pointer hover:bg-ink-50' : ''"
             @click="isMinimized ? (isMinimized = false) : undefined"
           >
-            <div class="flex items-center gap-2 min-w-0">
-              <div class="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center flex-shrink-0">
-                <MessageSquare :size="18" />
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center flex-shrink-0">
+                <MessageSquare :size="17" />
               </div>
               <div class="min-w-0">
                 <h3 class="text-sm font-bold text-ink-900 leading-tight">Tin nhắn</h3>
@@ -153,64 +153,64 @@ function handleToggleWidget() {
             </div>
 
             <!-- Inbox Header Actions: Vào page chat -> Thu gọn -> Thoát -->
-            <div class="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+            <div class="flex items-center gap-0.5 flex-shrink-0">
               <button
                 v-if="!isMinimized"
                 type="button"
-                class="p-1.5 text-ink-500 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors"
+                class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-brand-600 rounded-full hover:bg-brand-50 transition-colors"
                 @click.stop="handleExpandToPage"
                 title="Mở trong trang Tin nhắn đầy đủ"
                 aria-label="Mở trong trang Tin nhắn đầy đủ"
               >
-                <ExternalLink :size="17" />
+                <ExternalLink :size="16" />
               </button>
               <button
                 type="button"
-                class="p-1.5 text-ink-500 hover:text-ink-900 rounded-lg hover:bg-ink-100 transition-colors"
+                class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-ink-900 rounded-full hover:bg-ink-100 transition-colors"
                 @click.stop="isMinimized = !isMinimized"
                 :title="isMinimized ? 'Mở rộng danh sách tin nhắn' : 'Thu gọn danh sách tin nhắn'"
                 :aria-label="isMinimized ? 'Mở rộng' : 'Thu gọn'"
               >
-                <ChevronUp v-if="isMinimized" :size="17" />
-                <Minus v-else :size="17" />
+                <ChevronUp v-if="isMinimized" :size="16" />
+                <Minus v-else :size="16" />
               </button>
               <button
                 type="button"
-                class="p-1.5 text-ink-500 hover:text-danger-600 rounded-lg hover:bg-danger-50 transition-colors"
+                class="w-8 h-8 flex items-center justify-center text-ink-500 hover:text-danger-600 rounded-full hover:bg-danger-50 transition-colors"
                 @click.stop="handleCloseWidget"
                 title="Đóng cửa sổ"
                 aria-label="Đóng cửa sổ"
               >
-                <X :size="17" />
+                <X :size="16" />
               </button>
             </div>
           </div>
 
           <!-- Body of Inbox (Search, List, Footer) hidden when minimized -->
           <transition
-            enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
             enter-from-class="opacity-0 -translate-y-2"
             enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition-all duration-200 ease-[cubic-bezier(0.4,0,1,1)]"
+            leave-active-class="transition-all duration-200 ease-[cubic-bezier(0.4,0,1,1)] motion-reduce:transition-none"
             leave-from-class="opacity-100 translate-y-0"
             leave-to-class="opacity-0 -translate-y-2"
           >
             <div v-show="!isMinimized" class="flex-1 flex flex-col min-h-0 overflow-hidden">
               <!-- Search Bar -->
-              <div class="p-2.5 border-b border-ink-100 bg-ink-25">
+              <div class="px-3 py-2 bg-white">
                 <div class="relative">
-                  <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                  <Search :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
                   <input
                     v-model="searchQuery"
                     type="text"
                     placeholder="Tìm hội thoại, dịch vụ..."
-                    class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-ink-200 rounded-lg outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-ink-900"
+                    class="w-full h-9 pl-8.5 pr-3 text-xs bg-ink-100/75 border border-transparent rounded-full outline-none focus:bg-white focus:border-brand-300 focus:ring-2 focus:ring-brand-500/15 transition-all text-ink-900 placeholder:text-ink-400"
                   />
                 </div>
               </div>
 
               <!-- Conversations List -->
-              <div class="flex-1 overflow-y-auto divide-y divide-ink-100">
+              <div class="flex-1 overflow-y-auto px-1.5 pb-2 space-y-0.5">
                 <!-- Loading -->
                 <div
                   v-if="chatStore.loadingConversations && chatStore.conversations.length === 0"
@@ -224,9 +224,11 @@ function handleToggleWidget() {
                   v-else-if="filteredConversations.length === 0"
                   class="h-full flex flex-col items-center justify-center p-6 text-center text-ink-400"
                 >
-                  <MessageSquare :size="32" class="text-ink-300 mb-2" />
+                  <div class="w-12 h-12 rounded-2xl bg-ink-100 text-ink-400 flex items-center justify-center mb-2">
+                    <MessageSquare :size="22" />
+                  </div>
                   <p class="text-xs font-medium text-ink-700">Chưa có cuộc trò chuyện nào</p>
-                  <p class="text-[11px] text-ink-400 mt-0.5">
+                  <p class="text-[11px] text-ink-400 mt-0.5 max-w-[220px]">
                     Khi có đơn dịch vụ được nhận, khung trò chuyện sẽ tự động xuất hiện tại đây.
                   </p>
                 </div>
@@ -236,13 +238,13 @@ function handleToggleWidget() {
                   v-for="conv in filteredConversations"
                   :key="conv.id"
                   type="button"
-                  class="w-full p-3 flex items-start gap-2.5 text-left hover:bg-ink-50 transition-colors relative group"
-                  :class="{ 'bg-brand-50/40': conv.unreadCount > 0 }"
+                  class="w-full p-2.5 rounded-xl flex items-start gap-2.5 text-left hover:bg-ink-100/70 transition-colors relative group"
+                  :class="{ 'bg-brand-50/55 hover:bg-brand-50/80': conv.unreadCount > 0 }"
                   @click="chatStore.selectConversation(conv.id)"
                 >
                   <!-- Avatar -->
                   <div class="relative flex-shrink-0 mt-0.5">
-                    <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-sm overflow-hidden border border-brand-200">
+                    <div class="w-10 h-10 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center font-semibold text-sm overflow-hidden ring-1 ring-black/[0.06]">
                       <img
                         v-if="conv.counterpart?.avatarUrl"
                         :src="conv.counterpart.avatarUrl"
@@ -289,7 +291,7 @@ function handleToggleWidget() {
               </div>
 
               <!-- Footer: Mở toàn bộ trang Tin nhắn -->
-              <div class="p-2.5 border-t border-ink-100 bg-ink-25 text-center flex-shrink-0">
+              <div class="p-2.5 border-t border-ink-100 bg-ink-25/80 text-center flex-shrink-0">
                 <button
                   type="button"
                   class="text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline inline-flex items-center gap-1.5"
@@ -311,7 +313,7 @@ function handleToggleWidget() {
     >
       <button
         type="button"
-        class="relative w-11 h-11 sm:w-13 sm:h-13 rounded-full text-white flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-105 active:scale-95 cursor-pointer shadow-lg hover:shadow-xl"
+        class="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full text-white flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none hover:scale-105 active:scale-95 cursor-pointer shadow-(--shadow-e2) hover:shadow-(--shadow-e3)"
         :class="[
           chatStore.isWidgetOpen && !isMinimized
             ? 'bg-brand-700 ring-4 ring-brand-100'
@@ -321,12 +323,12 @@ function handleToggleWidget() {
         @click="handleToggleWidget"
         :title="chatStore.isWidgetOpen ? (isMinimized ? 'Mở lại khung chat' : 'Đóng / Thu gọn chat') : 'Mở tin nhắn hỗ trợ'"
       >
-        <MessageSquare :size="22" class="transition-transform duration-300" :class="chatStore.isWidgetOpen ? 'scale-90' : 'scale-100'" />
+        <MessageSquare :size="21" class="transition-transform duration-300 motion-reduce:transition-none" :class="chatStore.isWidgetOpen ? 'scale-90' : 'scale-100'" />
 
         <!-- Total Unread Badge -->
         <span
           v-if="chatStore.totalUnreadCount > 0"
-          class="absolute -top-1 -right-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-danger-600 text-white font-num leading-none border-2 border-white shadow-xs"
+          class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-danger-600 text-white font-num leading-none ring-2 ring-white shadow-xs"
         >
           {{ chatStore.totalUnreadCount > 99 ? '99+' : chatStore.totalUnreadCount }}
         </span>

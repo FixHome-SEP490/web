@@ -37,7 +37,7 @@ async function load() {
     sessions.value = result.sessions;
     hasPreviousTechnician.value = !!result.technicianId;
   } catch (err) {
-    error.value = userFacingError(err, 'Chưa tải được các buổi, thử lại sau.');
+    error.value = userFacingError(err, 'Chưa tải được các khung giờ, thử lại sau.');
   } finally {
     loading.value = false;
   }
@@ -48,7 +48,7 @@ watch(() => [props.open, props.bookingId], ([open]) => { if (open) void load(); 
 async function confirm() {
   if (busy.value) return;
   if (!selected.value) {
-    error.value = 'Vui lòng chọn ngày và buổi.';
+    error.value = 'Vui lòng chọn ngày và khung giờ.';
     return;
   }
   busy.value = true;
@@ -100,13 +100,13 @@ async function confirm() {
             </button>
           </div>
 
-          <div v-if="loading" aria-busy="true" aria-label="Đang tải các buổi" class="space-y-2">
+          <div v-if="loading" aria-busy="true" aria-label="Đang tải các khung giờ" class="space-y-2">
             <FhSkeleton height="52px" rounded="lg" />
             <FhSkeleton height="84px" rounded="lg" />
           </div>
           <template v-else>
             <p class="text-sm text-ink-600">
-              {{ hasPreviousTechnician ? 'Thợ cũ rảnh buổi bạn chọn sẽ nhận lời mời trước.' : 'Bạn chọn thợ ngay sau khi đặt.' }}
+              {{ hasPreviousTechnician ? 'Kỹ thuật viên cũ rảnh khung giờ bạn chọn sẽ nhận lời mời trước.' : 'Bạn chọn kỹ thuật viên ngay sau khi đặt.' }}
             </p>
             <BookingSessionPicker v-model="selected" :sessions="sessions" compact allow-busy busy-hint="chọn thợ khác" />
 

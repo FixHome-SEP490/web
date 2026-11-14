@@ -5,7 +5,7 @@
 // the technician cannot take are shown with the reason and cannot be picked,
 // unless allowBusy says otherwise.
 import { computed, nextTick, ref, watch } from 'vue';
-import { Calendar as CalendarIcon, Check, Sunrise, Sun, Moon } from 'lucide-vue-next';
+import { Calendar as CalendarIcon, Check, Clock } from 'lucide-vue-next';
 import { SLOT_SHORT, sessionDayLabel, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 import { addDaysToKey, vnDayKey, weekdayOfKey } from '../../utils/vn-time';
 import FhDatePicker from '../common/FhDatePicker.vue';
@@ -25,9 +25,9 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: { date: string; slot:
 /** Monday first, as Vietnamese calendars are laid out. */
 const WEEK_HEADER = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 const SLOT_PRESENTATION = {
-  morning: { icon: Sunrise, label: 'Sáng', time: '08:00–12:00' },
-  afternoon: { icon: Sun, label: 'Chiều', time: '13:00–18:00' },
-  evening: { icon: Moon, label: 'Tối', time: '18:00–23:00' },
+  morning: { icon: Clock, time: '08:00–12:00' },
+  afternoon: { icon: Clock, time: '13:00–18:00' },
+  evening: { icon: Clock, time: '18:00–23:00' },
 };
 const canPick = (s: SessionOption) => s.available || props.allowBusy;
 
@@ -132,7 +132,7 @@ function selectCalendarDate(date: string) {
 
 <template>
   <div class="space-y-4" data-testid="session-picker">
-    <p v-if="dates.length === 0" class="text-xs text-ink-500">Không còn buổi nào trong 14 ngày tới.</p>
+    <p v-if="dates.length === 0" class="text-xs text-ink-500">Không còn khung giờ nào trong 14 ngày tới.</p>
     <template v-else>
       <template v-if="compact">
         <div class="flex items-center gap-2">
@@ -149,7 +149,7 @@ function selectCalendarDate(date: string) {
                   day.open ? '' : 'opacity-50',
                 ]"
                 :aria-selected="activeDate === day.date"
-                :aria-label="`${day.weekday}, ${day.dayMonth}${day.open ? '' : ', không có buổi nhận đặt'}`"
+                :aria-label="`${day.weekday}, ${day.dayMonth}${day.open ? '' : ', không có khung giờ nhận đặt'}`"
                 :data-testid="`session-day-${day.date}`"
                 @click="activeDate = day.date"
               >
@@ -169,7 +169,7 @@ function selectCalendarDate(date: string) {
                   day.open ? '' : 'opacity-50',
                 ]"
                 :aria-selected="activeDate === day.date"
-                :aria-label="`${day.weekday}, ${day.dayMonth}${day.open ? '' : ', không có buổi nhận đặt'}`"
+                :aria-label="`${day.weekday}, ${day.dayMonth}${day.open ? '' : ', không có khung giờ nhận đặt'}`"
                 :data-testid="`session-day-${day.date}`"
                 @click="activeDate = day.date"
               >
@@ -221,23 +221,22 @@ function selectCalendarDate(date: string) {
           v-for="s in activeSessions"
           :key="s.slot"
           type="button"
-          class="relative flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1 py-3 text-center text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
           :class="[
             isSelected(s) ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500 text-ink-900' : 'border-ink-200 bg-white text-ink-800',
             canPick(s) ? 'hover:border-ink-300' : 'cursor-not-allowed bg-ink-50 text-ink-400',
           ]"
           :disabled="!canPick(s)"
           :aria-pressed="isSelected(s)"
-          :aria-label="`${SLOT_SHORT[s.slot]}${!s.available ? `, ${s.reason || 'Thợ không nhận buổi này'}${allowBusy && busyHint ? `, ${busyHint}` : ''}` : ''}`"
+          :aria-label="`${SLOT_SHORT[s.slot]}${!s.available ? `, ${s.reason || 'Kỹ thuật viên không nhận khung giờ này'}${allowBusy && busyHint ? `, ${busyHint}` : ''}` : ''}`"
           :data-testid="`session-${s.date}-${s.slot}`"
           @click="pick(s)"
         >
-          <component :is="SLOT_PRESENTATION[s.slot].icon" :size="20" aria-hidden="true" />
-          <span class="block whitespace-nowrap font-semibold">{{ SLOT_PRESENTATION[s.slot].label }}</span>
-          <span class="block whitespace-nowrap text-[11px] font-num">{{ SLOT_PRESENTATION[s.slot].time }}</span>
-          <Check v-if="isSelected(s)" class="absolute right-1 top-1 text-brand-700" :size="12" aria-hidden="true" />
+          <component :is="SLOT_PRESENTATION[s.slot].icon" :size="18" class="shrink-0" :class="isSelected(s) ? 'text-brand-600' : 'text-ink-500'" aria-hidden="true" />
+          <span class="block whitespace-nowrap text-xs sm:text-sm font-bold font-num">{{ SLOT_PRESENTATION[s.slot].time }}</span>
+          <Check v-if="isSelected(s)" class="absolute right-1.5 top-1.5 text-brand-700" :size="12" aria-hidden="true" />
           <span v-if="!s.available" class="block text-xs" :class="allowBusy ? 'text-warning-700' : 'text-ink-400'">
-            {{ s.reason || 'Thợ không nhận buổi này' }}<template v-if="allowBusy && busyHint"> · {{ busyHint }}</template>
+            {{ s.reason || 'Kỹ thuật viên không nhận khung giờ này' }}<template v-if="allowBusy && busyHint"> · {{ busyHint }}</template>
           </span>
         </button>
       </div>
@@ -300,34 +299,33 @@ function selectCalendarDate(date: string) {
             v-for="s in activeSessions"
             :key="s.slot"
             type="button"
-            class="relative flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1 py-3 text-center text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            class="relative flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-center text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
             :class="[
               isSelected(s) ? 'border-brand-600 bg-brand-50 ring-2 ring-brand-500 text-ink-900' : 'border-ink-200 bg-white text-ink-800',
               canPick(s) ? 'hover:border-ink-300' : 'cursor-not-allowed bg-ink-50 text-ink-400',
             ]"
             :disabled="!canPick(s)"
             :aria-pressed="isSelected(s)"
-            :aria-label="`${SLOT_SHORT[s.slot]}${!s.available ? `, ${s.reason || 'Thợ không nhận buổi này'}${allowBusy && busyHint ? `, ${busyHint}` : ''}` : ''}`"
+            :aria-label="`${SLOT_SHORT[s.slot]}${!s.available ? `, ${s.reason || 'Kỹ thuật viên không nhận khung giờ này'}${allowBusy && busyHint ? `, ${busyHint}` : ''}` : ''}`"
             :data-testid="`session-${s.date}-${s.slot}`"
             @click="pick(s)"
           >
-            <component :is="SLOT_PRESENTATION[s.slot].icon" :size="20" aria-hidden="true" />
+            <component :is="SLOT_PRESENTATION[s.slot].icon" :size="18" class="shrink-0" :class="isSelected(s) ? 'text-brand-600' : 'text-ink-500'" aria-hidden="true" />
             <span class="min-w-0">
-              <span class="block font-semibold whitespace-nowrap">{{ SLOT_PRESENTATION[s.slot].label }}</span>
-              <span class="block whitespace-nowrap text-[11px] font-num">{{ SLOT_PRESENTATION[s.slot].time }}</span>
+              <span class="block whitespace-nowrap text-xs sm:text-sm font-bold font-num">{{ SLOT_PRESENTATION[s.slot].time }}</span>
               <span v-if="!s.available" class="block text-xs" :class="allowBusy ? 'text-warning-700' : 'text-ink-400'">
-                {{ s.reason || 'Thợ không nhận buổi này' }}<template v-if="allowBusy && busyHint"> · {{ busyHint }}</template>
+                {{ s.reason || 'Kỹ thuật viên không nhận khung giờ này' }}<template v-if="allowBusy && busyHint"> · {{ busyHint }}</template>
               </span>
             </span>
             <span
-              class="absolute right-1 top-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+              class="absolute right-1.5 top-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
               :class="isSelected(s) ? 'border-brand-600 bg-brand-600 text-white' : 'border-ink-300 bg-white'"
               aria-hidden="true"
             >
               <Check v-if="isSelected(s)" :size="12" :stroke-width="3" />
             </span>
           </button>
-          <p v-if="!activeSessions.length" class="text-xs text-ink-500">Ngày này không còn buổi trống.</p>
+          <p v-if="!activeSessions.length" class="text-xs text-ink-500">Ngày này không còn khung giờ trống.</p>
         </div>
       </section>
       </template>

@@ -13,7 +13,6 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  ChevronDown,
   MessageSquare,
   Wallet,
   Loader2,
@@ -24,6 +23,7 @@ import {
 
 import { ChatFloatingWidget, AppSidebar } from '../components';
 import type { SidebarNavGroup } from '../components';
+import AccountAvatarBadge from '../components/account/AccountAvatarBadge.vue';
 import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
@@ -186,15 +186,6 @@ const handleLogout = async () => {
   window.location.href = '/login';
 };
 
-const userInitial = computed(() => {
-  return authStore.user?.fullName?.charAt(0)?.toUpperCase() || 'T';
-});
-
-const userShortName = computed(() => {
-  const parts = authStore.user?.fullName?.trim().split(/\s+/) || [];
-  return parts.length > 0 ? parts[parts.length - 1] : 'Thợ';
-});
-
 const unread = computed(() => (chatStore.totalUnreadCount > 99 ? '99+' : String(chatStore.totalUnreadCount)));
 
 /** Rejected profiles are blocked until fixed (red); pending ones only wait (yellow). */
@@ -282,44 +273,26 @@ const tabItems: TabNavItem[] = [
     />
 
     <div class="flex-1 min-w-0 min-h-screen flex flex-col">
-      <header class="sticky top-0 z-20 bg-white border-b border-ink-200">
+      <header class="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
         <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 max-w-360 mx-auto">
           <!-- Logo only when the sidebar is hidden (narrow screens) -->
-          <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0" aria-label="FixHome - Trang chủ">
-            <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg" />
+          <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0 group" aria-label="FixHome - Trang chủ">
+            <img src="/logo.png" alt="" class="w-8 h-8 object-contain rounded-lg transition-transform group-hover:scale-105" />
             <span class="text-lg font-bold tracking-tight whitespace-nowrap hidden sm:inline"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
           </router-link>
 
           <!-- Current Page Title on wide screens -->
-          <div class="hidden lg:flex items-center gap-3">
-            <h1 v-if="pageTitle" class="text-lg font-semibold text-ink-900 tracking-tight">{{ pageTitle }}</h1>
+          <div class="hidden lg:flex items-center gap-3 min-w-0 flex-1">
+            <h1 v-if="pageTitle" class="text-lg font-semibold text-ink-900 tracking-tight truncate">{{ pageTitle }}</h1>
           </div>
 
-          <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-            <!-- Messages live in the sidebar on wide screens -->
-            <router-link
-              to="/tech/messages"
-              class="lg:hidden relative w-10 h-10 rounded-xl text-ink-600 hover:bg-ink-100 flex items-center justify-center transition-colors"
-              aria-label="Tin nhắn với khách hàng"
-              active-class="bg-brand-50 text-brand-700"
-            >
-              <MessageSquare :size="20" :stroke-width="1.75" />
-              <span
-                v-if="chatStore.totalUnreadCount > 0"
-                class="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-danger-600 text-white text-[10px] font-semibold font-num inline-flex items-center justify-center"
-              >
-                {{ unread }}
-              </span>
-            </router-link>
-
-            <NotificationBellDropdown />
-
+          <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <button
               type="button"
-              class="h-9 px-3 rounded-full border flex items-center gap-2 text-sm font-medium whitespace-nowrap transition-colors"
+              class="h-9 px-3.5 rounded-full border flex items-center gap-2 text-sm font-medium whitespace-nowrap transition-[background-color,border-color,transform] active:scale-[0.98]"
               :class="
                 isAvailable
-                  ? 'bg-success-50 border-success-200 text-success-700 hover:bg-success-100'
+                  ? 'bg-success-50 border-success-200/90 text-success-700 hover:bg-success-100/80'
                   : 'bg-white border-ink-200 text-ink-600 hover:bg-ink-50'
               "
               :disabled="togglingAvailability"
@@ -331,61 +304,99 @@ const tabItems: TabNavItem[] = [
               <span class="hidden min-[360px]:inline">{{ isAvailable ? 'Đang nhận việc' : 'Tạm nghỉ' }}</span>
             </button>
 
-            <div class="relative" @keydown.esc="avatarMenuOpen = false">
+            <span class="h-5 w-px bg-ink-200 mx-0.5" aria-hidden="true" />
+
+            <div class="flex items-center gap-1.5">
+              <!-- Messages live in the sidebar on wide screens -->
+              <router-link
+                to="/tech/messages"
+                class="lg:hidden relative w-10 h-10 rounded-full text-ink-600 hover:text-ink-900 hover:bg-ink-100 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                aria-label="Tin nhắn với khách hàng"
+                active-class="bg-brand-50 text-brand-700"
+              >
+                <MessageSquare :size="19" :stroke-width="1.9" />
+                <span
+                  v-if="chatStore.totalUnreadCount > 0"
+                  class="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center ring-2 ring-white shadow-xs leading-none"
+                >
+                  {{ unread }}
+                </span>
+              </router-link>
+
+              <NotificationBellDropdown />
+
+              <div class="relative" @keydown.esc="avatarMenuOpen = false">
               <button
                 type="button"
-                class="flex items-center gap-2 p-1 sm:pr-2 rounded-full hover:bg-ink-100 transition-colors"
+                class="group flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-ink-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
                 aria-label="Tài khoản"
+                aria-haspopup="menu"
                 :aria-expanded="avatarMenuOpen"
                 @click="avatarMenuOpen = !avatarMenuOpen"
               >
-                <span class="w-8 h-8 rounded-full bg-brand-50 text-brand-700 border border-brand-100 font-semibold flex items-center justify-center text-sm overflow-hidden shrink-0">
-                  <img v-if="authStore.user?.avatarUrl" :src="authStore.user.avatarUrl" alt="" class="w-full h-full object-cover" />
-                  <span v-else>{{ userInitial }}</span>
-                </span>
-                <span class="hidden xl:inline text-sm font-medium text-ink-800 max-w-32 truncate">{{ userShortName }}</span>
-                <ChevronDown :size="16" class="text-ink-400 hidden sm:block" />
+                <AccountAvatarBadge
+                  :name="authStore.user?.fullName"
+                  :avatar-url="authStore.user?.avatarUrl"
+                  :open="avatarMenuOpen"
+                />
               </button>
 
               <div v-if="avatarMenuOpen" class="fixed inset-0 z-40" @click="avatarMenuOpen = false" />
 
-              <div
-                v-if="avatarMenuOpen"
-                class="absolute right-0 mt-2 w-60 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-2 z-50 divide-y divide-ink-100 text-sm"
-                @click="avatarMenuOpen = false"
+              <Transition
+                enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+                enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+                enter-to-class="opacity-100 scale-100 translate-y-0"
+                leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+                leave-from-class="opacity-100 scale-100 translate-y-0"
+                leave-to-class="opacity-0 scale-95 -translate-y-1.5"
               >
-                <div class="px-4 py-2.5">
-                  <p class="font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
-                  <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
-                </div>
+                <div
+                  v-if="avatarMenuOpen"
+                  class="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06] py-1.5 z-50 divide-y divide-ink-100 text-sm"
+                  @click="avatarMenuOpen = false"
+                >
+                  <div class="flex items-center gap-3 px-4 py-3">
+                    <AccountAvatarBadge
+                      :name="authStore.user?.fullName"
+                      :avatar-url="authStore.user?.avatarUrl"
+                      :show-chevron="false"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <p class="font-semibold text-ink-900 truncate">{{ authStore.user?.fullName || 'Kỹ thuật viên' }}</p>
+                      <p class="text-xs text-ink-500">Kỹ thuật viên FixHome</p>
+                    </div>
+                  </div>
 
-                <!-- Only what the bottom tab bar lacks below lg; the sidebar has everything on wide screens. -->
-                <div class="py-1 text-ink-700 lg:hidden">
-                  <router-link to="/tech/wallet" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <Wallet :size="16" class="text-ink-500" />
-                    Ví của tôi
-                  </router-link>
-                  <router-link to="/tech/warranty" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <ShieldCheck :size="16" class="text-ink-500" />
-                    Bảo hành
-                  </router-link>
-                  <router-link to="/tech/kyc" class="flex items-center gap-3 px-4 py-2.5 hover:bg-ink-50">
-                    <BadgeCheck :size="16" class="text-ink-500" />
-                    Xác minh danh tính
-                  </router-link>
-                </div>
+                  <!-- Only what the bottom tab bar lacks below lg; the sidebar has everything on wide screens. -->
+                  <div class="py-1.5 text-ink-700 lg:hidden">
+                    <router-link to="/tech/wallet" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <Wallet :size="16" class="text-ink-500" />
+                      Ví của tôi
+                    </router-link>
+                    <router-link to="/tech/warranty" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <ShieldCheck :size="16" class="text-ink-500" />
+                      Bảo hành
+                    </router-link>
+                    <router-link to="/tech/kyc" class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-ink-50">
+                      <BadgeCheck :size="16" class="text-ink-500" />
+                      Xác minh danh tính
+                    </router-link>
+                  </div>
 
-                <div class="py-1">
-                  <button
-                    type="button"
-                    class="flex items-center gap-3 px-4 py-2.5 text-danger-600 hover:bg-danger-50 w-full text-left"
-                    @click="handleLogout"
-                  >
-                    <LogOut :size="16" />
-                    Đăng xuất
-                  </button>
+                  <div class="pt-1.5 pb-0.5">
+                    <button
+                      type="button"
+                      class="mx-1.5 flex items-center gap-3 rounded-xl px-3 py-2 font-medium text-danger-600 hover:bg-danger-50 w-[calc(100%-0.75rem)] text-left"
+                      @click="handleLogout"
+                    >
+                      <LogOut :size="16" />
+                      Đăng xuất
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </Transition>
+            </div>
             </div>
           </div>
         </div>

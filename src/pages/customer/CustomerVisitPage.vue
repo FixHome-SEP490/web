@@ -10,6 +10,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQueryClient } from '@tanstack/vue-query';
 import { queryKeys } from '../../lib/query-keys';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
 import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
@@ -578,7 +579,7 @@ async function saveReschedule() {
     await visitGroupsApi.reschedule(groupId, chosenSession.value);
     if (disposed || groupId !== visitId.value) return;
     rescheduleOpen.value = false;
-    message.value = { type: 'success', text: 'Đã đổi lịch hẹn cho cả lượt sửa.' };
+    toast.success('Đã đổi lịch hẹn cho cả lượt sửa.');
     await load();
   } catch (err) {
     if (disposed || groupId !== visitId.value) return;
@@ -598,7 +599,7 @@ async function confirmCancel() {
     await visitGroupsApi.cancel(groupId, 'Khách huỷ lượt sửa');
     if (disposed || groupId !== visitId.value) return;
     cancelOpen.value = false;
-    message.value = { type: 'success', text: 'Đã huỷ lượt sửa.' };
+    toast.success('Đã huỷ lượt sửa.');
     await load();
   } catch (err) {
     if (disposed || groupId !== visitId.value) return;
@@ -919,400 +920,557 @@ async function answerCash(agreed: boolean) {
 </script>
 
 <template>
-  <div class="mx-auto min-w-0 max-w-3xl space-y-6 pb-16" data-testid="customer-visit">
-    <FhBackLink class="min-h-11" label="Đơn của tôi" @click="router.push('/app/orders')" />
+  <div class="w-full max-w-6xl mx-auto space-y-5 pb-12" data-testid="customer-visit">
+    <FhBackLink class="min-h-11 animate-slide-up" label="Đơn của tôi" @click="router.push('/app/orders')" />
 
-    <FhSkeleton v-if="loading" class="h-40 rounded-2xl" />
-    <div v-else-if="loadError && !visit" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">
+    <div
+      v-if="loading"
+      class="space-y-5 animate-slide-up-delay-1"
+      role="status"
+      aria-busy="true"
+      aria-label="Đang tải lượt sửa nhiều thiết bị"
+    >
+      <!-- Summary Header Card Skeleton -->
+      <div class="rounded-2xl border border-ink-200/85 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0 flex-1 space-y-2">
+            <FhSkeleton width="55%" height="28px" />
+            <FhSkeleton width="78%" height="14px" />
+          </div>
+          <div class="w-36 shrink-0">
+            <FhSkeleton width="100%" height="28px" rounded="full" />
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <FhSkeleton width="140px" height="12px" />
+              <FhSkeleton width="180px" height="18px" />
+              <FhSkeleton width="220px" height="14px" />
+            </div>
+            <div class="w-28 shrink-0">
+              <FhSkeleton width="100%" height="40px" rounded="md" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
+            <div class="space-y-1.5">
+              <FhSkeleton width="88px" height="12px" />
+              <FhSkeleton width="80%" height="16px" />
+            </div>
+            <div class="space-y-1.5">
+              <FhSkeleton width="76px" height="12px" />
+              <FhSkeleton width="90%" height="16px" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2-Column Workspace Skeleton -->
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,1fr)] lg:items-start">
+        <div class="min-w-0 space-y-3">
+          <FhSkeleton width="136px" height="20px" />
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <div
+              v-for="i in 3"
+              :key="i"
+              class="rounded-xl border border-ink-200/85 bg-white p-3 space-y-2"
+              :class="{ 'hidden sm:block': i === 3 }"
+            >
+              <FhSkeleton width="48px" height="12px" />
+              <FhSkeleton width="85%" height="16px" />
+              <FhSkeleton width="60%" height="12px" />
+            </div>
+          </div>
+          <div class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-3">
+            <div class="rounded-xl bg-ink-50/75 px-3.5 py-3 flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1 space-y-1.5">
+                <FhSkeleton width="60%" height="18px" />
+                <FhSkeleton width="40%" height="14px" />
+              </div>
+              <div class="w-20 shrink-0">
+                <FhSkeleton width="100%" height="18px" />
+              </div>
+            </div>
+            <FhSkeleton width="92%" height="14px" />
+            <FhSkeleton width="72%" height="14px" />
+            <div class="flex justify-end pt-1">
+              <div class="w-24">
+                <FhSkeleton width="100%" height="34px" rounded="md" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="min-w-0 space-y-4">
+          <div class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+            <FhSkeleton width="58%" height="20px" />
+            <div class="divide-y divide-ink-100">
+              <div v-for="i in 2" :key="i" class="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <FhSkeleton width="70%" height="15px" />
+                  <FhSkeleton width="42%" height="12px" />
+                </div>
+                <div class="w-16 shrink-0">
+                  <FhSkeleton width="100%" height="15px" />
+                </div>
+              </div>
+            </div>
+            <div class="rounded-xl bg-ink-50/85 p-3.5 space-y-2.5">
+              <div class="flex items-center justify-between gap-3">
+                <div class="w-32"><FhSkeleton width="100%" height="16px" /></div>
+                <div class="w-20"><FhSkeleton width="100%" height="18px" /></div>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="w-36"><FhSkeleton width="100%" height="14px" /></div>
+                <div class="w-16"><FhSkeleton width="100%" height="14px" /></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-3">
+            <div class="space-y-1.5">
+              <FhSkeleton width="35%" height="20px" />
+              <FhSkeleton width="48%" height="12px" />
+            </div>
+            <div class="divide-y divide-ink-100 rounded-xl border border-ink-200/80 overflow-hidden">
+              <div v-for="i in 2" :key="i" class="flex items-center gap-3 px-3.5 py-3">
+                <div class="w-9 shrink-0"><FhSkeleton width="36px" height="36px" rounded="md" /></div>
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <FhSkeleton width="40%" height="15px" />
+                  <FhSkeleton width="58%" height="12px" />
+                </div>
+                <div class="w-5 shrink-0"><FhSkeleton width="20px" height="20px" rounded="full" /></div>
+              </div>
+            </div>
+            <FhSkeleton width="100%" height="44px" rounded="md" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else-if="loadError && !visit" role="alert" class="rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800 animate-slide-up-delay-1">
       {{ loadError }}
       <FhButton variant="secondary" size="md" class="ml-2" @click="load">Thử lại</FhButton>
     </div>
 
     <template v-else-if="visit">
       <div v-if="loadError" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ loadError }} Hiện dữ liệu đã đọc trước đó; thao tác cần xác minh lại. <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></div>
-      <header class="space-y-4">
-        <div class="space-y-1">
-          <h1 class="text-2xl leading-8 font-bold tracking-tight text-ink-900 sm:text-[28px] sm:leading-9">Lượt sửa {{ visit.items.length }} thiết bị</h1>
-          <p class="text-sm text-ink-600">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
-        </div>
-        <div class="divide-y divide-ink-200 rounded-2xl border border-ink-200 bg-white px-4 sm:px-6">
-          <div class="flex flex-wrap items-center justify-between gap-2 py-4" data-testid="visit-shared-technician">
-            <div class="min-w-0 flex-1 basis-48">
-              <h2 class="text-sm font-medium text-ink-600">Kỹ thuật viên phụ trách cả lượt</h2>
-              <p v-if="sharedTechnician" class="break-words text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
-              <p class="text-sm text-ink-700" role="status">{{ technicianProgress }}</p>
-            </div>
-            <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-11 items-center rounded-xl border border-ink-200 px-3 text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+
+      <!-- Unified Visit Summary Header Card -->
+      <header class="rounded-2xl border border-ink-200/85 bg-white p-5 sm:p-6 shadow-2xs space-y-4 animate-slide-up-delay-1">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="space-y-1 min-w-0">
+            <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-ink-900">Lượt sửa {{ visit.items.length }} thiết bị</h1>
+            <p class="text-xs sm:text-sm text-ink-500">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
           </div>
-          <dl class="space-y-3 py-4 text-sm">
-            <div class="space-y-1"><dt class="text-ink-600">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
-            <div v-if="sharedAddress" class="space-y-1"><dt class="text-ink-600">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
+          <span
+            v-if="outcomeProgress"
+            class="inline-flex items-center rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700 font-num whitespace-nowrap shrink-0"
+            data-testid="visit-outcome-progress"
+          >
+            Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
+          </span>
+        </div>
+
+        <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3 text-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2" data-testid="visit-shared-technician">
+            <div class="min-w-0 flex-1 basis-48 space-y-0.5">
+              <h2 class="text-xs font-medium text-ink-500">Kỹ thuật viên phụ trách cả lượt</h2>
+              <p v-if="sharedTechnician" class="break-words text-sm sm:text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
+              <p class="text-xs sm:text-sm text-ink-600" role="status">{{ technicianProgress }}</p>
+            </div>
+            <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-10 items-center rounded-xl border border-ink-200 bg-white px-3 text-xs sm:text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+          </div>
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
+            <div class="space-y-0.5"><dt class="text-xs text-ink-500">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
+            <div v-if="sharedAddress" class="space-y-0.5"><dt class="text-xs text-ink-500">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
           </dl>
         </div>
-        <p v-if="outcomeProgress" class="text-sm text-ink-600" data-testid="visit-outcome-progress">
-          Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
-        </p>
+
+        <div v-if="!cancelled && (canChooseTechnician || canReschedule || (rescheduled && !repairStarted) || canCancel)" class="flex flex-wrap items-center gap-2 pt-1">
+          <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
+            {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
+          </FhButton>
+          <FhButton v-if="canReschedule" variant="secondary" size="sm" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
+          <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="sm" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
+          <FhButton v-if="canCancel" variant="ghost" size="sm" class="text-danger-700 ml-auto" data-testid="visit-cancel" @click="cancelOpen = true">Huỷ lượt sửa</FhButton>
+        </div>
       </header>
 
-      <section v-if="priorityQuotation" class="flex flex-col gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 sm:flex-row sm:items-center" data-testid="visit-quotation-priority">
-        <div class="min-w-0 flex-1 break-words">
-          <p class="text-sm font-semibold text-ink-900">
-            Máy {{ priorityQuotation.item.sequence }}<template v-if="priorityQuotation.item.booking?.serviceName">: {{ priorityQuotation.item.booking.serviceName }}</template>
-            <template v-if="priorityQuotation.item.deviceLabel"> · {{ priorityQuotation.item.deviceLabel }}</template>
-          </p>
-          <p class="text-sm text-warning-800">Báo giá đang chờ bạn duyệt</p>
-        </div>
-        <button
-          type="button"
-          :disabled="checkoutLoading"
-          @click="openQuotation(priorityQuotation.item)"
-          :aria-label="`Duyệt báo giá cho máy ${priorityQuotation.item.sequence}${priorityQuotation.item.booking?.serviceName ? `: ${priorityQuotation.item.booking.serviceName}` : ''}`"
-          class="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-semibold text-white transition-colors motion-reduce:transition-none duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
-          data-testid="visit-quotation-cta"
-        >
-          Duyệt báo giá máy {{ priorityQuotation.item.sequence }}
-          <ChevronRight :size="18" aria-hidden="true" />
-        </button>
-      </section>
-
-      <p
-        v-if="message"
-        :role="message.type === 'error' ? 'alert' : 'status'"
-        data-testid="visit-action-message"
-        class="rounded-xl border px-3.5 py-2.5 text-sm"
-        :class="message.type === 'success' ? 'border-success-200 bg-success-50 text-success-800' : 'border-danger-200 bg-danger-50 text-danger-800'"
-      >{{ message.text }}</p>
-
-      <section class="space-y-3" data-testid="visit-device-list">
-        <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
-        <div v-if="interruptedDevices.length" class="border-b border-ink-200 pb-2 text-sm text-ink-700" data-testid="visit-interrupted">
-          <StoppedDevicesRebookPicker :group-id="visitId" :customer-id="auth.user?.id" :revalidation="rebookVerificationVersion" :devices="interruptedDevices" :disabled="checkoutLoading || !!checkoutError || !!loadError" />
-        </div>
-        <FhButton
-          v-if="failedBookingIds.length > 1"
-          variant="secondary"
-          size="md"
-          data-testid="failed-repair-rebook-all"
-          @click="router.push({ path: '/app/bookings/new', query: { repairFailure: failedBookingIds.join(',') } })"
-        >Đặt lại {{ failedBookingIds.length }} máy không sửa được</FhButton>
-        <div class="grid gap-2 sm:grid-cols-3" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
-          <button
-            v-for="item in visit.items"
-            :key="item.id"
-            type="button"
-            class="visit-device min-h-11 min-w-0 rounded-xl border p-3 text-left transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-            :class="selectedVisitItem?.id === item.id ? 'border-brand-500 bg-brand-50' : 'border-ink-200 bg-white hover:border-brand-300'"
-            :aria-pressed="selectedVisitItem?.id === item.id"
-            :aria-controls="selectedVisitItem?.id === item.id ? `visit-device-panel-${item.sequence}` : undefined"
-            :aria-label="`Chọn máy ${item.sequence}${item.booking?.serviceName ? `: ${item.booking.serviceName}` : ''}, ${statusText(item)}`"
-            :id="`visit-device-select-${item.sequence}`"
-            :data-testid="`visit-device-select-${item.sequence}`"
-            @click="selectedVisitItemId = item.id"
-          >
-            <span class="flex items-center justify-between gap-1 text-sm font-semibold" :class="selectedVisitItem?.id === item.id ? 'text-brand-800' : 'text-ink-900'">
-              Máy {{ item.sequence }}
-              <span v-if="quotationOrderId(item) || pendingCosts(item)" class="h-2 w-2 shrink-0 rounded-full bg-warning-600" aria-label="Cần duyệt báo giá" />
-            </span>
-            <span class="mt-1 block break-words text-sm text-ink-700">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
-            <span class="mt-1 block break-words text-xs leading-relaxed" :class="quotationOrderId(item) ? 'font-medium text-warning-800' : 'text-ink-600'">{{ chipStatusText(item) }}</span>
-          </button>
-        </div>
-
-        <div
-          v-if="selectedVisitItem"
-          :id="`visit-device-panel-${selectedVisitItem.sequence}`"
-          class="rounded-2xl border border-ink-200 bg-white p-3.5 sm:p-4"
-          role="region"
-          :aria-labelledby="`visit-device-select-${selectedVisitItem.sequence}`"
-          :data-testid="`visit-device-panel-${selectedVisitItem.sequence}`"
-        >
-          <div class="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-2 px-1 py-1">
-            <div class="min-w-0 flex-[1_1_12rem]">
-              <p class="break-words text-sm font-medium text-ink-900 sm:text-base">
-                Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,1fr)] lg:items-start">
+        <!-- Left column: Priority quote + Device Selector + Selected Device Details -->
+        <div class="min-w-0 space-y-4 lg:col-start-1">
+          <section v-if="priorityQuotation" class="flex flex-col gap-3 rounded-2xl border border-warning-200 bg-warning-50/80 p-4 sm:flex-row sm:items-center shadow-2xs" data-testid="visit-quotation-priority">
+            <div class="min-w-0 flex-1 break-words">
+              <p class="text-sm font-semibold text-ink-900">
+                Máy {{ priorityQuotation.item.sequence }}<template v-if="priorityQuotation.item.booking?.serviceName">: {{ priorityQuotation.item.booking.serviceName }}</template>
+                <template v-if="priorityQuotation.item.deviceLabel"> · {{ priorityQuotation.item.deviceLabel }}</template>
               </p>
-              <p class="break-words text-sm text-ink-600"><template v-if="selectedVisitItem.deviceLabel">{{ selectedVisitItem.deviceLabel }} · </template>{{ statusText(selectedVisitItem) }}</p>
+              <p class="text-sm text-warning-800">Báo giá đang chờ bạn duyệt</p>
             </div>
-            <span v-if="deviceOf(selectedVisitItem.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-semibold text-ink-900 font-num"><FhMoney :amount="deviceOf(selectedVisitItem.booking?.id)!.amount" /></span>
-          </div>
-          <p v-if="quotationOrderId(selectedVisitItem)" class="mt-2 text-sm font-medium text-warning-800" :data-testid="`visit-device-quotation-status-${selectedVisitItem.sequence}`">
-            Báo giá đang chờ bạn duyệt
-          </p>
-          <div v-if="hasDeviceDetails(selectedVisitItem)" class="mt-2 space-y-2.5">
-            <div :id="`visit-device-details-${selectedVisitItem.sequence}`" class="space-y-3">
-              <p v-if="selectedVisitItem.booking?.description?.trim()" class="break-words text-pretty text-sm text-ink-700 whitespace-pre-line" :class="isDeviceExpanded(selectedVisitItem.id) ? '' : 'line-clamp-2'" :data-testid="`visit-device-description-${selectedVisitItem.sequence}`">
-                {{ selectedVisitItem.booking.description }}
-              </p>
-              <BookingMediaViewer
-                v-if="isDeviceExpanded(selectedVisitItem.id) && selectedVisitItem.booking?.media?.length"
-                :booking-id="selectedVisitItem.booking.id"
-                :media="selectedVisitItem.booking.media"
-                embedded
-              />
-            </div>
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <span v-if="selectedVisitItem.booking?.media?.length" class="text-xs text-ink-600" :data-testid="`visit-device-media-count-${selectedVisitItem.sequence}`">
-                {{ selectedVisitItem.booking.media.length }} ảnh/video
-              </span>
-              <FhButton
-                variant="ghost"
-                size="md"
-                :aria-expanded="isDeviceExpanded(selectedVisitItem.id)"
-                :aria-controls="`visit-device-details-${selectedVisitItem.sequence}`"
-                :aria-label="`${isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm'} chi tiết máy ${selectedVisitItem.sequence}`"
-                class="ml-auto"
-                :data-testid="`visit-device-expand-${selectedVisitItem.sequence}`"
-                @click="toggleDeviceDetails(selectedVisitItem.id)"
-              >{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}<ChevronDown :size="16" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" /></FhButton>
-            </div>
-          </div>
-          <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="childFeedback.error ? 'alert' : 'status'" class="mt-3 text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
-          <p v-if="approvingOrderId && approvingOrderId === selectedOrderId" role="status" class="mt-3 text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
-          <FhButton v-if="selectedOrderId && quotationChecks[selectedOrderId] && approvingOrderId !== selectedOrderId" variant="secondary" size="md" :disabled="childDeciding || checkoutLoading" data-testid="quotation-check-status" @click="checkChildQuotation">Kiểm tra trạng thái</FhButton>
-          <FailedRepairIncident
-            v-if="!checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
-            :key="selectedVisitItem.booking.id"
-            :booking-id="selectedVisitItem.booking.id"
-            @rebook="bookingId => router.push({ path: '/app/bookings/new', query: { repairFailure: bookingId } })"
-            @later="router.push('/app')"
-          />
-          <VisitOrderDetails
-            v-if="selectedDetails"
-            :key="selectedDetails.order.id"
-            :details="selectedDetails"
-            :stopped="isStoppedOrder(selectedDetails.order.id)"
-            :disabled="isStoppedOrder(selectedDetails.order.id) || !childDetailsFresh || childDeciding || checkoutLoading || !!quotationChecks[selectedDetails.order.id]"
-            @quote="decideChildQuotation(selectedDetails.order.id, $event)"
-            @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
-            @retry="load"
-          />
-          <CustomerStopReplaceRequest
-            v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id)"
-            :key="`stop-replace-${selectedDetails.order.id}`"
-            :order-id="selectedDetails.order.id"
-            :order-status="selectedDetails.order.status"
-          />
-          <div v-if="selectedOrderId && !selectedDetails" class="mt-4 space-y-2 border-t border-ink-100 pt-4">
-            <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />
-            <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
-          </div>
+            <button
+              type="button"
+              :disabled="checkoutLoading"
+              @click="openQuotation(priorityQuotation.item)"
+              :aria-label="`Duyệt báo giá cho máy ${priorityQuotation.item.sequence}${priorityQuotation.item.booking?.serviceName ? `: ${priorityQuotation.item.booking.serviceName}` : ''}`"
+              class="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-md)] bg-brand-600 px-4 text-sm font-semibold text-white transition-colors motion-reduce:transition-none duration-120 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto cursor-pointer"
+              data-testid="visit-quotation-cta"
+            >
+              Duyệt báo giá máy {{ priorityQuotation.item.sequence }}
+              <ChevronRight :size="18" aria-hidden="true" />
+            </button>
+          </section>
 
-          <CustomerContinuationPanel
-            v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id) && ['EN_ROUTE', 'UNDER_REPAIR'].includes(selectedDetails.order.status)"
-            :key="`continuation-${selectedDetails.order.id}`"
-            :order-id="selectedDetails.order.id"
-            :booking-id="selectedVisitItem.booking?.id ?? null"
-            :visit-group-id="visitId"
-            :order-status="selectedDetails.order.status"
-          />
-        </div>
-      </section>
+          <p
+            v-if="message"
+            :role="message.type === 'error' ? 'alert' : 'status'"
+            data-testid="visit-action-message"
+            class="rounded-xl border px-3.5 py-2.5 text-sm"
+            :class="message.type === 'success' ? 'border-success-200 bg-success-50 text-success-800' : 'border-danger-200 bg-danger-50 text-danger-800'"
+          >{{ message.text }}</p>
 
-      <section v-if="!cancelled" class="flex flex-wrap gap-2.5">
-        <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
-          {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
-        </FhButton>
-        <FhButton v-if="canReschedule" variant="secondary" size="md" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
-        <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="md" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
-        <FhButton v-if="canCancel" variant="ghost" size="md" class="text-danger-700" data-testid="visit-cancel" @click="cancelOpen = true">Huỷ lượt sửa</FhButton>
-      </section>
-
-      <!-- One payment for the devices repaired, once every device has its result. -->
-      <section v-if="invoiceSummary.rows.length" class="rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
-        <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
-        <p v-if="checkoutLoading" role="status" class="mt-2 text-ink-600">Đang cập nhật hóa đơn…</p>
-        <ul class="mt-3 divide-y divide-ink-100">
-          <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-3" :data-testid="`visit-invoice-row-${row.item.sequence}`">
-            <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <div class="min-w-0 flex-1 basis-36">
-                <p class="break-words font-medium text-ink-900">Máy {{ row.item.sequence }}<template v-if="row.item.booking?.serviceName"> · {{ row.item.booking.serviceName }}</template></p>
-                <p class="mt-0.5 text-xs text-ink-600">{{ row.status }}</p>
-              </div>
-              <FhMoney v-if="row.amount !== null" :amount="row.amount" class="shrink-0 whitespace-nowrap" data-testid="visit-invoice-amount" />
-              <span v-else class="text-ink-600">Chưa xác định</span>
+          <section class="space-y-3 animate-slide-up-delay-2" data-testid="visit-device-list">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
+              <span class="text-xs text-ink-500 sm:hidden">Vuốt hoặc chọn máy</span>
             </div>
-            <details v-if="row.lines.length || row.fees.length" class="group mt-1 text-ink-600">
-              <summary class="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"><span>Chi tiết hóa đơn máy {{ row.item.sequence }}</span><ChevronDown :size="16" class="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" /></summary>
-              <ul class="space-y-2 pb-1">
-                <li v-for="line in row.lines" :key="line.id" class="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                  <span class="min-w-0 flex-1 basis-36 break-words">{{ line.description }}<span class="block text-xs">{{ line.quantity }} × <FhMoney :amount="line.unitPrice" /></span></span>
-                  <FhMoney :amount="line.lineTotal" class="shrink-0 whitespace-nowrap" />
-                </li>
-                <li v-for="fee in row.fees" :key="fee.label" class="flex flex-wrap justify-between gap-2"><span>{{ fee.label }}</span><FhMoney :amount="fee.amount" class="whitespace-nowrap" /></li>
-              </ul>
-            </details>
-          </li>
-        </ul>
-        <dl class="space-y-3 border-t border-ink-200 pt-3">
-          <div class="flex flex-wrap items-baseline justify-between gap-2 font-semibold text-ink-900">
-            <dt>{{ invoiceSummary.pending ? 'Tổng hóa đơn đã chốt' : 'Tổng hóa đơn gốc' }}</dt>
-            <dd><FhMoney v-if="invoiceSummary.gross !== null" :amount="invoiceSummary.gross" emphasis data-testid="visit-invoice-gross" /><span v-else class="font-normal text-ink-600">Chưa xác định</span></dd>
-          </div>
-          <div class="flex flex-wrap items-baseline justify-between gap-2 text-ink-600">
-            <dt>Hóa đơn gốc chưa thanh toán</dt>
-            <dd><FhMoney v-if="invoiceSummary.unpaid !== null" :amount="invoiceSummary.unpaid" data-testid="visit-invoice-unpaid" /><span v-else>Chưa xác định</span></dd>
-          </div>
-        </dl>
-        <p v-if="invoiceSummary.pending" class="mt-3 text-xs text-ink-600">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
-      </section>
-    <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>
-    <p v-if="voucherAttemptPending" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-reservation-pending">Kết quả giữ voucher chưa rõ. Hãy mở voucher và kiểm tra lại yêu cầu cũ trước khi thanh toán; chưa thể trả bằng ví, VNPay hoặc tiền mặt.</p>
-      <section v-if="voucherReconciliationRequired && !checkout?.paid" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
-        Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu thanh toán từ máy chủ; chưa thể thu thêm.
-        <FhButton variant="secondary" size="sm" :disabled="voucherReconciliationLoading" @click="(voucherTerminal ?? savedVoucherAttempt?.terminal) && handleVoucherTerminal((voucherTerminal ?? savedVoucherAttempt?.terminal)!)">Kiểm tra thanh toán</FhButton>
-      </section>
-      <section v-if="checkoutError" role="alert" class="space-y-2 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800" data-testid="visit-checkout-error">
-        <h2 class="font-semibold">Thông tin thanh toán chưa sẵn sàng</h2>
-        <p>{{ checkoutError }}</p>
-        <FhButton variant="secondary" size="md" data-testid="visit-checkout-retry" @click="load">Thử lại</FhButton>
-      </section>
-      <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200 bg-white p-4 text-sm sm:p-6" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
-        <p v-if="financialFollowupRequired" role="status" data-testid="visit-financial-followup" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-warning-800">Có máy đã dừng sửa và chứng từ cũ cần đối soát. Số tiền phải trả hoặc hoàn tiền: Chưa xác định. Chưa thực hiện thanh toán mới cho lượt này; việc đặt lại chỉ mở khi đã xác minh đủ điều kiện.</p>
-        <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
-        <div class="flex flex-col gap-2 border-b border-ink-100 pb-3 sm:flex-row sm:items-baseline sm:justify-between">
-          <div>
-            <h2 id="visit-checkout-title" data-testid="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán</h2>
-            <p id="visit-checkout-scope" data-testid="visit-checkout-scope" class="text-xs text-ink-500">Gồm {{ checkout.devices.length }} thiết bị</p>
-          </div>
-          <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
-          <span v-else-if="checkoutState === 'zero_due'" data-testid="visit-checkout-state" class="font-semibold text-ink-700">Không phát sinh khoản cần thanh toán</span>
-          <span v-else-if="checkoutState === 'pending_cash'" data-testid="visit-checkout-state" class="font-semibold text-warning-800">Chờ xác nhận tiền mặt</span>
-          <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
-          <div v-else class="sm:text-right">
-            <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ voucherAttemptPending ? 'Chờ xác minh voucher' : checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
-            <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
-          </div>
-        </div>
-        <p v-if="checkout.waiting > 0" class="text-ink-600">Còn {{ checkout.waiting }} thiết bị đang xử lý. Bạn thanh toán một lần khi mọi thiết bị đã có kết quả, chỉ cho các máy sửa được.</p>
-        <p v-else-if="checkoutState === 'waiting'" class="text-ink-600">Đang cập nhật trạng thái thanh toán của lượt sửa. Bạn chưa cần thanh toán lúc này.</p>
-
-        <template v-else-if="checkoutState === 'zero_due'">
-          <p class="text-ink-700" data-testid="visit-zero-due">
-            Số tiền còn phải trả là 0 ₫. Bạn không cần thực hiện thanh toán cho lượt này.
-          </p>
-        </template>
-        <template v-else-if="checkoutState === 'pending_cash'">
-          <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
-            <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho {{ checkout.devices.length }} thiết bị. Bạn xác nhận đúng số tiền đã trả.</p>
-            <div class="flex flex-wrap gap-2">
-              <FhButton size="md" :loading="busy" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
-              <FhButton variant="secondary" size="md" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
+            <div v-if="interruptedDevices.length" class="rounded-xl bg-ink-50/80 p-3 text-sm text-ink-700" data-testid="visit-interrupted">
+              <StoppedDevicesRebookPicker :group-id="visitId" :customer-id="auth.user?.id" :revalidation="rebookVerificationVersion" :devices="interruptedDevices" :disabled="checkoutLoading || !!checkoutError || !!loadError" />
             </div>
-          </div>
-        </template>
-        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-900" aria-labelledby="visit-cash-intent-pending-title" data-testid="visit-cash-intent-pending">
-          <div>
-            <h3 id="visit-cash-intent-pending-title" class="font-semibold text-balance">Chờ kỹ thuật viên xác nhận tiền mặt</h3>
-            <p class="mt-1 text-sm text-warning-800">Gồm {{ checkout.devices.length }} thiết bị</p>
-          </div>
-          <dl class="border-y border-warning-200 py-3">
-            <dt class="text-sm text-warning-800">Số tiền cần trả</dt>
-            <dd class="mt-1"><FhMoney :amount="cashIntent.customerDueVnd" emphasis /></dd>
-          </dl>
-          <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
-          <FhButton variant="secondary" size="md" class="w-full sm:w-auto" :disabled="busy" :loading="busy" data-testid="visit-cash-intent-cancel" @click="cancelCashIntent">Hủy yêu cầu tiền mặt</FhButton>
-        </section>
-        <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-ink-800" data-testid="visit-cash-intent-received">
-          <h3 class="font-semibold text-balance">Kỹ thuật viên đã báo nhận tiền mặt</h3>
-          <p class="text-sm text-ink-600">Gồm {{ checkout.devices.length }} thiết bị</p>
-          <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái lượt được cập nhật; chưa hiển thị là đã thanh toán.</p>
-        </section>
-        <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0 && !voucherReconciliationRequired">
-            <p v-if="cashFirstEnabled && cashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-ink-700" data-testid="visit-cash-intent-cancelled">Yêu cầu tiền mặt cho {{ checkout.devices.length }} thiết bị đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
-            <VoucherCheckoutChooser
-              :scope-id="visitId"
-              @applied="handleVoucherApplied"
-              @terminal="handleVoucherTerminal"
-              @released="clearFundedVoucher"
-              @expired="clearFundedVoucher"
-            />
-            <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
-            <template v-else>
-            <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200" role="radiogroup" aria-label="Cách thanh toán" data-testid="visit-pay-methods">
+            <FhButton
+              v-if="failedBookingIds.length > 1"
+              variant="secondary"
+              size="md"
+              data-testid="failed-repair-rebook-all"
+              @click="router.push({ path: '/app/bookings/new', query: { repairFailure: failedBookingIds.join(',') } })"
+            >Đặt lại {{ failedBookingIds.length }} máy không sửa được</FhButton>
+
+            <!-- Sleek Device Selector: scrollable cards on mobile, clean grid on sm+ -->
+            <div class="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none sm:grid sm:grid-cols-2 md:grid-cols-3 sm:overflow-visible sm:pb-0" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
               <button
-                v-for="method in payMethods"
-                :key="method"
+                v-for="item in visit.items"
+                :key="item.id"
                 type="button"
-                role="radio"
-                :aria-checked="payMethod === method"
-                :tabindex="payMethod === method ? 0 : -1"
-                class="flex min-h-14 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 disabled:opacity-50"
-                :class="payMethod === method ? 'bg-brand-50' : 'bg-white hover:bg-ink-50'"
-                :data-testid="`visit-pay-method-${method}`"
-                :disabled="busy"
-                @click="selectPayMethod(method)"
-                @keydown="onPayMethodKey($event, method)"
+                class="visit-device flex min-h-11 min-w-[10.5rem] sm:min-w-0 shrink-0 flex-col justify-between rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 cursor-pointer"
+                :class="selectedVisitItem?.id === item.id ? 'border-brand-600 bg-brand-50/75 ring-1 ring-brand-500/20 shadow-2xs' : 'border-ink-200/90 bg-white hover:border-brand-300'"
+                :aria-pressed="selectedVisitItem?.id === item.id"
+                :aria-controls="selectedVisitItem?.id === item.id ? `visit-device-panel-${item.sequence}` : undefined"
+                :aria-label="`Chọn máy ${item.sequence}${item.booking?.serviceName ? `: ${item.booking.serviceName}` : ''}, ${statusText(item)}`"
+                :id="`visit-device-select-${item.sequence}`"
+                :data-testid="`visit-device-select-${item.sequence}`"
+                @click="selectedVisitItemId = item.id"
               >
-                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
-                  <Wallet v-if="method === 'wallet'" :size="18" />
-                  <span v-else-if="method === 'vnpay'" class="text-[10px] font-extrabold leading-none tracking-tight"><span class="text-[#005BAA]">VN</span><span class="text-[#ED1C24]">PAY</span></span>
-                  <Banknote v-else :size="18" />
-                </span>
-                <span class="min-w-0 flex-1">
-                  <span class="block text-sm font-semibold text-ink-900">{{ method === 'wallet' ? 'Ví FixHome' : method === 'vnpay' ? 'VNPay' : 'Tiền mặt' }}</span>
-                  <span v-if="method === 'wallet'" class="block text-xs" :class="walletBalance !== null && !walletCovers ? 'text-warning-800' : 'text-ink-500'">
-                    <template v-if="walletError">Chưa tải được số dư</template>
-                    <template v-else-if="walletBalance === null">Đang xem số dư…</template>
-                    <template v-else>Số dư <span class="font-num"><FhMoney :amount="walletBalance" /></span><template v-if="!walletCovers"> · không đủ</template></template>
-                  </span>
-                  <span v-else-if="method === 'vnpay'" class="block text-xs text-ink-500">ATM, thẻ quốc tế, QR</span>
-                  <span v-else class="block text-xs text-ink-500">Trả trực tiếp cho kỹ thuật viên</span>
-                </span>
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2" :class="payMethod === method ? 'border-brand-600' : 'border-ink-300'" aria-hidden="true"><span v-if="payMethod === method" class="h-2.5 w-2.5 rounded-full bg-brand-600"></span></span>
+                <div class="w-full space-y-1">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="text-xs font-bold uppercase tracking-wide font-num" :class="selectedVisitItem?.id === item.id ? 'text-brand-700' : 'text-ink-500'">
+                      Máy {{ item.sequence }}
+                    </span>
+                    <span v-if="quotationOrderId(item) || pendingCosts(item)" class="inline-flex items-center rounded-full bg-warning-100 px-1.5 py-0.5 text-[10px] font-semibold text-warning-800" aria-label="Cần duyệt báo giá">
+                      Cần duyệt
+                    </span>
+                  </div>
+                  <span class="block line-clamp-2 text-sm font-semibold text-ink-900">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
+                </div>
+                <span class="mt-2 block text-xs leading-snug" :class="quotationOrderId(item) ? 'font-medium text-warning-800' : 'text-ink-500'">{{ chipStatusText(item) }}</span>
               </button>
             </div>
-            <div v-if="payMethod === 'wallet' && walletError" class="text-danger-800" role="alert" data-testid="visit-wallet-error">
-              <p>Chưa tải được số dư ví. Thử lại hoặc chọn cách thanh toán khác.</p>
-              <FhButton variant="ghost" size="md" data-testid="visit-wallet-retry" @click="loadWallet">Thử lại số dư</FhButton>
+
+            <div
+              v-if="selectedVisitItem"
+              :id="`visit-device-panel-${selectedVisitItem.sequence}`"
+              class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-3"
+              role="region"
+              :aria-labelledby="`visit-device-select-${selectedVisitItem.sequence}`"
+              :data-testid="`visit-device-panel-${selectedVisitItem.sequence}`"
+            >
+              <div class="rounded-xl bg-ink-50/75 px-3.5 py-2.5 flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div class="min-w-0 flex-[1_1_12rem]">
+                  <p class="break-words text-sm font-semibold text-ink-900 sm:text-base">
+                    Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
+                  </p>
+                  <p class="break-words text-xs sm:text-sm text-ink-600"><template v-if="selectedVisitItem.deviceLabel">{{ selectedVisitItem.deviceLabel }} · </template>{{ statusText(selectedVisitItem) }}</p>
+                </div>
+                <span v-if="deviceOf(selectedVisitItem.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-bold text-ink-900 font-num"><FhMoney :amount="deviceOf(selectedVisitItem.booking?.id)!.amount" /></span>
+              </div>
+              <p v-if="quotationOrderId(selectedVisitItem)" class="text-sm font-medium text-warning-800" :data-testid="`visit-device-quotation-status-${selectedVisitItem.sequence}`">
+                Báo giá đang chờ bạn duyệt
+              </p>
+              <div v-if="hasDeviceDetails(selectedVisitItem)" class="space-y-2.5">
+                <div :id="`visit-device-details-${selectedVisitItem.sequence}`" class="space-y-3">
+                  <p v-if="selectedVisitItem.booking?.description?.trim()" class="break-words text-pretty text-sm text-ink-700 whitespace-pre-line" :class="isDeviceExpanded(selectedVisitItem.id) ? '' : 'line-clamp-2'" :data-testid="`visit-device-description-${selectedVisitItem.sequence}`">
+                    {{ selectedVisitItem.booking.description }}
+                  </p>
+                  <BookingMediaViewer
+                    v-if="isDeviceExpanded(selectedVisitItem.id) && selectedVisitItem.booking?.media?.length"
+                    :booking-id="selectedVisitItem.booking.id"
+                    :media="selectedVisitItem.booking.media"
+                    embedded
+                  />
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span v-if="selectedVisitItem.booking?.media?.length" class="text-xs text-ink-600" :data-testid="`visit-device-media-count-${selectedVisitItem.sequence}`">
+                    {{ selectedVisitItem.booking.media.length }} ảnh/video
+                  </span>
+                  <FhButton
+                    variant="ghost"
+                    size="md"
+                    :aria-expanded="isDeviceExpanded(selectedVisitItem.id)"
+                    :aria-controls="`visit-device-details-${selectedVisitItem.sequence}`"
+                    :aria-label="`${isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm'} chi tiết máy ${selectedVisitItem.sequence}`"
+                    class="ml-auto"
+                    :data-testid="`visit-device-expand-${selectedVisitItem.sequence}`"
+                    @click="toggleDeviceDetails(selectedVisitItem.id)"
+                  >{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}<ChevronDown :size="16" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" /></FhButton>
+                </div>
+              </div>
+              <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="childFeedback.error ? 'alert' : 'status'" class="text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
+              <p v-if="approvingOrderId && approvingOrderId === selectedOrderId" role="status" class="text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
+              <FhButton v-if="selectedOrderId && quotationChecks[selectedOrderId] && approvingOrderId !== selectedOrderId" variant="secondary" size="md" :disabled="childDeciding || checkoutLoading" data-testid="quotation-check-status" @click="checkChildQuotation">Kiểm tra trạng thái</FhButton>
+              <FailedRepairIncident
+                v-if="!checkoutError && selectedVisitItem.booking && deviceOf(selectedVisitItem.booking.id)?.state === 'failed'"
+                :key="selectedVisitItem.booking.id"
+                :booking-id="selectedVisitItem.booking.id"
+                @rebook="bookingId => router.push({ path: '/app/bookings/new', query: { repairFailure: bookingId } })"
+                @later="router.push('/app')"
+              />
+              <VisitOrderDetails
+                v-if="selectedDetails"
+                :key="selectedDetails.order.id"
+                :details="selectedDetails"
+                :stopped="isStoppedOrder(selectedDetails.order.id)"
+                :disabled="isStoppedOrder(selectedDetails.order.id) || !childDetailsFresh || childDeciding || checkoutLoading || !!quotationChecks[selectedDetails.order.id]"
+                @quote="decideChildQuotation(selectedDetails.order.id, $event)"
+                @cost="(id, action, consent) => selectedDetails && child.decide(selectedDetails.order.id, action, id, consent)"
+                @retry="load"
+              />
+              <CustomerStopReplaceRequest
+                v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id)"
+                :key="`stop-replace-${selectedDetails.order.id}`"
+                :order-id="selectedDetails.order.id"
+                :order-status="selectedDetails.order.status"
+              />
+              <div v-if="selectedOrderId && !selectedDetails" class="space-y-2 border-t border-ink-100 pt-3">
+                <FhSkeleton v-if="childOrderStatusLoading" class="h-24 rounded-xl" />
+                <template v-else><p class="text-sm text-ink-600">Chưa tải được báo giá và chi tiết máy này.</p><FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></template>
+              </div>
+
+              <CustomerContinuationPanel
+                v-if="selectedDetails && !isStoppedOrder(selectedDetails.order.id) && ['EN_ROUTE', 'UNDER_REPAIR'].includes(selectedDetails.order.status)"
+                :key="`continuation-${selectedDetails.order.id}`"
+                :order-id="selectedDetails.order.id"
+                :booking-id="selectedVisitItem.booking?.id ?? null"
+                :visit-group-id="visitId"
+                :order-status="selectedDetails.order.status"
+              />
             </div>
-            <p v-else-if="payMethod === 'wallet' && walletBalance !== null && !walletCovers" class="text-ink-600" data-testid="visit-wallet-short">
-              Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
-            </p>
-            <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
-              <p v-if="cashFirstEnabled">Gửi yêu cầu để máy chủ chốt số tiền hiện tại cho cả lượt {{ checkout.devices.length }} thiết bị. Kỹ thuật viên chỉ xác nhận đã nhận sau khi yêu cầu được tạo.</p>
-              <p v-else>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
-              <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu trả tiền mặt</FhButton>
-              <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
-              <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
-                <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>
-                <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>
-                <p v-else>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
-                <p>Nút này chỉ mở hướng dẫn. Chưa ghi nhận đã thanh toán và chưa gửi xác nhận tiền mặt lên hệ thống.</p>
-                <p>Đưa số tiền trên trực tiếp cho kỹ thuật viên. Kỹ thuật viên khai báo số tiền đã nhận; sau đó bạn xác nhận đúng số tiền hoặc báo chưa đúng.</p>
-                <FhButton variant="ghost" size="md" data-testid="visit-cash-instructions-close" @click="cashInstructionsOpen = false">Đóng hướng dẫn</FhButton>
-              </section>
+          </section>
+        </div>
+
+        <!-- Right column: Unified Sticky Invoice Summary + Checkout Panel (DOM order kept: visit-invoice-summary precedes visit-checkout) -->
+        <aside class="min-w-0 space-y-4 lg:col-start-2 lg:sticky lg:top-4">
+          <section v-if="invoiceSummary.rows.length" class="rounded-2xl border border-ink-200/85 bg-white p-4 text-sm sm:p-5 shadow-2xs space-y-3.5" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
+            <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
+            <p v-if="checkoutLoading" role="status" class="text-ink-600">Đang cập nhật hóa đơn…</p>
+            <ul class="divide-y divide-ink-100">
+              <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-2.5 first:pt-0 last:pb-0" :data-testid="`visit-invoice-row-${row.item.sequence}`">
+                <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                  <div class="min-w-0 flex-1 basis-36">
+                    <p class="break-words font-medium text-ink-900">Máy {{ row.item.sequence }}<template v-if="row.item.booking?.serviceName"> · {{ row.item.booking.serviceName }}</template></p>
+                    <p class="mt-0.5 text-xs text-ink-500">{{ row.status }}</p>
+                  </div>
+                  <FhMoney v-if="row.amount !== null" :amount="row.amount" class="shrink-0 whitespace-nowrap font-semibold" data-testid="visit-invoice-amount" />
+                  <span v-else class="text-ink-500">Chưa xác định</span>
+                </div>
+                <details v-if="row.lines.length || row.fees.length" class="group mt-1 text-ink-600">
+                  <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg text-xs font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"><span>Chi tiết hóa đơn máy {{ row.item.sequence }}</span><ChevronDown :size="15" class="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" /></summary>
+                  <ul class="mt-1 space-y-1.5 rounded-xl bg-ink-50/80 p-2.5 text-xs">
+                    <li v-for="line in row.lines" :key="line.id" class="flex flex-wrap justify-between gap-x-3 gap-y-1">
+                      <span class="min-w-0 flex-1 basis-36 break-words">{{ line.description }}<span class="block text-ink-500">{{ line.quantity }} × <FhMoney :amount="line.unitPrice" /></span></span>
+                      <FhMoney :amount="line.lineTotal" class="shrink-0 whitespace-nowrap font-num" />
+                    </li>
+                    <li v-for="fee in row.fees" :key="fee.label" class="flex flex-wrap justify-between gap-2"><span>{{ fee.label }}</span><FhMoney :amount="fee.amount" class="whitespace-nowrap font-num" /></li>
+                  </ul>
+                </details>
+              </li>
+            </ul>
+            <dl class="rounded-xl bg-ink-50/85 p-3.5 space-y-2">
+              <div class="flex flex-wrap items-baseline justify-between gap-2 font-semibold text-ink-900">
+                <dt>{{ invoiceSummary.pending ? 'Tổng hóa đơn đã chốt' : 'Tổng hóa đơn gốc' }}</dt>
+                <dd><FhMoney v-if="invoiceSummary.gross !== null" :amount="invoiceSummary.gross" emphasis data-testid="visit-invoice-gross" /><span v-else class="font-normal text-ink-600">Chưa xác định</span></dd>
+              </div>
+              <div class="flex flex-wrap items-baseline justify-between gap-2 text-xs sm:text-sm text-ink-600">
+                <dt>Hóa đơn gốc chưa thanh toán</dt>
+                <dd><FhMoney v-if="invoiceSummary.unpaid !== null" :amount="invoiceSummary.unpaid" data-testid="visit-invoice-unpaid" /><span v-else>Chưa xác định</span></dd>
+              </div>
+            </dl>
+            <p v-if="invoiceSummary.pending" class="text-xs text-ink-500">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
+          </section>
+
+          <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>
+          <p v-if="voucherAttemptPending" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="voucher-reservation-pending">Kết quả giữ voucher chưa rõ. Hãy mở voucher và kiểm tra lại yêu cầu cũ trước khi thanh toán; chưa thể trả bằng ví, VNPay hoặc tiền mặt.</p>
+          <section v-if="voucherReconciliationRequired && !checkout?.paid" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="voucher-terminal-reconciliation">
+            Ưu đãi đã được sử dụng hoặc hoàn lại. Cần đối chiếu thanh toán từ máy chủ; chưa thể thu thêm.
+            <FhButton variant="secondary" size="sm" class="mt-2" :disabled="voucherReconciliationLoading" @click="(voucherTerminal ?? savedVoucherAttempt?.terminal) && handleVoucherTerminal((voucherTerminal ?? savedVoucherAttempt?.terminal)!)">Kiểm tra thanh toán</FhButton>
+          </section>
+          <section v-if="checkoutError" role="alert" class="space-y-2 rounded-2xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800" data-testid="visit-checkout-error">
+            <h2 class="font-semibold">Thông tin thanh toán chưa sẵn sàng</h2>
+            <p>{{ checkoutError }}</p>
+            <FhButton variant="secondary" size="md" data-testid="visit-checkout-retry" @click="load">Thử lại</FhButton>
+          </section>
+
+          <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200/85 bg-white p-4 text-sm sm:p-5 shadow-2xs" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
+            <p v-if="financialFollowupRequired" role="status" data-testid="visit-financial-followup" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-warning-800">Có máy đã dừng sửa và chứng từ cũ cần đối soát. Số tiền phải trả hoặc hoàn tiền: Chưa xác định. Chưa thực hiện thanh toán mới cho lượt này; việc đặt lại chỉ mở khi đã xác minh đủ điều kiện.</p>
+            <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
+            <div class="flex flex-col gap-2 pb-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <div>
+                <h2 id="visit-checkout-title" data-testid="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán</h2>
+                <p id="visit-checkout-scope" data-testid="visit-checkout-scope" class="text-xs text-ink-500">Gồm {{ checkout.devices.length }} thiết bị</p>
+              </div>
+              <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
+              <span v-else-if="checkoutState === 'zero_due'" data-testid="visit-checkout-state" class="font-semibold text-ink-700">Không phát sinh khoản cần thanh toán</span>
+              <span v-else-if="checkoutState === 'pending_cash'" data-testid="visit-checkout-state" class="font-semibold text-warning-800">Chờ xác nhận tiền mặt</span>
+              <span v-else-if="checkoutState === 'waiting'" data-testid="visit-checkout-state" class="font-semibold text-ink-600">Chờ kết quả các thiết bị</span>
+              <div v-else class="sm:text-right">
+                <span data-testid="visit-checkout-state" class="block text-xs font-medium text-ink-600">{{ voucherAttemptPending ? 'Chờ xác minh voucher' : checkoutState === 'wallet_short' ? 'Ví chưa đủ' : checkoutState === 'vnpay' ? 'Chọn VNPay' : 'Sẵn sàng thanh toán' }}</span>
+                <span v-if="activeFundedVoucher" class="block text-xs text-brand-700">Khách dự kiến trả theo máy chủ: <FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></span>
+              </div>
             </div>
-            <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || !walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
-            <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
+            <p v-if="checkout.waiting > 0" class="text-ink-600">Còn {{ checkout.waiting }} thiết bị đang xử lý. Bạn thanh toán một lần khi mọi thiết bị đã có kết quả, chỉ cho các máy sửa được.</p>
+            <p v-else-if="checkoutState === 'waiting'" class="text-ink-600">Đang cập nhật trạng thái thanh toán của lượt sửa. Bạn chưa cần thanh toán lúc này.</p>
+
+            <template v-else-if="checkoutState === 'zero_due'">
+              <p class="text-ink-700" data-testid="visit-zero-due">
+                Số tiền còn phải trả là 0 ₫. Bạn không cần thực hiện thanh toán cho lượt này.
+              </p>
             </template>
-        </template>
-      </section>
+            <template v-else-if="checkoutState === 'pending_cash'">
+              <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
+                <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho {{ checkout.devices.length }} thiết bị. Bạn xác nhận đúng số tiền đã trả.</p>
+                <div class="flex flex-wrap gap-2">
+                  <FhButton size="md" :loading="busy" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
+                  <FhButton variant="secondary" size="md" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>
+                </div>
+              </div>
+            </template>
+            <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'pending'" class="space-y-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-warning-900" aria-labelledby="visit-cash-intent-pending-title" data-testid="visit-cash-intent-pending">
+              <div>
+                <h3 id="visit-cash-intent-pending-title" class="font-semibold text-balance">Chờ kỹ thuật viên xác nhận tiền mặt</h3>
+                <p class="mt-1 text-sm text-warning-800">Gồm {{ checkout.devices.length }} thiết bị</p>
+              </div>
+              <dl class="rounded-lg bg-white/70 p-3">
+                <dt class="text-xs text-warning-800">Số tiền cần trả</dt>
+                <dd class="mt-0.5"><FhMoney :amount="cashIntent.customerDueVnd" emphasis /></dd>
+              </dl>
+              <p>Yêu cầu chưa phải thanh toán hoàn tất. Bạn có thể huỷ khi kỹ thuật viên chưa xác nhận đã nhận tiền.</p>
+              <FhButton variant="secondary" size="md" class="w-full sm:w-auto" :disabled="busy" :loading="busy" data-testid="visit-cash-intent-cancel" @click="cancelCashIntent">Hủy yêu cầu tiền mặt</FhButton>
+            </section>
+            <section v-else-if="checkoutState !== 'paid' && cashFirstEnabled && cashIntent?.status === 'received'" class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4 text-ink-800" data-testid="visit-cash-intent-received">
+              <h3 class="font-semibold text-balance">Kỹ thuật viên đã báo nhận tiền mặt</h3>
+              <p class="text-sm text-ink-600">Gồm {{ checkout.devices.length }} thiết bị</p>
+              <p>Máy chủ ghi nhận số tiền <strong class="font-num"><FhMoney :amount="cashIntent.customerDueVnd" /></strong>. Đang chờ trạng thái lượt được cập nhật; chưa hiển thị là đã thanh toán.</p>
+            </section>
+            <template v-else-if="checkout.ready && !checkout.paid && checkout.total > 0 && !voucherReconciliationRequired">
+                <p v-if="cashFirstEnabled && cashIntent?.status === 'cancelled'" class="rounded-xl border border-ink-200 bg-ink-50 p-3 text-ink-700" data-testid="visit-cash-intent-cancelled">Yêu cầu tiền mặt cho {{ checkout.devices.length }} thiết bị đã được huỷ. Bạn có thể chọn cách thanh toán khác.</p>
+                <VoucherCheckoutChooser
+                  :scope-id="visitId"
+                  @applied="handleVoucherApplied"
+                  @terminal="handleVoucherTerminal"
+                  @released="clearFundedVoucher"
+                  @expired="clearFundedVoucher"
+                />
+                <FhButton v-if="activeFundedVoucher?.preview.customerDueVnd === 0" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-confirm-zero" @click="confirmZeroCheckout">Xác nhận tất toán 0 ₫</FhButton>
+                <template v-else>
+                <div class="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200/90" role="radiogroup" aria-label="Cách thanh toán" data-testid="visit-pay-methods">
+                  <button
+                    v-for="method in payMethods"
+                    :key="method"
+                    type="button"
+                    role="radio"
+                    :aria-checked="payMethod === method"
+                    :tabindex="payMethod === method ? 0 : -1"
+                    class="flex min-h-14 w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 disabled:opacity-50 cursor-pointer"
+                    :class="payMethod === method ? 'bg-brand-50/80' : 'bg-white hover:bg-ink-50'"
+                    :data-testid="`visit-pay-method-${method}`"
+                    :disabled="busy"
+                    @click="selectPayMethod(method)"
+                    @keydown="onPayMethodKey($event, method)"
+                  >
+                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-700" aria-hidden="true">
+                      <Wallet v-if="method === 'wallet'" :size="18" />
+                      <span v-else-if="method === 'vnpay'" class="text-[10px] font-extrabold leading-none tracking-tight"><span class="text-[#005BAA]">VN</span><span class="text-[#ED1C24]">PAY</span></span>
+                      <Banknote v-else :size="18" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block text-sm font-semibold text-ink-900">{{ method === 'wallet' ? 'Ví FixHome' : method === 'vnpay' ? 'VNPay' : 'Tiền mặt' }}</span>
+                      <span v-if="method === 'wallet'" class="block text-xs" :class="walletBalance !== null && !walletCovers ? 'text-warning-800' : 'text-ink-500'">
+                        <template v-if="walletError">Chưa tải được số dư</template>
+                        <template v-else-if="walletBalance === null">Đang xem số dư…</template>
+                        <template v-else>Số dư <span class="font-num"><FhMoney :amount="walletBalance" /></span><template v-if="!walletCovers"> · không đủ</template></template>
+                      </span>
+                      <span v-else-if="method === 'vnpay'" class="block text-xs text-ink-500">ATM, thẻ quốc tế, QR</span>
+                      <span v-else class="block text-xs text-ink-500">Trả trực tiếp cho kỹ thuật viên</span>
+                    </span>
+                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2" :class="payMethod === method ? 'border-brand-600' : 'border-ink-300'" aria-hidden="true"><span v-if="payMethod === method" class="h-2.5 w-2.5 rounded-full bg-brand-600"></span></span>
+                  </button>
+                </div>
+                <div v-if="payMethod === 'wallet' && walletError" class="text-danger-800" role="alert" data-testid="visit-wallet-error">
+                  <p>Chưa tải được số dư ví. Thử lại hoặc chọn cách thanh toán khác.</p>
+                  <FhButton variant="ghost" size="md" data-testid="visit-wallet-retry" @click="loadWallet">Thử lại số dư</FhButton>
+                </div>
+                <p v-else-if="payMethod === 'wallet' && walletBalance !== null && !walletCovers" class="text-ink-600" data-testid="visit-wallet-short">
+                  Ví chưa đủ tiền. <router-link to="/app/wallet" class="font-semibold text-brand-700 underline">Nạp thêm vào ví</router-link> hoặc chọn cách khác.
+                </p>
+                <div v-else-if="payMethod === 'cash'" class="space-y-3 text-ink-700" data-testid="visit-cash-intent-panel">
+                  <p v-if="cashFirstEnabled">Gửi yêu cầu để máy chủ chốt số tiền hiện tại cho cả lượt {{ checkout.devices.length }} thiết bị. Kỹ thuật viên chỉ xác nhận đã nhận sau khi yêu cầu được tạo.</p>
+                  <p v-else>Trả tiền trực tiếp cho kỹ thuật viên. Bạn sẽ xác nhận đúng số tiền sau khi kỹ thuật viên khai báo đã nhận.</p>
+                  <FhButton v-if="cashFirstEnabled" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-cash-intent" @click="createCashIntent">Yêu cầu trả tiền mặt</FhButton>
+                  <FhButton v-else-if="!cashInstructionsOpen" variant="secondary" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-intent" @click="openCashInstructions">Tiếp tục với tiền mặt</FhButton>
+                  <section v-else class="space-y-2 rounded-xl border border-ink-200 bg-ink-50 p-4" role="status" aria-live="polite" aria-labelledby="visit-cash-instructions-title" tabindex="-1" data-testid="visit-cash-instructions">
+                    <h3 id="visit-cash-instructions-title" class="font-semibold text-ink-900">Hướng dẫn trả tiền mặt</h3>
+                    <p v-if="activeFundedVoucher">Số tiền khách dự kiến trả theo máy chủ: <strong class="font-num"><FhMoney :amount="activeFundedVoucher.preview.customerDueVnd" /></strong></p>
+                    <p v-else>Số tiền của cả lượt: <strong class="font-num"><FhMoney :amount="checkout.total" /></strong></p>
+                    <p>Nút này chỉ mở hướng dẫn. Chưa ghi nhận đã thanh toán và chưa gửi xác nhận tiền mặt lên hệ thống.</p>
+                    <p>Đưa số tiền trên trực tiếp cho kỹ thuật viên. Kỹ thuật viên khai báo số tiền đã nhận; sau đó bạn xác nhận đúng số tiền hoặc báo chưa đúng.</p>
+                    <FhButton variant="ghost" size="md" data-testid="visit-cash-instructions-close" @click="cashInstructionsOpen = false">Đóng hướng dẫn</FhButton>
+                  </section>
+                </div>
+                <FhButton v-if="payMethod === 'wallet'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || !walletCovers || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-wallet" @click="payWithWallet">Trả bằng ví</FhButton>
+                <FhButton v-else-if="payMethod === 'vnpay'" class="w-full" size="lg" :disabled="voucherCollectionBlocked || busy || checkoutLoading" :loading="busy" data-testid="visit-pay-vnpay" @click="payWithVnpay">Thanh toán qua VNPay</FhButton>
+                </template>
+            </template>
+          </section>
+        </aside>
+      </div>
     </template>
 
     <!-- Reschedule -->
-    <div v-if="rescheduleOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="rescheduleOpen = false">
-      <div class="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-[var(--radius-lg)] bg-white p-6 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
-        <div class="flex items-start justify-between gap-3">
-          <h2 id="visit-reschedule-title" class="text-lg font-semibold text-ink-900">Đổi lịch cho cả lượt</h2>
-          <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl text-ink-600 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng" @click="rescheduleOpen = false"><X :size="18" /></button>
+    <Transition name="fh-modal">
+      <div v-if="rescheduleOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs sm:p-4" @click.self="rescheduleOpen = false">
+        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-lg space-y-4 overflow-y-auto rounded-t-[20px] sm:rounded-[20px] bg-white p-5 sm:p-6 shadow-(--shadow-e3)" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
+          <div class="flex items-start justify-between gap-3">
+            <h2 id="visit-reschedule-title" class="text-lg font-semibold text-ink-900">Đổi lịch cho cả lượt</h2>
+            <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl text-ink-600 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng" @click="rescheduleOpen = false"><X :size="18" /></button>
+          </div>
+          <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Mỗi lượt sửa chỉ đổi lịch được một lần, mọi thiết bị đổi cùng nhau.</p>
+          <BookingSessionPicker v-model="chosenSession" :sessions="sessions" busy-hint="Thợ đã có lịch buổi này" />
+          <FhButton class="w-full" size="lg" :disabled="!chosenSession || busy" :loading="busy" data-testid="visit-reschedule-save" @click="saveReschedule">Lưu lịch mới</FhButton>
         </div>
-        <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Mỗi lượt sửa chỉ đổi lịch được một lần, mọi thiết bị đổi cùng nhau.</p>
-        <BookingSessionPicker v-model="chosenSession" :sessions="sessions" busy-hint="Thợ đã có lịch buổi này" />
-        <FhButton class="w-full" size="lg" :disabled="!chosenSession || busy" :loading="busy" data-testid="visit-reschedule-save" @click="saveReschedule">Lưu lịch mới</FhButton>
       </div>
-    </div>
+    </Transition>
 
     <!-- Cancel -->
-    <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="cancelOpen = false">
-      <div class="w-full max-w-md space-y-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
-        <h2 id="visit-cancel-title" class="text-lg font-semibold text-ink-900">Huỷ cả lượt sửa?</h2>
-        <p class="text-sm text-ink-600 text-pretty">Mọi thiết bị trong lượt đều huỷ.<template v-if="held"> Thợ đã nhận lượt này nên bạn bị trừ điểm uy tín như huỷ một đơn đã có thợ.</template></p>
-        <div class="flex justify-end gap-2.5">
-          <FhButton variant="secondary" size="md" :disabled="busy" @click="cancelOpen = false">Không</FhButton>
-          <FhButton variant="danger" size="md" :loading="busy" data-testid="visit-cancel-confirm" @click="confirmCancel">Huỷ lượt sửa</FhButton>
+    <Transition name="fh-modal">
+      <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs sm:p-4" @click.self="cancelOpen = false">
+        <div class="fh-modal-panel fh-modal-panel--sheet w-full sm:max-w-md space-y-4 rounded-t-[20px] sm:rounded-[20px] bg-white p-5 sm:p-6 shadow-(--shadow-e3)" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
+          <h2 id="visit-cancel-title" class="text-lg font-semibold text-ink-900">Huỷ cả lượt sửa?</h2>
+          <p class="text-sm text-ink-600 text-pretty">Mọi thiết bị trong lượt đều huỷ.<template v-if="held"> Thợ đã nhận lượt này nên bạn bị trừ điểm uy tín như huỷ một đơn đã có thợ.</template></p>
+          <div class="flex justify-end gap-2.5">
+            <FhButton variant="secondary" size="md" :disabled="busy" @click="cancelOpen = false">Không</FhButton>
+            <FhButton variant="danger" size="md" :loading="busy" data-testid="visit-cancel-confirm" @click="confirmCancel">Huỷ lượt sửa</FhButton>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 

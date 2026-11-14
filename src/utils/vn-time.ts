@@ -110,3 +110,35 @@ export function vnDateTimeString(input: DateInput, options?: Intl.DateTimeFormat
     withZone(options ?? { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
   );
 }
+
+/** Short Vietnamese relative timestamp (Vietnam calendar fallback for older items). */
+export function vnRelativeTime(input: DateInput, now: DateInput = new Date()): string {
+  const date = new Date(input);
+  const ref = new Date(now);
+  if (Number.isNaN(date.getTime()) || Number.isNaN(ref.getTime())) return '';
+
+  const diffSec = Math.floor((ref.getTime() - date.getTime()) / 1000);
+  if (diffSec < 60) return 'Vừa xong';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} ngày trước`;
+
+  const sameYear = vnParts(date).year === vnParts(ref).year;
+  return vnDateString(date, sameYear ? { day: '2-digit', month: '2-digit' } : undefined);
+}
+
+export type VnDayGroup = 'Hôm nay' | 'Hôm qua' | 'Trước đó';
+
+/** Group timestamp into Today / Yesterday / Earlier using Vietnam calendar day boundaries. */
+export function vnDayGroup(input: DateInput, now: DateInput = new Date()): VnDayGroup {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return 'Trước đó';
+  const todayKey = vnDayKey(now);
+  const itemKey = vnDayKey(date);
+  if (itemKey === todayKey) return 'Hôm nay';
+  if (itemKey === addDaysToKey(todayKey, -1)) return 'Hôm qua';
+  return 'Trước đó';
+}

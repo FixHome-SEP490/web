@@ -56,7 +56,7 @@ onMounted(loadCategories);
 </script>
 
 <template>
-  <section class="landing-section bg-ink-25/60" aria-labelledby="services-title">
+  <section class="landing-section bg-[#F8FAFC]" aria-labelledby="services-title">
     <div class="landing-container">
       <div class="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div class="max-w-xl">
@@ -82,11 +82,11 @@ onMounted(loadCategories);
         <div
           v-for="item in 4"
           :key="item"
-          class="rounded-2xl border border-ink-200/80 bg-white p-5"
+          class="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-2xs"
           aria-hidden="true"
         >
-          <FhSkeleton width="48px" height="48px" class="rounded-xl" />
-          <FhSkeleton class="mt-5" width="65%" height="20px" />
+          <FhSkeleton width="76px" height="76px" class="rounded-2xl" />
+          <FhSkeleton class="mt-4" width="65%" height="20px" />
           <FhSkeleton class="mt-3" width="90%" height="16px" />
           <FhSkeleton class="mt-4" width="35%" height="16px" />
         </div>
@@ -114,24 +114,24 @@ onMounted(loadCategories);
           v-for="category in visibleCategories"
           :key="category.id"
           :to="{ name: 'services', query: { category: category.id } }"
-          class="service-card group flex min-h-[224px] min-w-0 flex-col justify-between rounded-2xl border border-ink-200/80 bg-white p-5 transition-colors duration-200 hover:border-brand-300 sm:p-6"
+          class="service-card group flex min-h-[244px] min-w-0 flex-col justify-between rounded-2xl border border-slate-200/85 bg-white p-5 shadow-2xs transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm sm:p-6"
         >
           <div>
             <div class="flex items-center justify-between">
-              <span
-                class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-ink-200 bg-ink-50 p-2 shadow-xs transition-transform duration-200 group-hover:scale-105 group-hover:border-brand-200 group-hover:bg-brand-50/60"
+              <div
+                class="flex h-20 w-20 shrink-0 items-center justify-center transition-transform duration-200 group-hover:scale-105"
               >
                 <img
                   :src="getCategoryArtworkUrl(category)"
                   alt=""
                   loading="lazy"
-                  class="h-full w-full object-contain"
+                  class="h-full w-full object-contain drop-shadow-xs select-none pointer-events-none"
                   aria-hidden="true"
                 />
-              </span>
+              </div>
             </div>
 
-            <div class="mt-4 min-w-0">
+            <div class="mt-3.5 min-w-0">
               <h3 class="text-base font-semibold text-ink-900 transition-colors group-hover:text-brand-700 sm:text-[17px]">
                 {{ category.name }}
               </h3>
@@ -141,10 +141,10 @@ onMounted(loadCategories);
             </div>
           </div>
 
-          <div class="mt-5 flex items-center justify-between border-t border-ink-100 pt-4">
-            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600">
+          <div class="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 transition-colors group-hover:text-brand-700">
               Xem dịch vụ
-              <ArrowRight :size="16" aria-hidden="true" />
+              <ArrowRight :size="16" class="transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden="true" />
             </span>
           </div>
         </router-link>

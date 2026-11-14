@@ -7,6 +7,7 @@ import apiClient from '../src/api/client';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import NotificationBellDropdown from '../src/components/notifications/NotificationBellDropdown.vue';
+import NotificationSemanticIcon from '../src/components/notifications/NotificationSemanticIcon.vue';
 import { useAuthStore } from '../src/stores/auth';
 
 describe('Notification bell accessibility', () => {
@@ -239,5 +240,47 @@ describe('Departure warning and matching exhausted notifications', () => {
 
     vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Forbidden'));
     await expect(resolvePartRequestServiceOrderId(item)).resolves.toBeNull();
+  });
+});
+
+describe('NotificationSemanticIcon', () => {
+  const base: NotificationItem = {
+    id: 'n1',
+    userId: 'u1',
+    title: 'Thông báo',
+    message: 'Nội dung',
+    type: 'ORDER_COMPLETED',
+    isRead: false,
+    createdAt: '2026-10-07T08:00:00Z',
+  };
+
+  it('renders semantic surface tones and status micro-badges without outer border clutter', () => {
+    const approved = mount(NotificationSemanticIcon, {
+      props: { item: { ...base, type: 'QUOTATION_APPROVED', title: 'Báo giá đã được duyệt' } },
+    });
+    expect(approved.classes()).toContain('bg-success-50');
+    expect(approved.classes()).not.toContain('border');
+    expect(approved.html()).toContain('bg-success-600');
+    approved.unmount();
+
+    const rejected = mount(NotificationSemanticIcon, {
+      props: { item: { ...base, type: 'ADDITIONAL_COST_REJECTED', title: 'Từ chối chi phí phát sinh' } },
+    });
+    expect(rejected.classes()).toContain('bg-danger-50');
+    expect(rejected.html()).toContain('bg-danger-600');
+    rejected.unmount();
+
+    const pendingReturn = mount(NotificationSemanticIcon, {
+      props: { item: { ...base, type: 'PART_RETURN_DECLARED', title: 'Chờ nhận hoàn trả' } },
+    });
+    expect(pendingReturn.classes()).toContain('bg-warning-50');
+    expect(pendingReturn.html()).toContain('bg-warning-600');
+    pendingReturn.unmount();
+
+    const readDimmed = mount(NotificationSemanticIcon, {
+      props: { item: { ...base, isRead: true }, dimWhenRead: true },
+    });
+    expect(readDimmed.classes()).toContain('opacity-70');
+    readDimmed.unmount();
   });
 });

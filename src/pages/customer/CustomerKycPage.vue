@@ -4,7 +4,8 @@
 // it. No face photo or video. Pending: wait; rejected: the reason and the form
 // again; verified: never asked again.
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { AlertCircle, Camera, CheckCircle2, ShieldCheck } from 'lucide-vue-next';
+import { AlertCircle, Camera, ShieldCheck } from 'lucide-vue-next';
+import { toast } from 'vue-sonner';
 import { FhButton, FhSkeleton } from '../../components';
 import {
   CUSTOMER_KYC_MAX_FILE_SIZE,
@@ -44,7 +45,6 @@ const form = reactive({ fullName: '', dateOfBirth: '', gender: '' as CustomerGen
 const errors = ref<Record<string, string>>({});
 const submitError = ref('');
 const submitting = ref(false);
-const justSubmitted = ref(false);
 
 const isGender = (value: unknown): value is CustomerGender => value === 'male' || value === 'female' || value === 'other';
 
@@ -181,7 +181,7 @@ async function submit() {
     identity.setData(result);
     // The wallet decides the next withdrawal step from this status.
     cache.markChanged([queryKeys.wallet.all]);
-    justSubmitted.value = true;
+    toast.success('Đã gửi hồ sơ xác minh.');
     sides.forEach((side) => {
       releasePreview(side);
       side.file = null;
@@ -199,22 +199,22 @@ const fieldClass =
 
 <template>
   <div class="max-w-2xl mx-auto space-y-5 pb-12">
-    <h1 class="text-2xl font-bold text-ink-900 tracking-tight text-balance">Xác minh danh tính</h1>
+    <h1 class="text-2xl font-bold text-ink-900 tracking-tight text-balance animate-slide-up">Xác minh danh tính</h1>
 
     <!-- Loading: the shape of the status block -->
-    <section v-if="identity.loading.value" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-3" aria-busy="true" aria-label="Đang tải trạng thái xác minh">
+    <section v-if="identity.loading.value" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-3 animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải trạng thái xác minh">
       <FhSkeleton width="55%" height="20px" />
       <FhSkeleton height="14px" :count="3" />
     </section>
 
-    <section v-else-if="loadError && !state" class="rounded-2xl border border-ink-200 bg-white p-5 flex flex-wrap items-center justify-between gap-3">
+    <section v-else-if="loadError && !state" class="rounded-2xl border border-ink-200 bg-white p-5 flex flex-wrap items-center justify-between gap-3 animate-slide-up-delay-1">
       <p class="text-sm text-ink-700">{{ loadError }}</p>
       <FhButton variant="secondary" size="sm" @click="identity.refetch()">Thử lại</FhButton>
     </section>
 
     <template v-else-if="state">
       <!-- Verified: never asked again -->
-      <section v-if="state.status === 'verified'" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-4" data-testid="kyc-verified">
+      <section v-if="state.status === 'verified'" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-4 animate-slide-up-delay-1" data-testid="kyc-verified">
         <div class="flex items-start gap-3">
           <ShieldCheck :size="22" class="text-success-600 shrink-0 mt-0.5" />
           <div class="min-w-0 space-y-1">
@@ -236,10 +236,7 @@ const fieldClass =
       </section>
 
       <!-- Pending: wait for FixHome -->
-      <section v-else-if="state.status === 'pending'" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-4" data-testid="kyc-pending">
-        <p v-if="justSubmitted" role="status" class="rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-800 flex items-start gap-2">
-          <CheckCircle2 :size="16" class="shrink-0 mt-0.5" /> <span class="text-pretty">Đã gửi hồ sơ xác minh.</span>
-        </p>
+      <section v-else-if="state.status === 'pending'" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-4 animate-slide-up-delay-1" data-testid="kyc-pending">
         <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">
           Hồ sơ xác minh đang chờ duyệt. Bạn sẽ nhận thông báo khi FixHome duyệt xong, sau đó rút được tiền.
         </p>
@@ -261,7 +258,7 @@ const fieldClass =
       </section>
 
       <!-- Rejected: why, then the form again -->
-      <div v-if="state.status === 'rejected'" role="alert" data-testid="kyc-rejected" class="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800 flex items-start gap-3">
+      <div v-if="state.status === 'rejected'" role="alert" data-testid="kyc-rejected" class="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800 flex items-start gap-3 animate-slide-up-delay-1">
         <AlertCircle :size="18" class="shrink-0 mt-0.5 text-danger-600" />
         <div class="min-w-0 space-y-0.5">
           <p class="font-semibold">Hồ sơ xác minh chưa được duyệt</p>
@@ -269,7 +266,7 @@ const fieldClass =
         </div>
       </div>
 
-      <form v-if="showForm" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-5" data-testid="kyc-form" novalidate @submit.prevent="submit">
+      <form v-if="showForm" class="rounded-2xl border border-ink-200 bg-white p-5 space-y-5 animate-slide-up-delay-1" data-testid="kyc-form" novalidate @submit.prevent="submit">
         <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800 text-pretty">
           Cần một lần trước khi rút tiền lần đầu. Thông tin phải giống trên CCCD; sau khi được duyệt, họ tên và ngày sinh không đổi được nữa.
         </p>

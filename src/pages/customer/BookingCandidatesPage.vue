@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Star,
@@ -15,11 +15,11 @@ import {
 import {
   FhBackLink,
   FhButton,
-  FhSkeleton,
   FhStatusPill,
   FhEmptyState,
   TechnicianProfileModal,
 } from '../../components';
+import TechnicianRadarLoader from '../../components/customer/TechnicianRadarLoader.vue';
 import { bookingsApi, type TechnicianCandidate, type CandidateEmptyReason } from '../../api/bookings.api';
 import { visitGroupsApi } from '../../api/visit-groups.api';
 import { hasRating, ratingLabel } from '../../utils/formatters';
@@ -137,6 +137,17 @@ const handleModalToggleSelect = (id: string) => {
   toggleSelect(id);
 };
 
+const MIN_RADAR_SCAN_MS = 1400;
+let pageUnmounted = false;
+
+const shouldUseMinScanDelay = () => {
+  if (import.meta.env.MODE === 'test') return false;
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    return false;
+  }
+  return true;
+};
+
 const loadCandidates = async () => {
   const loadId = ++latestLoadId;
   if (!bookingId) {
@@ -147,26 +158,36 @@ const loadCandidates = async () => {
   loading.value = true;
   loadError.value = '';
   emptyReason.value = null;
+  const startedAt = Date.now();
   try {
     const result = isVisit
       ? await visitGroupsApi.candidatesWithDiagnostics(bookingId)
       : await bookingsApi.getCandidatesWithDiagnostics(bookingId);
-    if (loadId !== latestLoadId) return;
+    if (shouldUseMinScanDelay()) {
+      const remaining = MIN_RADAR_SCAN_MS - (Date.now() - startedAt);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+    }
+    if (pageUnmounted || loadId !== latestLoadId) return;
     candidates.value = result.candidates;
     emptyReason.value = result.candidates.length ? null : result.emptyReason;
     // The customer may choose one or two technicians; selection order is invitation priority.
     selectedIds.value = [];
   } catch {
-    if (loadId !== latestLoadId) return;
+    if (pageUnmounted || loadId !== latestLoadId) return;
     candidates.value = [];
     emptyReason.value = null;
     loadError.value = 'Không thể tải danh sách kỹ thuật viên phù hợp. Vui lòng thử lại.';
   } finally {
-    if (loadId === latestLoadId) loading.value = false;
+    if (!pageUnmounted && loadId === latestLoadId) loading.value = false;
   }
 };
 
 onMounted(loadCandidates);
+onUnmounted(() => {
+  pageUnmounted = true;
+});
 
 const toggleSelect = (id: string) => {
   if (selectedIds.value.includes(id)) {
@@ -242,7 +263,7 @@ const selectedTechs = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-6 pb-28">
+  <div class="w-full space-y-5 pb-16">
     <!-- Rebook notice when former tech is busy -->
     <div
       v-if="rebookedChoose"
@@ -266,7 +287,7 @@ const selectedTechs = computed(() => {
     </div>
 
     <!-- Top Navigation & Header -->
-    <div class="space-y-3">
+    <div class="space-y-3 animate-slide-up">
       <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
       <FhBackLink :label="isVisit ? 'Lượt sửa của bạn' : 'Yêu cầu của bạn'" @click="router.push(backTarget)" />
 
@@ -274,7 +295,7 @@ const selectedTechs = computed(() => {
         <div>
           <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
           <p class="text-sm text-ink-500 mt-1">
-            Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong buổi bạn chọn
+            Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong khung giờ bạn chọn
           </p>
         </div>
         <div
@@ -289,7 +310,7 @@ const selectedTechs = computed(() => {
     </div>
 
     <!-- Customer-ranked invitations policy callout -->
-    <div class="rounded-2xl border border-ink-200/80 bg-ink-50/70 p-4 text-ink-700 text-xs sm:text-sm shadow-2xs">
+    <div class="rounded-2xl border border-ink-200/80 bg-ink-50/70 p-4 text-ink-700 text-xs sm:text-sm shadow-2xs animate-slide-up-delay-1">
       <div class="flex items-start gap-3.5">
         <div class="w-8 h-8 rounded-xl bg-white border border-ink-200/90 text-brand-600 flex items-center justify-center shrink-0 shadow-2xs mt-0.5">
           <Info :size="16" aria-hidden="true" />
@@ -315,26 +336,12 @@ const selectedTechs = computed(() => {
     </div>
 
     <!-- Candidate List Loading State -->
-    <div
-      v-if="loading"
-      role="status"
-      aria-label="Đang tải danh sách kỹ thuật viên"
-      class="rounded-3xl bg-white border border-ink-200/90 divide-y divide-ink-100 shadow-xs"
-    >
-      <div v-for="i in 3" :key="i" class="p-5 sm:p-6 flex items-center gap-4">
-        <span class="w-14 shrink-0"><FhSkeleton height="56px" rounded="full" /></span>
-        <span class="flex-1 space-y-2.5">
-          <FhSkeleton width="35%" height="20px" />
-          <FhSkeleton width="65%" height="16px" />
-          <FhSkeleton width="45%" height="14px" />
-        </span>
-      </div>
-    </div>
+    <TechnicianRadarLoader v-if="loading" :is-visit="isVisit" />
 
     <!-- Candidate List Load Error -->
     <div
       v-else-if="loadError"
-      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs"
+      class="bg-white rounded-3xl border border-ink-200 p-8 flex flex-col items-center text-center gap-3 shadow-xs animate-slide-up-delay-2"
       role="alert"
     >
       <div class="w-12 h-12 rounded-full bg-danger-50 text-danger-600 flex items-center justify-center">
@@ -347,6 +354,7 @@ const selectedTechs = computed(() => {
     <!-- Candidate List Empty State -->
     <FhEmptyState
       v-else-if="candidates.length === 0"
+      class="animate-slide-up-delay-2"
       illustration="/images/ui/booking-technician-match.png"
       :title="emptyState.title"
       :description="emptyState.description"
@@ -360,7 +368,7 @@ const selectedTechs = computed(() => {
     </FhEmptyState>
 
     <!-- Candidates Section -->
-    <div v-else class="space-y-3">
+    <div v-else class="space-y-3 animate-slide-up-delay-2">
       <!-- Filter / Sort Toolbar (Only when multiple candidates) -->
       <div v-if="candidates.length > 1" class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
         <span class="text-xs font-semibold text-ink-500 uppercase tracking-wider">

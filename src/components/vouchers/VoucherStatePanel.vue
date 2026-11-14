@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { AlertCircle, Inbox, LoaderCircle, LockKeyhole } from 'lucide-vue-next';
-import FhSkeleton from '../FhSkeleton.vue';
-import FhButton from '../FhButton.vue';
+import { FhButton, FhEmptyState, FhSkeleton } from '..';
 
 type PanelState = 'loading' | 'empty' | 'error' | 'unavailable' | 'denied';
 
@@ -29,31 +28,32 @@ const panelContent = {
 
 <template>
   <section
-    class="flex flex-col items-center rounded-[var(--radius-md)] border border-ink-200 bg-white px-5 py-9 text-center sm:px-8"
+    class="rounded-[var(--radius-md)] border border-ink-200 bg-white"
+    :class="state === 'empty' ? 'px-4 py-2' : 'flex flex-col items-center px-5 py-9 text-center sm:px-8'"
     :role="state === 'error' || state === 'denied' ? 'alert' : 'status'"
     :aria-live="state === 'loading' ? 'polite' : undefined"
     data-testid="voucher-state-panel"
   >
-    <div v-if="state === 'loading'" class="mb-4 w-full space-y-4" aria-hidden="true">
-      <FhSkeleton height="24px" width="40%" />
-      <FhSkeleton height="80px" width="100%" />
-      <FhSkeleton height="80px" width="100%" />
-    </div>
-    <div v-else-if="state === 'empty'" class="mb-3 max-w-[130px] flex items-center justify-center" aria-hidden="true">
-      <img
-        :src="'/images/ui/empty-state-search-service.png'"
-        alt=""
-        class="w-full h-auto max-h-28 object-contain drop-shadow-sm select-none pointer-events-none"
-        loading="lazy"
-      />
-    </div>
-    <div v-else class="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-sm)] bg-ink-50 text-ink-700" aria-hidden="true">
-      <component :is="panelContent[state].icon" :size="22" />
-    </div>
-    <h2 class="text-base font-semibold text-ink-900">{{ title || panelContent[state].title }}</h2>
-    <p class="mt-2 max-w-lg text-sm leading-6 text-ink-600">{{ message || panelContent[state].message }}</p>
-    <FhButton v-if="state === 'error'" class="mt-5" variant="secondary" size="md" :aria-label="retryLabel" @click="$emit('retry')">
-      {{ retryLabel }}
-    </FhButton>
+    <FhEmptyState
+      v-if="state === 'empty'"
+      :title="title || panelContent.empty.title"
+      :description="message || panelContent.empty.message"
+      illustration="/images/ui/empty-state-search-service.png"
+    />
+    <template v-else>
+      <div v-if="state === 'loading'" class="mb-4 w-full space-y-4" aria-hidden="true">
+        <FhSkeleton height="24px" width="40%" />
+        <FhSkeleton height="80px" width="100%" />
+        <FhSkeleton height="80px" width="100%" />
+      </div>
+      <div v-else class="mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-sm)] bg-ink-50 text-ink-700" aria-hidden="true">
+        <component :is="panelContent[state].icon" :size="22" />
+      </div>
+      <h2 class="text-base font-semibold text-ink-900">{{ title || panelContent[state].title }}</h2>
+      <p class="mt-2 max-w-lg text-sm leading-6 text-ink-600">{{ message || panelContent[state].message }}</p>
+      <FhButton v-if="state === 'error'" class="mt-5" variant="secondary" size="md" :aria-label="retryLabel" @click="$emit('retry')">
+        {{ retryLabel }}
+      </FhButton>
+    </template>
   </section>
 </template>

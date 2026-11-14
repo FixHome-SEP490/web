@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-12 13:40 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/ai-booking-description-1211
+> Cập nhật lần cuối: 2026-11-14 17:10 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,24 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Nâng cấp trải nghiệm Khách hàng & Lightbox ảnh chat (14/11/2026)
+
+- **Ảnh dịch vụ & điều hướng đơn khách**: Thêm thumbnail artwork 3D (`getServiceArtworkUrl`) cho danh sách đơn/lịch/lượt sửa nhiều thiết bị và chi tiết tại `CustomerDashboard.vue`, `CustomerOrdersPage.vue` (`order-card-*`, `booking-card-*`, `visit-group-card-*`, `visit-group-device-*`), `CustomerWarrantiesPage.vue` và `CustomerOrderDetailPage.vue`; `CustomerOrdersPage.vue` mặc định tab `orders` khi có đơn sửa chữa.
+- **Radar dò thợ & Theo dõi di chuyển (`EN_ROUTE`)**: Thêm `TechnicianRadarLoader.vue` trong `BookingCandidatesPage.vue` (`MIN_RADAR_SCAN_MS = 1400`, tắt trong test/reduced motion); thêm `LiveArrivalCard.vue` nội tuyến trên `CustomerOrderDetailPage.vue` khi đơn `EN_ROUTE` chưa dừng/chưa xác minh đến nơi (bản đồ `MapTilerMap` + nút mở rộng `[aria-label="Xem vị trí kỹ thuật viên"]`) và cập nhật thẻ đơn đang xử lý ở `CustomerDashboard.vue`.
+- **Khung giờ đặt lịch & Lightbox ảnh chat**: Đổi nhãn buổi sang khung giờ thuần (`08:00–12:00`, `13:00–18:00`, `18:00–23:00`, giữ `slot: 'morning' | 'afternoon' | 'evening'`) ở `src/utils/booking-session.ts`, `BookingSessionPicker.vue`, `NewBookingWizardPage.vue`, `RebookDialog.vue`; thêm `ChatImageLightbox.vue` (`Teleport`, zoom `1×`/`1.75×`, tải ảnh, đóng `Escape`/nền, khôi phục focus) cho `ChatAttachmentView.vue` và `AiConversationThread.vue`. Kiểm tra giao diện trình duyệt CHƯA KIỂM CHỨNG.
+
+### Redesign UI/UX khu Thợ, Khách hàng và Công khai (12/11/2026)
+
+- **Khu Thợ**: Tạo `TechnicianJobStepper.vue` dùng chung tiến trình 5 bước (compact trên `TechnicianDashboard.vue`, đầy đủ nhãn trên `TechnicianJobDetailPage.vue`); nâng cấp `TechnicianJobsPage.vue` thành card 3 vùng + segmented switcher (`Đơn lẻ`/`Nhiều máy`/`Lịch sử`); làm gọn `TechnicianJobDetailPage.vue` (cột tài chính sticky, cấu trúc lại báo giá/phát sinh, `job-summary`/`job-details` hợp nhất, timeline dọc); đồng bộ `TechnicianWarrantyDetailPage.vue` (2 cột), `TechnicianOnboardingPage.vue`, `TechnicianProfilePage.vue`/`TechnicianWeekCalendar.vue`, `TechnicianLayout.vue`, `AppSidebar.vue` và `MessagesPage.vue` (bỏ `TechnicianEarningsChart.vue` ở `TechnicianEarningsPage.vue`).
+- **Khu Khách hàng & Công khai**: Làm gọn card list và segmented switcher ở `CustomerOrdersPage.vue`; chuyển `CustomerOrderDetailPage.vue` sang bố cục 2 cột trên desktop và gộp khối tiến trình/ảnh sửa chữa; loại bỏ style AI/màu cầu vồng/badge thừa ở `BookingDetailPage.vue`; tái cấu trúc `CustomerVisitPage.vue` (Summary Header Card hợp nhất, `visit-device-selector` tinh gọn, bố cục 2 cột desktop với `visit-checkout` sticky, transition `fh-modal` và anatomical loading skeleton); gỡ khung viền + phóng to artwork PNG không nền ở `LandingServices.vue`, `ServicesPage.vue` và `CustomerDashboard.vue`, đồng thời thay nền card vàng nâu `--color-ink-25` ở trang công khai bằng nền slate sáng sạch.
+- **Phạm vi & Kiểm chứng**: Không đổi API, hợp đồng hay quyền truy cập; `npm test` (`227/227` file, `2678/2678` test), `npm run typecheck` (`vue-tsc -b`) và `npm run lint` (`0` warnings) đều PASS; kiểm tra trực tiếp trên trình duyệt CHƯA KIỂM CHỨNG.
+
+### Dashboard và hồ sơ kỹ thuật viên (12/11/2026)
+
+- Dashboard ưu tiên lời mời và đơn đang xử lý, dùng hướng dẫn bước tiếp theo thay thanh tiến độ lặp; ví và lịch sử nằm sau công việc. Bỏ tổng tiền và số đơn tuần suy ra từ danh sách tải về; dẫn sang trang Thu nhập để đối soát.
+- Hồ sơ dùng menu dọc trên desktop và chọn mục trên điện thoại; hỗ trợ điều hướng bàn phím, giữ bản nháp khi đổi mục, báo thay đổi chưa lưu ở thông tin/lịch/khu vực. Lịch xem trước thu gọn sau phần chỉnh sửa. API và quyền giữ nguyên.
+- Đã đối chiếu code màn Home/Profile của Mobile; không sửa Mobile. Kiểm tra giao diện render trên trình duyệt và thiết bị CHƯA KIỂM CHỨNG vì công cụ không xác định được URL Chrome.
 
 ### Nâng cấp UI/UX, Design System và Visual Assets 3D (11/11/2026)
 
@@ -429,6 +447,7 @@ Không đổi màu, font, token hay `Fh*`; chỉ đổi bố cục, chỗ đặt
 - Web tích hợp cash intent theo cờ capability, giữ giá trị và trạng thái theo phản hồi Backend; cash của lượt vẫn là một intent toàn nhóm. Đọc capability chạy riêng, lỗi/độ trễ chỉ khóa lựa chọn cash chứ không chặn nội dung đơn/lượt. Báo cáo kỹ thuật viên dùng kết luận trách nhiệm có version riêng với xử lý vận hành thay thợ/đóng để khách đặt lại. B4 chỉ thêm giữ nội dung sự cố terminal trong lúc tải lại lượt và gộp GET checkout đang chạy cùng khóa; browser, Backend DEV và Mobile parity CHƯA KIỂM CHỨNG.
 
 ### Lịch sử changelog đã lưu trữ
+
 - 2026-10-21 11:40 (UTC+7) | ToanAltF4 | fix/booking-back-reschedule | Đổi lịch một lần (nút mờ + lý do), lịch đổi buổi dạng thanh ngày; Quay lại đồng bộ (FhBackLink, bước 1 không có nút lùi, trang chọn thợ về yêu cầu); không tự điền mô tả; khung Mô tả (lời khách + ảnh) ở chi tiết yêu cầu
 
 ### Tích hợp BUG DETECTOR Web (2026-10-30, đang chờ PR)
@@ -532,6 +551,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 8. Việc đang dở và rủi ro đã biết
 
+- Đợt 12–13/11/2026: Các màn redesign UI/UX (Thợ, Khách hàng, Landing/Services) cùng tích hợp mới từ dev (#247: `invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote` trên `TechnicianJobDetailPage`) đã qua kiểm tra unit test + typecheck + lint, nhưng giao diện render trực tiếp trên trình duyệt thật CHƯA KIỂM CHỨNG.
+
 - W3 DELIVERY phí dương và 0 ₫, bằng chứng/đồng thuận, physical handoff và frozen invoice snapshot đã merge/deploy DEV trong ngày 07/11. Đợt sửa W1–W3 auditfix xử lý đổi đơn A→B (remount và hủy subscription cũ) và hiển thị tổng chia 70/30 từ từng shipment làm tròn riêng, không tính lại trên tổng. Focused Web RED→GREEN 22/22, typecheck/lint PASS; PR/DEV deploy của đợt sửa đang chờ. UAT đăng nhập do owner tự kiểm tra, CHƯA KIỂM CHỨNG.
 - W3 Admin lifecycle Web source nối API mới trong Backend worktree đang phát triển. Chỉ cấu hình vận hành; `ACTIVE` không mở Finance 70/30, không payout, không legal/ledger approval. Cần Lead review source/schema và phối hợp release Backend trước runtime QA; migration/DB/JWT/DEV/browser: NOT VERIFIED. Khi Backend chỉ là bản cũ (lifecycle GET 404), Web giữ legacy DRAFT; 503 hoặc schema sai đóng action lifecycle.
 
@@ -597,6 +618,18 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-14 17:10 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UX Khách hàng (ảnh dịch vụ các màn đơn/lượt/bảo hành/chi tiết, mặc định tab Đơn sửa chữa, khung giờ thuần 08:00–23:00, radar dò thợ `TechnicianRadarLoader.vue`, theo dõi thợ di chuyển `LiveArrivalCard.vue`) và hộp thoại xem ảnh chat `ChatImageLightbox.vue`; trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-13 18:20 (UTC+7) | ToanAltF4 | fix/w3-paid-ops-web | W3 có phí: SM đối chiếu 404 quay về form đề xuất; khối điều khoản hiện đủ 4 trần (số lượt, tổng, phần khách, phần thợ)
+- 2026-11-13 15:20 (UTC+7) | ToanAltF4 | fix/w3-receipt-blocker | Phiếu W3 thợ đã nhận đọc như đã nhận ở trang đơn: thợ ghi nhận dùng và gửi hoàn thành được (trước đó kẹt 'cần nhận bằng QR')
+- 2026-11-13 11:26 (UTC+7) | ToanAltF4 | fix/voucher-limit-w3-zero | BUG 62: chiến dịch voucher có ô Số lần mỗi khách được dùng (1-100); W3 0đ: phiếu thợ đã nhận hiện Đã giao xong thay vì cảnh báo dữ liệu nguồn
+- 2026-11-13 10:28 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (#247) vào LacVy: tích hợp giao diện chi tiết việc thợ (`invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote`) theo layout mới và hợp nhất nhật ký context; đã kiểm tra `typecheck`, `lint`, trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-13 00:37 (UTC+7) | ToanAltF4 | feat/price-variants-tech-note-1211 | ADMIN 47 sửa mức giá theo thiết bị trong hộp Sửa dịch vụ; TECH 42 ghi chú riêng của thợ trên trang việc (lưu server)
+- 2026-11-12 23:54 (UTC+7) | ToanAltF4 | fix/web-console-followup-1211 | Sửa dịch vụ: bỏ giá rỗng (fixedPrice null) khỏi payload, API từ chối null (W-7 lần 2)
+- 2026-11-12 23:30 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX hàng loạt cho Thợ (Jobs/JobDetail/Stepper/Warranty/Onboarding/Profile; bỏ `TechnicianEarningsChart.vue`), Khách (Orders/OrderDetail/BookingDetail/CustomerVisit + skeleton/Dashboard) và Công khai (Services/LandingServices); `typecheck`, `lint` và test liên quan PASS, trình duyệt CHƯA KIỂM CHỨNG.
+- 2026-11-12 23:13 (UTC+7) | ToanAltF4 | fix/web-console-bugs-1211 | Sửa lỗi console 12/11: Người dùng (lọc vai trò, Đã khoá, xem chi tiết, SĐT thợ), sửa dịch vụ gửi giá dạng số, lọc xác minh/ví, điều chỉnh tồn (lỗi 4xx mở lại form, tồn SKU ở trang khác), khối W3 theo userRole, tiến trình W3 có phí, dòng phí giao trên hoá đơn thợ, chữ trang chính sách W3, SM huỷ đơn, gỡ trang Gán thợ và Đổi thợ trực tiếp (PO: nền tảng không gán thợ), trang Cấu hình chỉ hiện tham số đang áp dụng
+- 2026-11-12 19:29 (UTC+7) | Lạc Vỹ | LacVy | Dashboard ưu tiên công việc; hồ sơ đổi điều hướng, báo bản nháp chưa lưu và thu gọn lịch xem trước; chưa xác minh giao diện trình duyệt.
+- 2026-11-12 18:58 (UTC+7) | ToanAltF4 | fix/sheet-trace-1211 | SM 46 mã kho: lỗi vẽ QR không thành báo lỗi, mất phản hồi thì đọc lại trạng thái, có nút sao chép mã; hàng đợi hoàn trả đọc warehouseAllocated từ server, bỏ N+1 warehouse-allocation
+- 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
 - 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
@@ -625,15 +658,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-06 13:17 (UTC+7) | foxonworld | foxonworld/fixhome-w3-finance-web-uat-20261106 | Khóa retry consent W3 sau 409 đến khi GET mới thành công, hiện cảnh báo snapshot chia phí thiếu policy, dịch copy lifecycle sang tiếng Việt; 2593 test, lint/typecheck/build PASS, signed-in DEV UAT chưa xác minh.
 - 2026-11-06 10:59 (UTC+7) | foxonworld | foxonworld/fixhome-w3-admin-lifecycle-web-20261106 | Thêm Web Admin W3 lifecycle với receipt preview/CAS, history Active/Retired và giữ riêng luồng legacy; focused 74/74, full 2591/2591, lint/typecheck/build PASS; runtime/Finance chưa kiểm chứng.
 - 2026-11-06 09:54 (UTC+7) | foxonworld | foxonworld/fixhome-w3-ops-web-20261106 | Sửa nhận ảnh chứng cứ Technician dùng `physical.warehouseId` từ Backend, không dùng kho SM; thêm test RED→GREEN, focused 32/32 PASS, typecheck/lint/build PASS; Backend PR #197 và migrations `0004–0008` đã deploy DEV, Web operational chưa PR/UAT.
-- 2026-11-06 03:02 (UTC+7) | foxonworld | foxonworld/fixhome-w3-ops-web-20261106 | Hoàn thiện bootstrap đề xuất SM bằng kho active tự phụ trách và ảnh QUOTE, retry cùng command/payload; focused 127/127, full 2567/2567, lint/typecheck/build PASS; runtime chưa xác minh.
-- 2026-11-06 02:40 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Thợ chọn linh kiện hỏng khi đề xuất, nộp linh kiện hỏng sau khi nhận linh kiện thay trong hạn, SM kiểm tra sau khi thợ nộp và chỉ một lần
-- 2026-11-06 02:07 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Admin W3 history chỉ đọc, status/blocker, trang revision cũ hơn và loại phản hồi cũ khi đổi actor; focused 51/51, full 2510/2510, lint/typecheck/build PASS, review Orca độc lập không có finding; DEV/migration/Finance NOT VERIFIED.
-- 2026-11-06 00:24 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm physical preview GET chỉ đọc cho Customer/Technician trên DELIVERY request thật, schema fail-closed và chống phản hồi cũ; 56 test mới, full 2502/2502 và lint/typecheck/build PASS, review độc lập không còn finding; DEV/release chưa xác minh.
-- 2026-11-05 19:51 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Admin W3 DRAFT/preview fail-closed, source review và mock QA 360/768/1440; rút nhãn menu theo design system không nới test, full Web 2446/2446 PASS, focused 65/65 và lint/typecheck/build PASS; không kích hoạt tài chính.
-- 2026-11-04 19:41 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w3-delivery-web-20261104 | Thêm Web W3 shipping read-only fail-closed snapshot/render, kiểm tra copy legacy theo vai trò và owner handoff; focused 14/14, typecheck/lint/build PASS, full suite 2402/2403 do 1 VisitGroup timeout localhost:3000.
-- 2026-11-04 18:36 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Gộp dev 1110b4a, giữ Warranty và W2; focused 146/146, typecheck/lint/build PASS. Full suite có test Voucher/VisitGroup ngoài phạm vi không ổn định; CI sẽ chạy độc lập.
-- 2026-11-04 14:28 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p3-w2-warehouse-fulfillment-web-20261104 | Thêm console kho W1 và bind pickup W2 theo contract, gồm recovery receipt QR sau bàn giao và ACK/hoàn kho; 2372 test, typecheck/lint/build PASS, runtime chờ lead.
-- 2026-11-04 13:53 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Gộp dev vào nhánh bảo hành, giữ cả ghi chú warehouse, booking draft và bảo hành.
-- 2026-11-04 13:04 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p2-booking-draft-web-20261104 | Nối Web với bản nháp đặt lịch lưu thủ công, khôi phục tối đa 5 thiết bị và submit theo receipt; 56 test tập trung/gates PASS, DEV/browser chờ lead.
-- 2026-11-04 12:12 (UTC+7) | foxonworld | foxonworld/fixhome-review2-p1-group5-web-20261104 | Nâng Web VisitGroup tối đa 5 theo contact Backend, giữ đủ child trong thanh toán/dừng/đặt lại; Mobile giữ 3, rollout do lead và runtime chưa kiểm chứng.
-- 2026-11-04 12:10 (UTC+7) | Hgnv11 | warranty-cost-sla-20261104 | Trang yêu cầu linh kiện của SM thêm loại Bảo hành và bước kiểm tra linh kiện hỏng trước khi chuẩn bị xong.

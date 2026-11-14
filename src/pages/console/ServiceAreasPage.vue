@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { foldForSearch } from '../../utils/formatters';
 import { ref, onMounted, computed, watch } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhConfirmDialog } from '../../components';
@@ -75,9 +76,7 @@ const filteredAreas = computed(() => {
       area.provinceCode === selectedProvince.value;
     const matchSearch =
       !searchQuery.value ||
-      area.districtName.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      area.districtCode.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      area.provinceName.toLowerCase().includes(searchQuery.value.toLowerCase());
+      [area.districtName, area.districtCode, area.provinceName].some((text) => foldForSearch(text).includes(foldForSearch(searchQuery.value.trim())));
     return matchProvince && matchSearch;
   });
 });

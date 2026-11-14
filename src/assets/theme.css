@@ -306,7 +306,34 @@
   transform: translateY(6px);
 }
 
+/* ---- Entrance Motion per Impeccable ---- */
+@keyframes fhSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: fhSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-up-delay-1 {
+  animation: fhSlideUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+.animate-slide-up-delay-2 {
+  animation: fhSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-slide-up-delay-1,
+  .animate-slide-up-delay-2,
   .fh-modal-enter-active,
   .fh-modal-leave-active,
   .fh-modal-enter-active .fh-modal-panel,
@@ -334,4 +361,15 @@
   .fh-list-leave-to {
     transform: none !important;
   }
+}
+
+/* ---- Vue Sonner toast typography & surface alignment ---- */
+[data-sonner-toaster] {
+  font-family: var(--font-sans) !important;
+}
+
+[data-sonner-toast] {
+  border-radius: var(--radius-md) !important;
+  font-family: var(--font-sans) !important;
+  box-shadow: var(--shadow-e2) !important;
 }

@@ -40,6 +40,8 @@ export interface PartRequest {
   status: PartRequestStatus;
   reason?: string | null;
   shippingFee: number;
+  /** W3 paid delivery progress (latest warehouse delivery event); null off that path. */
+  w3DeliveryStage?: string | null;
   /** Optional read-only delivery snapshot; absent fields remain LEGACY. */
   shippingPolicyVersion?: string | null;
   customerShippingShare?: number | null;
@@ -169,6 +171,8 @@ export interface PartCustodyReturnRecord {
   orderId?: string;
   technicianId?: string;
   technicianName?: string | null;
+  /** The return goes back into a W2 warehouse's stock; the queue marks it for the whole page in one read. */
+  warehouseAllocated?: boolean;
 }
 
 export interface DeclareReturnPayload {
@@ -467,7 +471,10 @@ export const partRequestsApi = {
     const res = await apiClient.get<{ data: PartRequest[] }>(
       `/service-orders/${orderId}/part-requests`,
     );
-    return res.data.data || [];
+    // A W3 delivery the technician has received stays 'requested' in storage; the backend reads it
+    // as received for completion, so the order pages do the same (usage, completion, labels).
+    return (res.data.data || []).map((request) => request.status === 'requested' && request.w3DeliveryStage === 'TECHNICIAN_RECEIVED'
+      ? { ...request, status: 'received' as PartRequest['status'] } : request);
   },
 
   /**
