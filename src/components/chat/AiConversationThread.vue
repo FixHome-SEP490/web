@@ -4,8 +4,9 @@
 // the conversation (useAiConversation) and puts its own action in the
 // `pinned` slot (the floating assistant's booking action).
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { ArrowDown, Bot, X, Image as ImageIcon, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
+import { ArrowDown, Bot, X, Image as ImageIcon, Maximize2, Send, AlertTriangle, Play, Check, RotateCw, Film } from 'lucide-vue-next';
 import ChatTypingDots from './ChatTypingDots.vue';
+import ChatImageLightbox from './ChatImageLightbox.vue';
 import {
   AI_CHAT_MAX_IMAGES,
   AI_MAX_VIDEOS,
@@ -168,6 +169,8 @@ function answer(text: string) {
 // says so in the conversation ("sai rồi", "không phải bệnh đó"); the assistant
 // notices, and Backend keeps it with the conversation for the team.
 
+const lightboxImage = ref<{ src: string; alt: string; caption?: string | null; downloadName?: string } | null>(null);
+
 defineExpose({ scrollToEnd });
 </script>
 
@@ -182,7 +185,26 @@ defineExpose({ scrollToEnd });
           <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-600 text-white px-3.5 py-2">
             <div v-if="message.images?.length" class="flex flex-wrap gap-1.5 mb-1.5">
               <div v-for="(src, index) in message.images" :key="index" class="flex flex-col items-center gap-1 w-20">
-                <img :src="src" alt="" class="w-20 h-20 object-cover rounded-lg" />
+                <button
+                  type="button"
+                  class="group relative block h-20 w-20 overflow-hidden rounded-lg cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                  :aria-label="`Xem lớn ảnh ${index + 1}`"
+                  data-testid="ai-chat-image-trigger"
+                  @click="lightboxImage = {
+                    src,
+                    alt: `Ảnh ${index + 1} gửi trợ lý AI`,
+                    caption: photoLabels[messageIndex]?.[index]?.text || message.text || null,
+                    downloadName: `fixhome-ai-image-${index + 1}.jpg`,
+                  }"
+                >
+                  <img :src="src" alt="" class="h-full w-full object-cover transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none" />
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none absolute right-1 bottom-1 flex h-6 w-6 items-center justify-center rounded-full bg-ink-950/60 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150 motion-reduce:transition-none"
+                  >
+                    <Maximize2 :size="11" :stroke-width="2" />
+                  </span>
+                </button>
                 <button
                   v-if="photoLabels[messageIndex]?.[index]"
                   type="button"
@@ -436,5 +458,14 @@ defineExpose({ scrollToEnd });
         <Send :size="16" />
       </button>
     </div>
+
+    <ChatImageLightbox
+      :open="!!lightboxImage"
+      :src="lightboxImage?.src ?? null"
+      :alt="lightboxImage?.alt"
+      :caption="lightboxImage?.caption ?? null"
+      :download-name="lightboxImage?.downloadName"
+      @close="lightboxImage = null"
+    />
   </div>
 </template>

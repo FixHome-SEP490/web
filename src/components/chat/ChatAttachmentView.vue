@@ -5,10 +5,11 @@
 // While this tab is still sending the file, the local copy shows with how far
 // it is, and a failed send offers Thử lại / Bỏ.
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { ImageOff, Loader2, RotateCw, X } from 'lucide-vue-next';
+import { ImageOff, Loader2, Maximize2, RotateCw, X } from 'lucide-vue-next';
 import { apiUrl } from '../../api/client';
 import { messagingApi, type ChatMessage } from '../../api/messaging.api';
 import { useChatStore } from '../../stores/chat.store';
+import ChatImageLightbox from './ChatImageLightbox.vue';
 
 const props = defineProps<{ message: ChatMessage; isMe: boolean }>();
 const chatStore = useChatStore();
@@ -21,6 +22,12 @@ let owned: string | null = null;
 let renewed = false;
 
 const isVideo = computed(() => props.message.attachment?.kind === 'video');
+const lightboxOpen = ref(false);
+const downloadName = computed(() => {
+  const mime = props.message.attachment?.mimeType?.toLowerCase() ?? '';
+  const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+  return `fixhome-chat-${props.message.id || 'image'}.${ext}`;
+});
 const upload = computed(() => props.message.upload ?? null);
 const percent = computed(() => `${Math.round(Math.max(0, Math.min(1, upload.value?.progress ?? 0)) * 100)}%`);
 const uploadText = computed(() => {
@@ -133,9 +140,27 @@ onUnmounted(() => {
         @error="onVideoError"
         @loadeddata="onVideoPlayed"
       ></video>
-      <a v-else :href="source" target="_blank" rel="noopener" class="block" aria-label="Xem ảnh lớn">
-        <img :src="source" alt="Ảnh gửi trong cuộc trò chuyện" class="block max-h-72 w-full object-cover" data-testid="chat-attachment-image" />
-      </a>
+      <button
+        v-else
+        type="button"
+        class="group relative block w-full overflow-hidden text-left cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        aria-label="Xem ảnh phóng to"
+        data-testid="chat-attachment-image-trigger"
+        @click="lightboxOpen = true"
+      >
+        <img
+          :src="source"
+          alt="Ảnh gửi trong cuộc trò chuyện"
+          class="block max-h-72 w-full object-cover transition-transform duration-200 ease-out group-hover:scale-[1.02] motion-reduce:transform-none"
+          data-testid="chat-attachment-image"
+        />
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute right-2 bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-ink-950/60 text-white backdrop-blur-xs opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150 motion-reduce:transition-none"
+        >
+          <Maximize2 :size="13" :stroke-width="2" />
+        </span>
+      </button>
     </template>
     <div v-else class="flex h-32 items-center justify-center gap-1.5 px-3 text-center text-xs" :class="failed ? 'text-danger-700' : 'text-ink-500'">
       <ImageOff v-if="failed" :size="16" aria-hidden="true" />
@@ -174,5 +199,14 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
+
+    <ChatImageLightbox
+      :open="lightboxOpen"
+      :src="isVideo ? null : source"
+      alt="Ảnh gửi trong cuộc trò chuyện"
+      :caption="message.content || null"
+      :download-name="downloadName"
+      @close="lightboxOpen = false"
+    />
   </div>
 </template>

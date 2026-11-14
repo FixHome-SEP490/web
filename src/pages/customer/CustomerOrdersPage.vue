@@ -259,12 +259,14 @@ const chosenList = useQueryState<ListView | null>(
   (raw) => (raw === 'orders' || raw === 'requests' || raw === 'visits' ? raw : null),
   (value) => value ?? undefined,
 );
-// An unselected list opens on parent visits when present; otherwise preserve the legacy default.
+// Default to "Đơn sửa chữa" whenever repair orders exist (or are loading); only switch to requests/visits if orders are empty.
 const listView = computed<ListView>(() => {
   if (chosenList.value) return chosenList.value;
-  if (!loadingVisitGroups.value && visitGroupsTotal.value > 0) return 'visits';
-  const ordersEmpty = !loadingOrders.value && ordersTotal.value === 0;
-  return ordersEmpty && !loadingBookings.value && bookingsTotal.value > 0 ? 'requests' : 'orders';
+  if (!loadingOrders.value && ordersTotal.value === 0) {
+    if (!loadingBookings.value && bookingsTotal.value > 0) return 'requests';
+    if (!loadingVisitGroups.value && visitGroupsTotal.value > 0) return 'visits';
+  }
+  return 'orders';
 });
 const listChoices = computed(() => [
   { key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa', count: ordersTotal.value, loading: loadingOrders.value },
@@ -789,8 +791,19 @@ async function confirmCancel() {
             class="animate-slide-up rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 space-y-3.5 shadow-2xs transition-[border-color,box-shadow] duration-200 hover:border-brand-300/80 hover:shadow-sm"
             :style="{ animationDelay: `${Math.min(idx, 6) * 35}ms` }"
           >
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <div class="min-w-0 space-y-1">
+            <div class="flex items-start gap-3.5">
+              <div
+                class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+              >
+                <img
+                  :src="getServiceArtworkUrl({ name: group.items[0]?.serviceName || group.items[0]?.deviceLabel })"
+                  :alt="group.items[0]?.serviceName || `Lượt sửa ${group.items.length} thiết bị`"
+                  class="w-full h-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+
+              <div class="min-w-0 flex-1 space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
                   <span :class="`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${visitGroupStatus(group).tone}`" :aria-label="`Trạng thái lượt sửa: ${visitGroupStatus(group).label}`">
                     {{ visitGroupStatus(group).label }}
@@ -807,12 +820,22 @@ async function confirmCancel() {
                 v-for="item in group.items"
                 :key="item.itemId"
                 :data-testid="`visit-group-device-${group.id}-${item.sequence}`"
-                class="flex min-w-0 items-center justify-between gap-2 rounded-xl bg-ink-50/80 px-3 py-2 text-sm"
+                class="flex min-w-0 items-center justify-between gap-2.5 rounded-xl bg-ink-50/80 px-3 py-2 text-sm"
               >
-                <span class="min-w-0 flex-1 truncate text-ink-800">
-                  <span class="font-medium">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
-                  <span v-if="item.serviceName" class="text-ink-500"> · {{ item.serviceName }}</span>
-                </span>
+                <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div class="h-9 w-9 shrink-0 rounded-lg bg-white border border-ink-200/75 p-1 flex items-center justify-center overflow-hidden">
+                    <img
+                      :src="getServiceArtworkUrl({ name: item.serviceName || item.deviceLabel })"
+                      :alt="item.serviceName || item.deviceLabel || `Thiết bị ${item.sequence}`"
+                      class="w-full h-full object-contain select-none pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
+                  <span class="min-w-0 flex-1 truncate text-ink-800">
+                    <span class="font-medium">{{ item.deviceLabel || `Thiết bị ${item.sequence}` }}</span>
+                    <span v-if="item.serviceName" class="text-ink-500"> · {{ item.serviceName }}</span>
+                  </span>
+                </div>
                 <span :class="`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${visitItemStatus(item).tone}`" :aria-label="`Trạng thái thiết bị: ${visitItemStatus(item).label}`">
                   {{ visitItemStatus(item).label }}
                 </span>

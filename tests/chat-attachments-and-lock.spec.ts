@@ -257,6 +257,24 @@ describe('chat photos and videos', () => {
     expect(item.get('[data-testid="chat-attachment-image"]').attributes('src')).toBe('blob:local');
     // No empty text bubble under a photo without a caption.
     expect(item.findAll('.whitespace-pre-wrap')).toHaveLength(0);
+    // Image opens inside an in-page modal dialog instead of opening a new browser tab.
+    expect(item.find('a[target="_blank"]').exists()).toBe(false);
+    await item.get('[data-testid="chat-attachment-image-trigger"]').trigger('click');
+    await flushPromises();
+    const lightbox = document.body.querySelector('[data-testid="chat-image-lightbox"]') as HTMLElement | null;
+    expect(lightbox).not.toBeNull();
+    expect(lightbox?.getAttribute('role')).toBe('dialog');
+    expect(lightbox?.querySelector('[data-testid="chat-lightbox-image"]')?.getAttribute('src')).toBe('blob:local');
+    const zoomBtn = lightbox?.querySelector('[data-testid="chat-lightbox-zoom"]') as HTMLButtonElement;
+    expect(zoomBtn.getAttribute('aria-pressed')).toBe('false');
+    zoomBtn.click();
+    await flushPromises();
+    expect(zoomBtn.getAttribute('aria-pressed')).toBe('true');
+    const closeBtn = lightbox?.querySelector('[data-testid="chat-lightbox-close"]') as HTMLButtonElement;
+    closeBtn.click();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="chat-image-lightbox"]')).toBeNull();
+    item.unmount();
 
     apiClientMock.get.mockRejectedValueOnce(new Error('503'));
     const broken = mount(ChatMessageItem, { props: { message: { ...message, id: 'm2', attachment: { kind: 'video', mimeType: 'video/mp4', sizeBytes: 3 } }, isMe: true } });

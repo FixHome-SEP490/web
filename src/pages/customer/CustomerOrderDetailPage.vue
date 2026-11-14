@@ -62,6 +62,7 @@ import CustomerCancelledRebookAction from '../../components/customer/CustomerCan
 import WarrantyClaimCard from '../../components/customer/WarrantyClaimCard.vue';
 import WarrantyClaimModal, { type ClaimableCoverage } from '../../components/customer/WarrantyClaimModal.vue';
 import LiveArrivalCard from '../../components/customer/LiveArrivalCard.vue';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { isOpenClaim } from '../../utils/warranty-claim';
 import { vnDateString, vnDateTimeString, vnTimeString } from '../../utils/vn-time';
 import { toTimelineSteps } from '../../utils/order-timeline';
@@ -1301,11 +1302,23 @@ const parsedReview = computed(() => {
       <!-- 1. Summary: what, where, when, who -->
       <section class="order-0 lg:col-start-1 rounded-2xl bg-white border border-ink-200/75 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
-            <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
+          <div class="flex items-start gap-3.5 min-w-0 flex-1">
+            <div
+              class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+            >
+              <img
+                :src="getServiceArtworkUrl({ name: order.serviceName })"
+                :alt="order.serviceName"
+                class="w-full h-full object-contain select-none pointer-events-none"
+                loading="lazy"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
+              <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
+            </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
             <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
             <FhStatusPill
               v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
