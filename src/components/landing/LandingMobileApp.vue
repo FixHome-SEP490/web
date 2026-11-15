@@ -25,7 +25,6 @@ interface StepItem {
   id: string;
   number: string;
   title: string;
-  badge: string;
   description: string;
   image: string;
   imageAlt: string;
@@ -36,10 +35,9 @@ const steps: StepItem[] = [
   {
     id: 'step-discover',
     number: '01',
-    title: 'Khám phá dịch vụ & bắt đầu yêu cầu',
-    badge: 'Trang chủ ứng dụng',
+    title: 'Khám phá dịch vụ & tạo yêu cầu',
     description:
-      'Chọn dịch vụ cần sửa chữa hoặc bắt đầu nhanh với tính năng Đặt thợ và AI Soi lỗi ngay trên trang chủ.',
+      'Chọn dịch vụ cần sửa chữa hoặc danh mục phù hợp để nhanh chóng gửi yêu cầu trên FixHome.',
     image: '/images/mobile-showcase/step-1-home.png',
     imageAlt: 'Giao diện trang chủ FixHome Mobile - Đặt thợ và AI Soi lỗi',
     floatingBadges: [
@@ -61,7 +59,6 @@ const steps: StepItem[] = [
     id: 'step-ai-diagnosis',
     number: '02',
     title: 'Mô tả sự cố & nhận hỗ trợ từ AI',
-    badge: 'AI Soi lỗi trợ lý',
     description:
       'Gửi hình ảnh, mô tả tình trạng và mức độ khẩn cấp. AI hỗ trợ phân tích, gợi ý nguyên nhân và khoảng chi phí tham khảo.',
     image: '/images/mobile-showcase/step-2-ai.png',
@@ -84,10 +81,9 @@ const steps: StepItem[] = [
   {
     id: 'step-schedule-match',
     number: '03',
-    title: 'Chọn lịch & kết nối thợ phù hợp',
-    badge: 'Ghép thợ theo khu vực',
+    title: 'Chọn lịch & kết nối kỹ thuật viên',
     description:
-      'Chọn ngày giờ mong muốn, xem danh sách thợ phù hợp theo khu vực và lịch làm việc, sau đó chọn thợ muốn gửi lời mời.',
+      'Chọn thời gian mong muốn, xem danh sách kỹ thuật viên phù hợp theo khu vực và lịch làm việc, sau đó gửi lời mời.',
     image: '/images/mobile-showcase/step-3-matching.png',
     imageAlt: 'Màn hình chọn lịch hẹn và bản đồ vị trí thợ gần bạn',
     floatingBadges: [
@@ -99,8 +95,8 @@ const steps: StepItem[] = [
       },
       {
         icon: MapPin,
-        title: 'Kết nối thợ phù hợp',
-        subtext: 'Thợ xác minh theo khoảng cách & đánh giá',
+        title: 'Kết nối kỹ thuật viên',
+        subtext: 'Kỹ thuật viên theo khoảng cách & đánh giá',
         tone: 'emerald',
       },
     ],
@@ -108,10 +104,9 @@ const steps: StepItem[] = [
   {
     id: 'step-inspection-quote',
     number: '04',
-    title: 'Báo giá minh bạch & nghiệm thu',
-    badge: 'Khảo sát & Nghiệm thu',
+    title: 'Theo dõi báo giá & nghiệm thu',
     description:
-      'Theo dõi quá trình khảo sát, xem và duyệt báo giá khi cần; xác nhận chi phí phát sinh trước khi thực hiện, theo dõi hình ảnh nghiệm thu và thông tin bảo hành.',
+      'Theo dõi quá trình khảo sát, xem và duyệt báo giá; xác nhận chi phí phát sinh trước khi thực hiện, đồng thời theo dõi hình ảnh nghiệm thu và thông tin bảo hành.',
     image: '/images/mobile-showcase/step-4-quotation.png',
     imageAlt: 'Màn hình kỹ thuật viên lập báo giá thực tế và biên bản nghiệm thu',
     floatingBadges: [
@@ -263,10 +258,10 @@ onUnmounted(() => {
                 id="app-section-title"
                 class="text-2xl sm:text-3xl lg:text-[30px] xl:text-[34px] font-bold text-ink-900 tracking-tight leading-[1.25]"
               >
-                Từ tìm dịch vụ đến hoàn tất sửa chữa – <span class="text-brand-600">tất cả trên điện thoại.</span>
+                Tìm dịch vụ, đặt lịch và theo dõi sửa chữa – <span class="text-brand-600">tất cả trên FixHome.</span>
               </h2>
               <p class="mt-2 text-xs sm:text-sm lg:text-[14px] text-ink-600 leading-relaxed max-w-[58ch]">
-                Chủ động mô tả sự cố, nhận hỗ trợ từ AI, kết nối thợ phù hợp và theo dõi toàn bộ quá trình sửa chữa ngay trên ứng dụng FixHome.
+                Chủ động gửi yêu cầu, nhận hỗ trợ từ AI, kết nối kỹ thuật viên phù hợp và theo dõi toàn bộ quá trình sửa chữa ngay trên ứng dụng FixHome.
               </p>
             </div>
 
@@ -324,29 +319,17 @@ onUnmounted(() => {
 
                   <!-- Step Content -->
                   <div class="flex-1 min-w-0 pt-0.5">
-                    <div class="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3
-                        class="text-sm sm:text-[15px] font-bold tracking-tight transition-colors duration-200"
-                        :class="[
-                          activeStepIndex === index ? 'text-ink-900' : 'text-ink-700 hover:text-ink-900',
-                        ]"
-                      >
-                        {{ step.title }}
-                      </h3>
-                      <span
-                        class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0"
-                        :class="[
-                          activeStepIndex === index
-                            ? 'bg-brand-50 text-brand-700 border border-brand-200/70'
-                            : 'bg-slate-100 text-ink-400',
-                        ]"
-                      >
-                        {{ step.badge }}
-                      </span>
-                    </div>
+                    <h3
+                      class="text-sm sm:text-[15px] font-bold tracking-tight transition-colors duration-200"
+                      :class="[
+                        activeStepIndex === index ? 'text-ink-900' : 'text-ink-700 hover:text-ink-900',
+                      ]"
+                    >
+                      {{ step.title }}
+                    </h3>
 
                     <p
-                      class="text-xs sm:text-[13px] leading-relaxed transition-colors duration-200"
+                      class="mt-1 text-xs sm:text-[13px] leading-relaxed transition-colors duration-200"
                       :class="[
                         activeStepIndex === index ? 'text-ink-600 font-normal' : 'text-ink-500 line-clamp-2',
                       ]"

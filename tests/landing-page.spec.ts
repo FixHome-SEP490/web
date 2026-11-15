@@ -270,11 +270,11 @@ describe('Public landing page', () => {
     const context = await setup();
     const wrapper = mount(LandingMobileApp, context);
 
-    expect(wrapper.text()).toContain('Từ tìm dịch vụ đến hoàn tất sửa chữa');
-    expect(wrapper.text()).toContain('Khám phá dịch vụ & bắt đầu yêu cầu');
+    expect(wrapper.text()).toContain('Tìm dịch vụ, đặt lịch và theo dõi sửa chữa');
+    expect(wrapper.text()).toContain('Khám phá dịch vụ & tạo yêu cầu');
     expect(wrapper.text()).toContain('Mô tả sự cố & nhận hỗ trợ từ AI');
-    expect(wrapper.text()).toContain('Chọn lịch & kết nối thợ phù hợp');
-    expect(wrapper.text()).toContain('Báo giá minh bạch & nghiệm thu');
+    expect(wrapper.text()).toContain('Chọn lịch & kết nối kỹ thuật viên');
+    expect(wrapper.text()).toContain('Theo dõi báo giá & nghiệm thu');
     expect(wrapper.findAll('img')).toHaveLength(4);
 
     // No store listing exists yet, so nothing may pretend to download the app.
