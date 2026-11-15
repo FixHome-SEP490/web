@@ -3,7 +3,6 @@ import { useRouter } from 'vue-router';
 import { ArrowRight, CalendarDays, Plus, Sparkles } from 'lucide-vue-next';
 import LandingHero from '../../components/landing/LandingHero.vue';
 import LandingServices from '../../components/landing/LandingServices.vue';
-import LandingHowItWorks from '../../components/landing/LandingHowItWorks.vue';
 import LandingDiagnosis from '../../components/landing/LandingDiagnosis.vue';
 import LandingTrust from '../../components/landing/LandingTrust.vue';
 import LandingMobileApp from '../../components/landing/LandingMobileApp.vue';
@@ -43,7 +42,6 @@ const questions = [
     </div>
 
     <LandingDiagnosis />
-    <LandingHowItWorks />
     <LandingTrust />
     <LandingMobileApp />
 
