@@ -1300,35 +1300,50 @@ const parsedReview = computed(() => {
         @chat="handleChatWithTech"
       />
       <!-- 1. Summary: what, where, when, who -->
-      <section class="order-0 lg:col-start-1 rounded-2xl bg-white border border-ink-200/75 shadow-(--shadow-e1) p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="flex items-start gap-3.5 min-w-0 flex-1">
-            <div
-              class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
-            >
-              <img
-                :src="getServiceArtworkUrl({ name: order.serviceName })"
-                :alt="order.serviceName"
-                class="w-full h-full object-contain select-none pointer-events-none"
-                loading="lazy"
+      <section class="overflow-hidden order-0 lg:col-start-1 rounded-2xl bg-white border border-ink-200/75 shadow-(--shadow-e1) animate-slide-up-delay-1">
+        <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4 sm:px-6 sm:py-5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+            aria-hidden="true"
+          >
+            <img
+              :src="'/images/ui/detail-order-home.png'"
+              alt=""
+              data-testid="order-detail-ambient-artwork"
+              class="h-20 w-24 sm:h-24 sm:w-28 object-contain object-center p-1"
+              loading="lazy"
+            />
+          </div>
+          <div class="relative z-10 flex flex-wrap items-start justify-between gap-3 sm:pr-32">
+            <div class="flex items-start gap-3.5 min-w-0 flex-1">
+              <div
+                class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
+              >
+                <img
+                  :src="getServiceArtworkUrl({ name: order.serviceName })"
+                  :alt="order.serviceName"
+                  class="w-full h-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="min-w-0 flex-1">
+                <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
+                <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+              <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
+              <FhStatusPill
+                v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
+                :status="isPaid ? 'COMPLETED' : 'PENDING'"
+                :label="isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'"
               />
             </div>
-            <div class="min-w-0 flex-1">
-              <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance">{{ order.serviceName }}</h1>
-              <p class="text-sm text-ink-500 font-num mt-1">#{{ order.code }}</p>
-            </div>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 shrink-0">
-            <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
-            <FhStatusPill
-              v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
-              :status="isPaid ? 'COMPLETED' : 'PENDING'"
-              :label="isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'"
-            />
           </div>
         </div>
 
-        <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2.5 text-sm">
+        <div class="px-5 py-4 sm:px-6 sm:py-5 space-y-5 bg-white">
+          <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-4 gap-y-2.5 text-sm">
           <dt class="text-ink-500">Lịch hẹn</dt>
           <dd class="font-medium text-ink-900 font-num whitespace-nowrap">{{ vnDateTimeString(order.scheduledAt) }}</dd>
           <dt class="text-ink-500">Địa chỉ</dt>
@@ -1386,6 +1401,7 @@ const parsedReview = computed(() => {
               Nhắn tin
             </FhButton>
           </div>
+        </div>
         </div>
       </section>
 
@@ -1764,11 +1780,24 @@ const parsedReview = computed(() => {
       >
         <button
           type="button"
-          class="w-full flex items-center justify-between p-5 sm:p-6 text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          class="relative overflow-hidden w-full min-h-[7.25rem] flex flex-col justify-between gap-2.5 p-5 sm:p-6 pr-24 sm:pr-[35%] text-left transition-colors hover:bg-ink-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           :aria-expanded="isCostsExpanded"
           @click="isCostsExpanded = !isCostsExpanded"
         >
-          <div class="flex flex-wrap items-center gap-2.5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-[35%] flex items-center justify-center overflow-hidden opacity-50 sm:opacity-95"
+            aria-hidden="true"
+          >
+            <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+            <img
+              :src="'/images/ui/card-quote-checklist.png'"
+              alt=""
+              data-testid="order-costs-ambient-artwork"
+              class="relative h-24 w-24 sm:h-28 sm:w-28 object-contain object-center p-1.5 sm:p-2"
+              loading="lazy"
+            />
+          </div>
+          <div class="relative z-10 flex flex-wrap items-center gap-2 min-w-0">
             <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ oldFinanceReview ? 'Báo giá cũ chỉ để xem lịch sử' : canDecideQuotation ? 'Báo giá chờ bạn duyệt' : billing.final ? 'Hóa đơn cuối cùng' : 'Tạm tính theo báo giá đã duyệt' }}</h2>
             <span
               v-if="!oldFinanceReview && order.status !== 'CANCELLED' && !notQuotedYet"
@@ -1778,16 +1807,16 @@ const parsedReview = computed(() => {
               {{ isPaid ? 'Đã thanh toán' : 'Chưa thanh toán' }}
             </span>
           </div>
-          <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
-            <span v-if="!oldFinanceReview && !notQuotedYet" class="text-sm font-semibold text-ink-900 font-num hidden sm:inline">
+          <div class="relative z-10 flex items-center gap-2 text-xs font-medium text-ink-600">
+            <span v-if="!oldFinanceReview && !notQuotedYet" class="text-sm font-semibold text-ink-900 font-num">
               <FhMoney v-if="(billing.total) !== null" :amount="billing.total" /><span v-else>Chưa xác định</span>
             </span>
-            <span class="hidden sm:inline">{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
+            <span>{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
             <div
-              class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
+              class="flex h-6 w-6 items-center justify-center rounded-md text-ink-500 transition-transform duration-300 ease-out"
               :class="{ 'rotate-180': isCostsExpanded }"
             >
-              <ChevronDown :size="18" />
+              <ChevronDown :size="17" />
             </div>
           </div>
         </button>

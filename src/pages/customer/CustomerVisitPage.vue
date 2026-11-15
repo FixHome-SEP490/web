@@ -1057,43 +1057,59 @@ async function answerCash(agreed: boolean) {
       <div v-if="loadError" role="alert" class="rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ loadError }} Hiện dữ liệu đã đọc trước đó; thao tác cần xác minh lại. <FhButton variant="secondary" size="md" @click="load">Thử lại</FhButton></div>
 
       <!-- Unified Visit Summary Header Card -->
-      <header class="rounded-2xl border border-ink-200/85 bg-white p-5 sm:p-6 shadow-2xs space-y-4 animate-slide-up-delay-1">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="space-y-1 min-w-0">
-            <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-ink-900">Lượt sửa {{ visit.items.length }} thiết bị</h1>
-            <p class="text-xs sm:text-sm text-ink-500">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
-          </div>
-          <span
-            v-if="outcomeProgress"
-            class="inline-flex items-center rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700 font-num whitespace-nowrap shrink-0"
-            data-testid="visit-outcome-progress"
+      <header class="overflow-hidden rounded-2xl border border-ink-200/85 bg-white shadow-2xs animate-slide-up-delay-1">
+        <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4 sm:px-6 sm:py-5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+            aria-hidden="true"
           >
-            Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
-          </span>
-        </div>
-
-        <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3 text-sm">
-          <div class="flex flex-wrap items-center justify-between gap-2" data-testid="visit-shared-technician">
-            <div class="min-w-0 flex-1 basis-48 space-y-0.5">
-              <h2 class="text-xs font-medium text-ink-500">Kỹ thuật viên phụ trách cả lượt</h2>
-              <p v-if="sharedTechnician" class="break-words text-sm sm:text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
-              <p class="text-xs sm:text-sm text-ink-600" role="status">{{ technicianProgress }}</p>
-            </div>
-            <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-10 items-center rounded-xl border border-ink-200 bg-white px-3 text-xs sm:text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+            <img
+              :src="'/images/ui/booking-multi-visit.png'"
+              alt=""
+              data-testid="visit-header-ambient-artwork"
+              class="h-20 w-24 sm:h-24 sm:w-28 object-contain object-center p-1"
+              loading="lazy"
+            />
           </div>
-          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
-            <div class="space-y-0.5"><dt class="text-xs text-ink-500">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
-            <div v-if="sharedAddress" class="space-y-0.5"><dt class="text-xs text-ink-500">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
-          </dl>
+          <div class="relative z-10 flex flex-wrap items-start justify-between gap-3 pr-20 sm:pr-32">
+            <div class="space-y-1 min-w-0">
+              <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-ink-900">Lượt sửa {{ visit.items.length }} thiết bị</h1>
+              <p class="text-xs sm:text-sm text-ink-500">Một kỹ thuật viên phụ trách cả lượt · Một lịch hẹn · Thanh toán một lần</p>
+            </div>
+            <span
+              v-if="outcomeProgress"
+              class="inline-flex items-center rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700 font-num whitespace-nowrap shrink-0"
+              data-testid="visit-outcome-progress"
+            >
+              Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
+            </span>
+          </div>
         </div>
 
-        <div v-if="!cancelled && (canChooseTechnician || canReschedule || (rescheduled && !repairStarted) || canCancel)" class="flex flex-wrap items-center gap-2 pt-1">
-          <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
-            {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
-          </FhButton>
-          <FhButton v-if="canReschedule" variant="secondary" size="sm" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
-          <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="sm" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
-          <FhButton v-if="canCancel" variant="ghost" size="sm" class="text-danger-700 ml-auto" data-testid="visit-cancel" @click="cancelOpen = true">Huỷ lượt sửa</FhButton>
+        <div class="p-5 sm:p-6 space-y-4 bg-white">
+          <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3 text-sm">
+            <div class="flex flex-wrap items-center justify-between gap-2" data-testid="visit-shared-technician">
+              <div class="min-w-0 flex-1 basis-48 space-y-0.5">
+                <h2 class="text-xs font-medium text-ink-500">Kỹ thuật viên phụ trách cả lượt</h2>
+                <p v-if="sharedTechnician" class="break-words text-sm sm:text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
+                <p class="text-xs sm:text-sm text-ink-600" role="status">{{ technicianProgress }}</p>
+              </div>
+              <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-10 items-center rounded-xl border border-ink-200 bg-white px-3 text-xs sm:text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+            </div>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
+              <div class="space-y-0.5"><dt class="text-xs text-ink-500">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
+              <div v-if="sharedAddress" class="space-y-0.5"><dt class="text-xs text-ink-500">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
+            </dl>
+          </div>
+
+          <div v-if="!cancelled && (canChooseTechnician || canReschedule || (rescheduled && !repairStarted) || canCancel)" class="flex flex-wrap items-center gap-2 pt-1">
+            <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
+              {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
+            </FhButton>
+            <FhButton v-if="canReschedule" variant="secondary" size="sm" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
+            <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="sm" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
+            <FhButton v-if="canCancel" variant="ghost" size="sm" class="text-danger-700 ml-auto" data-testid="visit-cancel" @click="cancelOpen = true">Huỷ lượt sửa</FhButton>
+          </div>
         </div>
       </header>
 
@@ -1268,8 +1284,26 @@ async function answerCash(agreed: boolean) {
 
         <!-- Right column: Unified Sticky Invoice Summary + Checkout Panel (DOM order kept: visit-invoice-summary precedes visit-checkout) -->
         <aside class="min-w-0 space-y-4 lg:col-start-2 lg:sticky lg:top-4">
-          <section v-if="invoiceSummary.rows.length" class="rounded-2xl border border-ink-200/85 bg-white p-4 text-sm sm:p-5 shadow-2xs space-y-3.5" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
-            <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
+          <section v-if="invoiceSummary.rows.length" class="overflow-hidden rounded-2xl border border-ink-200/85 bg-white text-sm shadow-2xs" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
+            <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-4 py-3.5 sm:px-5 sm:py-4">
+              <div
+                class="pointer-events-none select-none absolute inset-y-0 right-0 w-20 sm:w-28 flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
+                aria-hidden="true"
+              >
+                <img
+                  :src="'/images/ui/card-quote-checklist.png'"
+                  alt=""
+                  data-testid="visit-invoice-ambient-artwork"
+                  class="h-16 w-16 sm:h-20 sm:w-20 object-contain object-center p-1"
+                  loading="lazy"
+                />
+              </div>
+              <div class="relative z-10 pr-20 sm:pr-28">
+                <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
+                <p class="mt-0.5 text-xs text-ink-500">Chi phí từng thiết bị và tổng cộng</p>
+              </div>
+            </div>
+            <div class="p-4 sm:p-5 space-y-3.5 bg-white">
             <p v-if="checkoutLoading" role="status" class="text-ink-600">Đang cập nhật hóa đơn…</p>
             <ul class="divide-y divide-ink-100">
               <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-2.5 first:pt-0 last:pb-0" :data-testid="`visit-invoice-row-${row.item.sequence}`">
@@ -1304,6 +1338,7 @@ async function answerCash(agreed: boolean) {
               </div>
             </dl>
             <p v-if="invoiceSummary.pending" class="text-xs text-ink-500">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
+            </div>
           </section>
 
           <p v-if="voucherContextChanged" role="alert" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900">Phiên đăng nhập đã thay đổi. Hãy mở lại trang để kiểm tra hóa đơn từ máy chủ trước khi thanh toán.</p>

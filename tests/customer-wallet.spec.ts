@@ -28,6 +28,7 @@ describe('Customer wallet page', () => {
   it('shows the balance, offers top-up and withdrawal, and lists money in and out', async () => {
     const w = mount(CustomerWalletPage);
     await flushPromises();
+    expect(w.get('[data-testid="wallet-balance-artwork"]').attributes('src')).toBe('/images/ui/wallet-3d.png');
     expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
     expect(w.text()).toContain('rút về tài khoản ngân hàng');
     expect(w.text()).not.toContain('không rút ra được');
@@ -84,6 +85,7 @@ describe('Customer wallet page', () => {
     await flushPromises();
     expect(summary).toHaveBeenLastCalledWith(2, 20);
     expect(w.get('[data-testid="wallet-transactions"]').findAll('li')).toHaveLength(3);
+    expect(w.get('[data-testid="wallet-balance-artwork"]').attributes('src')).toBe('/images/ui/wallet-3d.png');
     expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
   });
 
@@ -129,6 +131,7 @@ describe('Customer wallet page', () => {
     await flushPromises();
 
     expect(w.find('[data-testid="topup-result"]').exists()).toBe(false);
+    expect(w.get('[data-testid="wallet-balance-artwork"]').attributes('src')).toBe('/images/ui/wallet-3d.png');
     expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
   });
 
@@ -165,6 +168,7 @@ describe('Customer wallet page', () => {
     await flushPromises();
 
     expect(summary).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="wallet-balance-artwork"]').attributes('src')).toBe('/images/ui/wallet-3d.png');
     expect(w.get('[data-testid="wallet-balance"]').text().replace(/\s/g, '')).toContain('750.000');
     expectUnverifiedPayment(w.get('[data-testid="topup-result"]').text());
   });

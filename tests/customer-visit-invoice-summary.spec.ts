@@ -71,6 +71,8 @@ describe('Customer VisitGroup finalized invoice summary', () => {
 
   it.each(['group', 'device'])('shows an interrupted device after refresh without a free/cancelled claim and blocks %s financial follow-up', async scope => {
     const w = await open();
+    expect(w.get('[data-testid="visit-header-ambient-artwork"]').attributes('src')).toBe('/images/ui/booking-multi-visit.png');
+    expect(w.get('[data-testid="visit-invoice-ambient-artwork"]').attributes('src')).toBe('/images/ui/card-quote-checklist.png');
     snapshot.devices[1] = { ...snapshot.devices[1], state: 'interrupted', amount: 0, invoiceId: null };
     if (scope === 'group') snapshot.financialFollowupRequired = true;
     else snapshot.devices[1].financialFollowupRequired = true;

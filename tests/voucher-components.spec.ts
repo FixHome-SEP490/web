@@ -49,6 +49,7 @@ describe('voucher components', () => {
     expect(wrapper.text()).toContain('42 / 100 lượt thanh toán thành công còn lại');
     expect(wrapper.text()).toContain('Tiền công và linh kiện');
     expect(wrapper.text()).toContain('Đơn chưa đạt mức tối thiểu.');
+    expect(wrapper.get('[data-testid="voucher-card-artwork"]').attributes('src')).toBe('/images/ui/voucher-general-ticket.png');
     expect(wrapper.get('button').attributes('disabled')).toBeDefined();
   });
 

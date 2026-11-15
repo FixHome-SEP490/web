@@ -60,9 +60,26 @@ const barNote = computed(() => {
 
 <template>
   <!-- Wide screens -->
-  <aside class="hidden min-w-0 lg:block lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto rounded-2xl border border-ink-200 bg-white p-6" aria-label="Yêu cầu của bạn" data-testid="booking-summary">
-    <h2 class="text-base font-semibold text-ink-900">Yêu cầu của bạn <span v-if="devices?.length" class="font-normal text-ink-600">· {{ devices.length }} thiết bị</span></h2>
-    <dl class="mt-4 grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
+  <aside class="hidden min-w-0 overflow-hidden lg:block lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto rounded-2xl border border-ink-200 bg-white" aria-label="Yêu cầu của bạn" data-testid="booking-summary">
+    <div class="relative overflow-hidden border-b border-ink-100 bg-gradient-to-r from-white via-white to-brand-50/90 px-6 py-5 min-h-[7.5rem] flex items-center">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-[38%] flex items-center justify-center overflow-hidden p-2"
+        aria-hidden="true"
+      >
+        <img
+          :src="devices?.length ? '/images/ui/booking-multi-visit.png' : '/images/ui/booking-single-schedule.png'"
+          alt=""
+          data-testid="booking-summary-illustration"
+          class="h-24 w-full object-contain object-center opacity-95"
+        />
+      </div>
+      <div class="relative z-10 min-w-0 pr-[38%]">
+        <h2 class="text-base font-semibold text-ink-900 text-pretty">Yêu cầu của bạn <span v-if="devices?.length" class="font-normal text-ink-600">· {{ devices.length }} thiết bị</span></h2>
+        <p class="mt-0.5 text-xs text-ink-600 text-pretty">Đặt lịch thợ FixHome sửa chữa tận nhà</p>
+      </div>
+    </div>
+    <div class="p-6 pt-5">
+      <dl class="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
       <dt class="text-ink-500">Dịch vụ</dt>
       <dd class="min-w-0 break-words font-medium text-ink-900" :class="!serviceName && 'font-normal text-ink-400'" data-testid="booking-summary-service">{{ devices?.length ? `${devices.length} thiết bị` : serviceName || 'Chưa chọn' }}</dd>
       <template v-if="deviceText && !devices?.length">
@@ -108,6 +125,7 @@ const barNote = computed(() => {
     <FhButton v-if="backLabel" variant="ghost" size="md" class="mt-2 w-full" data-testid="booking-summary-back" @click="emit('back')">
       <ArrowLeft :size="15" class="mr-1.5" aria-hidden="true" /> {{ backLabel }}
     </FhButton>
+    </div>
   </aside>
 
   <!-- Phones and tablets: right above the bottom tab bar; the route's actionBar meta lifts the chat button over it. -->
