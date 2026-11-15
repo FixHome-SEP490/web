@@ -449,8 +449,10 @@ describe('NewBookingWizardPage A+ service finder', () => {
     // Both saved into the visit, nothing for the customer to tap through.
     expect(wrapper.get('[data-testid="visit-device-0"]').text()).toContain('Máy 1 · Sửa chữa điều hòa mất lạnh');
     expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('máy lạnh không mát');
-    expect(wrapper.get('[data-testid="visit-device-0"]').find('img').attributes('src')).toBe('data:image/jpeg;base64,AC');
+    expect(wrapper.get('[data-testid="visit-saved-artwork-0"]').attributes('src')).toBe('/images/services/svc-sua-dieu-hoa.png');
+    expect(wrapper.get('[data-testid="visit-device-0"]').find('[aria-label="Ảnh máy 1"] img').attributes('src')).toBe('data:image/jpeg;base64,AC');
     expect(wrapper.get('[data-testid="visit-device-1"]').text()).toContain('Máy 2 · Thay siphon lavabo');
+    expect(wrapper.get('[data-testid="visit-saved-artwork-1"]').attributes('src')).toBe('/images/services/svc-thay-siphon-lavabo.png');
     expect(wrapper.find('[data-testid="ai-visit-skip-rest"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 2 thiết bị đã lưu');
 
@@ -655,6 +657,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
     for (let index = 0; index < 3; index += 1) {
       const machine = wrapper.get(`[data-testid="visit-review-device-${index}"]`);
       expect(machine.text()).toContain(`Máy số ${index + 1}`);
+      expect(machine.get(`[data-testid="visit-review-artwork-${index}"]`).attributes('src')).toMatch(/^\/images\/services\/.+\.png$/);
       expect(machine.get(`[data-testid="visit-device-edit-${index}"]`).attributes('aria-label')).toContain(`Sửa máy ${index + 1}`);
     }
     expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);

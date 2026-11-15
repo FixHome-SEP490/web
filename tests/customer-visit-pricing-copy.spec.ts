@@ -17,5 +17,6 @@ describe('partial visit labor is never the whole visit price', () => {
       expect(text).toContain('Chưa phải tổng 3 máy');
       expect(text).not.toContain('tối thiểu');
     }
+    expect(w.get('[data-testid="booking-summary-illustration"]').attributes('src')).toBe('/images/ui/booking-confirmed.png');
   });
 });
