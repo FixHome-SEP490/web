@@ -80,7 +80,7 @@ const questions = [
             <!-- 3D House Illustration -->
             <div class="shrink-0 flex items-center justify-center">
               <img
-                src="/images/landing-cta-house.png"
+                :src="'/images/landing-cta-house.png'"
                 alt="FixHome"
                 class="w-28 sm:w-36 lg:w-44 h-auto object-contain select-none"
                 loading="lazy"
