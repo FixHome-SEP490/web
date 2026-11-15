@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { ArrowRight, Plus, Sparkles } from 'lucide-vue-next';
-import { FhButton } from '../../components';
+import { ArrowRight, CalendarDays, Plus, Sparkles } from 'lucide-vue-next';
 import LandingHero from '../../components/landing/LandingHero.vue';
 import LandingServices from '../../components/landing/LandingServices.vue';
-import LandingHowItWorks from '../../components/landing/LandingHowItWorks.vue';
 import LandingDiagnosis from '../../components/landing/LandingDiagnosis.vue';
 import LandingTrust from '../../components/landing/LandingTrust.vue';
 import LandingMobileApp from '../../components/landing/LandingMobileApp.vue';
@@ -36,7 +34,7 @@ const questions = [
 </script>
 
 <template>
-  <div class="landing-page bg-white">
+  <div class="landing-page bg-transparent">
     <LandingHero />
 
     <div id="services">
@@ -44,11 +42,10 @@ const questions = [
     </div>
 
     <LandingDiagnosis />
-    <LandingHowItWorks />
     <LandingTrust />
     <LandingMobileApp />
 
-    <section id="questions" class="landing-section bg-white" aria-labelledby="questions-title">
+    <section id="questions" class="landing-section bg-transparent" aria-labelledby="questions-title">
       <div class="landing-container grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
         <div class="max-w-[500px]">
           <p class="landing-eyebrow">Trước khi bạn đặt lịch</p>
@@ -73,25 +70,61 @@ const questions = [
       </div>
     </section>
 
-    <section class="final-cta landing-section bg-brand-50/70" aria-labelledby="final-title">
-      <div class="landing-container grid gap-7 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-10">
-        <div class="max-w-[720px]">
-          <p class="landing-eyebrow">Bắt đầu khi bạn sẵn sàng</p>
-          <h2 id="final-title" class="final-title">Nhà có việc cần sửa? Bắt đầu cùng FixHome.</h2>
-          <p class="landing-description max-w-[60ch]">
-            Chọn dịch vụ và gửi yêu cầu đặt lịch tại nhà.
-          </p>
-        </div>
+    <section class="final-cta py-12 sm:py-16 lg:py-20" aria-labelledby="final-title">
+      <div class="landing-container">
+        <div class="final-cta-card relative overflow-hidden rounded-3xl sm:rounded-[2.5rem] bg-[#F0F6FE] border border-blue-100/90 shadow-sm p-6 sm:p-8 lg:p-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8">
+          <!-- Left: House illustration + Vertical Divider + Text Content -->
+          <div class="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7 lg:gap-8 min-w-0">
+            <!-- 3D House Illustration -->
+            <div class="shrink-0 flex items-center justify-center">
+              <img
+                :src="'/images/landing-cta-house.png'"
+                alt="FixHome"
+                class="w-28 sm:w-36 lg:w-44 h-auto object-contain select-none"
+                loading="lazy"
+              />
+            </div>
 
-        <div class="flex flex-col gap-2 sm:items-start">
-          <FhButton size="lg" class="w-full sm:w-auto" @click="router.push('/app/bookings/new')">
-            Đặt lịch sửa chữa
-            <ArrowRight :size="18" aria-hidden="true" />
-          </FhButton>
-          <a href="#ai" class="landing-secondary-link w-full sm:w-auto">
-            <Sparkles :size="18" class="text-brand-600" aria-hidden="true" />
-            Nhờ AI gợi ý
-          </a>
+            <!-- Vertical Divider Line -->
+            <div class="hidden sm:block w-px h-20 lg:h-24 bg-blue-200/70 shrink-0" aria-hidden="true" />
+
+            <!-- Text Content -->
+            <div class="min-w-0">
+              <p class="text-xs sm:text-sm font-bold text-brand-600 mb-1 sm:mb-1.5 tracking-normal">
+                Bắt đầu khi bạn sẵn sàng
+              </p>
+              <h2 id="final-title" class="final-title font-bold text-ink-900 tracking-tight leading-[1.25]">
+                Nhà có việc cần sửa?<br />
+                Bắt đầu cùng <span class="text-brand-600">FixHome.</span>
+              </h2>
+              <p class="mt-2 text-xs sm:text-sm text-ink-600 leading-normal max-w-md">
+                Chọn dịch vụ và gửi yêu cầu đặt lịch tại nhà.
+              </p>
+            </div>
+          </div>
+
+          <!-- Right: Horizontal CTA Buttons -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 lg:ml-auto">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center gap-2 h-12 px-5 sm:px-6 rounded-2xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-sm sm:text-[14.5px] font-semibold shadow-md shadow-brand-600/20 transition-all whitespace-nowrap cursor-pointer"
+              @click="router.push('/app/bookings/new')"
+            >
+              <CalendarDays :size="17" class="shrink-0" aria-hidden="true" />
+              <span>Đặt lịch sửa chữa</span>
+              <ArrowRight :size="15" class="shrink-0" aria-hidden="true" />
+            </button>
+
+            <a
+              href="/app/bookings/ai"
+              class="inline-flex items-center justify-center gap-2 h-12 px-5 sm:px-6 rounded-2xl bg-white hover:bg-slate-50 active:scale-[0.98] text-ink-900 text-sm sm:text-[14.5px] font-semibold border border-slate-200/90 shadow-sm transition-all whitespace-nowrap cursor-pointer"
+              @click.prevent="router.push('/app/bookings/ai')"
+            >
+              <Sparkles :size="17" class="text-brand-600 shrink-0" aria-hidden="true" />
+              <span>Nhờ AI gợi ý</span>
+              <ArrowRight :size="15" class="text-brand-600 shrink-0" aria-hidden="true" />
+            </a>
+          </div>
         </div>
       </div>
     </section>
@@ -230,8 +263,7 @@ const questions = [
   line-height: 24px;
 }
 
-.faq-title,
-.final-title {
+.faq-title {
   margin: 0;
   color: var(--color-ink-900);
   font-size: clamp(1.9rem, 3.2vw, 2.75rem);
@@ -239,6 +271,15 @@ const questions = [
   letter-spacing: -0.035em;
   line-height: 1.15;
   text-wrap: balance;
+}
+
+.final-title {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: clamp(1.4rem, 2.3vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
 }
 
 @media (max-width: 767px) {

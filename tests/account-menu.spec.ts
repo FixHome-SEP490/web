@@ -101,26 +101,51 @@ describe('account menu items', () => {
     expect(roleAreaLink(role)).toEqual({ to: areaTo, label: areaLabel });
   });
 
-  it('keeps repair history in the customer menu in both headers', () => {
-    expect(accountMenuLinks('CUSTOMER', 'public').map((l) => l.to)).toEqual([
+  it('places profile first, groups items, and de-duplicates customer-app navbar items', () => {
+    const onPublic = accountMenuLinks('CUSTOMER', 'public');
+    expect(onPublic.map((l) => l.to)).toEqual([
+      '/app/profile',
+      '/app/wallet',
+      '/app/vouchers',
       '/app/orders',
       '/app/history',
-      '/app/wallet',
-      '/app/vouchers',
-      '/app/profile',
     ]);
+    expect(onPublic.map((l) => l.group)).toEqual([
+      'account',
+      'account',
+      'account',
+      'activity',
+      'activity',
+    ]);
+
     const inApp = accountMenuLinks('CUSTOMER', 'customer-app');
     expect(inApp.map((l) => l.to)).toEqual([
-      '/app/history',
-      '/app/warranties',
+      '/app/profile',
       '/app/wallet',
       '/app/vouchers',
-      '/app/notifications',
-      '/app/profile',
+      '/app/history',
+      '/app/warranties',
     ]);
-    // Warranties is in the wide top bar already; the menu only carries it on narrow screens.
+    expect(inApp.map((l) => l.group)).toEqual([
+      'account',
+      'account',
+      'account',
+      'activity',
+      'activity',
+    ]);
+    // Notifications already lives in the bell dropdown and mobile tab bar;
+    // vouchers & warranties live in the wide top bar so they only show in the menu on < lg.
+    expect(inApp.find((l) => l.to === '/app/notifications')).toBeUndefined();
+    expect(inApp.find((l) => l.to === '/app/vouchers')?.hiddenOnWide).toBe(true);
     expect(inApp.find((l) => l.to === '/app/warranties')?.hiddenOnWide).toBe(true);
+    expect(inApp.find((l) => l.to === '/app/profile')?.hiddenOnWide).toBeFalsy();
     expect(inApp.find((l) => l.to === '/app/history')?.hiddenOnWide).toBeFalsy();
+
+    expect(accountMenuLinks('TECHNICIAN', 'public').map((l) => l.to)).toEqual([
+      '/tech/profile',
+      '/tech/wallet',
+      '/tech/jobs',
+    ]);
   });
 });
 
@@ -238,9 +263,65 @@ describe('customer header', () => {
     expect(history.attributes('href')).toBe('/app/history');
     expect(history.classes()).not.toContain('lg:hidden');
     expect(menu.get('[data-testid="menu-wallet"]').attributes('href')).toBe('/app/wallet');
+    expect(menu.get('[data-testid="menu-vouchers"]').classes()).toContain('lg:hidden');
+    expect(menu.get('[data-testid="menu-warranties"]').classes()).toContain('lg:hidden');
+    expect(menu.find('[data-testid="menu-notifications"]').exists()).toBe(false);
     expect(menu.text()).not.toMatch(SERVICE_WORDS);
     // The role badge belongs to public pages; inside the app everyone is a customer.
     expect(menu.text()).not.toContain('Khách hàng');
+    wrapper.unmount();
+  });
+
+  it('renders display-only profile header, places Hồ sơ cá nhân first, separates groups, and supports menu keyboard navigation', async () => {
+    const { wrapper } = await mountAs('customer', UserRole.CUSTOMER);
+    const trigger = wrapper.get('[data-testid="account-menu-trigger"]');
+    expect(trigger.attributes('aria-haspopup')).toBe('menu');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+
+    const menu = await openAccountMenu(wrapper);
+    expect(trigger.attributes('aria-expanded')).toBe('true');
+    expect(menu.attributes('role')).toBe('menu');
+
+    // Profile header displays user name/email without acting as a navigation link
+    expect(menu.text()).toContain('Người dùng kiểm thử');
+    expect(menu.text()).toContain('u@example.test');
+    expect(menu.find('a').attributes('data-testid')).toBe('menu-profile');
+
+    const items = menu.findAll('[role="menuitem"]');
+    expect(items.map((item) => item.attributes('data-testid'))).toEqual([
+      'menu-profile',
+      'menu-wallet',
+      'menu-vouchers',
+      'menu-history',
+      'menu-warranties',
+      'menu-logout',
+    ]);
+    expect(menu.find('[role="separator"]').exists()).toBe(true);
+
+    // ArrowDown / ArrowUp / Home / End navigation
+    const profileEl = items[0].element as HTMLElement;
+    const walletEl = items[1].element as HTMLElement;
+    const logoutEl = items[items.length - 1].element as HTMLElement;
+    profileEl.focus();
+    expect(document.activeElement).toBe(profileEl);
+
+    await menu.trigger('keydown', { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(walletEl);
+
+    await menu.trigger('keydown', { key: 'End' });
+    expect(document.activeElement).toBe(logoutEl);
+
+    await menu.trigger('keydown', { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[items.length - 2].element);
+
+    await menu.trigger('keydown', { key: 'Home' });
+    expect(document.activeElement).toBe(profileEl);
+
+    // Escape closes the menu and restores focus to the trigger
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(trigger.element);
     wrapper.unmount();
   });
 });

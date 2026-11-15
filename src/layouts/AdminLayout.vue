@@ -22,7 +22,7 @@
       </header>
 
       <!-- Page content -->
-      <main class="flex-1 p-6 bg-gray-50">
+      <main class="flex-1 p-6 bg-transparent">
         <router-view />
       </main>
     </div>

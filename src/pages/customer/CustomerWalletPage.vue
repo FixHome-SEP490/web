@@ -155,15 +155,32 @@ async function topUp() {
 
     <!-- Balance and top-up: one surface -->
     <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden animate-slide-up-delay-1">
-      <div class="p-5 space-y-1">
-        <p class="text-sm text-ink-500">Số dư</p>
-        <p class="text-3xl font-bold text-ink-900 font-num whitespace-nowrap" data-testid="wallet-balance">
-          <span v-if="!balanceLoaded && loading" class="block w-40" aria-busy="true" aria-label="Đang tải số dư"><FhSkeleton height="36px" /></span>
-          <FhMoney v-else-if="balanceLoaded" :amount="balance" emphasis />
-          <span v-else>—</span>
-        </p>
-        <p class="text-sm text-ink-500 text-pretty">Dùng để trả đơn sửa chữa hoặc rút về tài khoản ngân hàng của bạn.</p>
-        <div class="grid grid-cols-2 gap-2 pt-3" role="group" aria-label="Chọn thao tác với ví">
+      <div class="relative overflow-hidden bg-gradient-to-r from-white via-white to-brand-50/85 p-5 sm:p-6">
+        <div
+          class="pointer-events-none select-none absolute inset-y-0 right-0 w-28 sm:w-[30%] max-w-[13rem] flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+          aria-hidden="true"
+        >
+          <img
+            :src="'/images/ui/wallet-3d.png'"
+            alt=""
+            data-testid="wallet-balance-artwork"
+            class="h-24 w-24 sm:h-28 sm:w-28 object-contain object-center p-2"
+            loading="lazy"
+          />
+        </div>
+        <div class="relative z-10 space-y-1 pr-24 sm:pr-[32%]">
+          <p class="text-sm text-ink-500">Số dư</p>
+          <p class="text-3xl font-bold text-ink-900 font-num whitespace-nowrap" data-testid="wallet-balance">
+            <span v-if="!balanceLoaded && loading" class="block w-40" aria-busy="true" aria-label="Đang tải số dư"><FhSkeleton height="36px" /></span>
+            <FhMoney v-else-if="balanceLoaded" :amount="balance" emphasis />
+            <span v-else>—</span>
+          </p>
+          <p class="text-sm text-ink-500 text-pretty">Dùng để trả đơn sửa chữa hoặc rút về tài khoản ngân hàng của bạn.</p>
+        </div>
+      </div>
+
+      <div class="px-5 pb-5 pt-3 border-t border-ink-100/70 bg-white">
+        <div class="grid grid-cols-2 gap-2" role="group" aria-label="Chọn thao tác với ví">
           <button
             v-for="choice in ACTIONS"
             :key="choice.key"

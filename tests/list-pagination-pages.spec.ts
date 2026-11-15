@@ -233,6 +233,7 @@ describe('Customer notifications', () => {
     }));
     const wrapper = mount(CustomerNotificationsPage, { global: { stubs } });
     await flushPromises();
+    expect(wrapper.get('[data-testid="notifications-header-artwork"]').attributes('src')).toBe('/images/ui/notifications-bell.png');
     expect(paramsOf('/notifications')).toEqual([{ page: 1, limit: 20 }]);
     expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('1–20 / 21');
     await wrapper.get('[data-testid="pagination-next"]').trigger('click');

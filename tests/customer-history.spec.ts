@@ -37,6 +37,7 @@ describe('Customer repair history shows only server records', () => {
     await flushPromises();
 
     expect(getRepairHistory).toHaveBeenCalledWith(1, 20, undefined, undefined, true);
+    expect(wrapper.get('[data-testid="history-header-artwork"]').attributes('src')).toBe('/images/ui/history-archive.png');
     const text = wrapper.text();
     expect(text).toContain('Lịch sử sửa chữa');
     expect(text).not.toMatch(/Read Model|D-20|Trần Đình Trọng|Nguyễn Văn Hùng/);

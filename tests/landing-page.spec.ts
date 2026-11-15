@@ -270,12 +270,12 @@ describe('Public landing page', () => {
     const context = await setup();
     const wrapper = mount(LandingMobileApp, context);
 
-    expect(wrapper.text()).toContain('Theo dõi việc sửa chữa trên điện thoại');
-    expect(wrapper.text()).toContain('Theo dõi yêu cầu trong từng đơn');
-    expect(wrapper.text()).toContain('Trao đổi với kỹ thuật viên');
-    expect(wrapper.text()).toContain('Xem lại lịch sử sửa chữa');
-    expect(wrapper.findAll('.app-flow > li')).toHaveLength(3);
-    expect(wrapper.findAll('img')).toHaveLength(0);
+    expect(wrapper.text()).toContain('Tìm dịch vụ, đặt lịch và theo dõi sửa chữa');
+    expect(wrapper.text()).toContain('Khám phá dịch vụ & tạo yêu cầu');
+    expect(wrapper.text()).toContain('Mô tả sự cố & nhận hỗ trợ từ AI');
+    expect(wrapper.text()).toContain('Chọn lịch & kết nối kỹ thuật viên');
+    expect(wrapper.text()).toContain('Theo dõi báo giá & nghiệm thu');
+    expect(wrapper.findAll('img')).toHaveLength(4);
 
     // No store listing exists yet, so nothing may pretend to download the app.
     expect(wrapper.text()).not.toContain('4.9/5');
@@ -284,7 +284,6 @@ describe('Public landing page', () => {
     expect(wrapper.text()).not.toContain('App Store');
     expect(wrapper.text()).not.toContain('Google Play');
     expect(wrapper.text()).not.toContain('Quét mã QR');
-    expect(wrapper.findAll('button')).toHaveLength(0);
     wrapper.unmount();
   });
 
@@ -357,14 +356,14 @@ describe('Public landing page', () => {
     expect(wrapper.find('a[href="/pricing-policy"]').exists()).toBe(true);
     expect(wrapper.findAll('#questions details')).toHaveLength(4);
     const ids = wrapper.findAll('[id]').map((el) => el.attributes('id'));
-    const order = ['gioi-thieu', 'services', 'ai', 'how-it-works', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
+    const order = ['gioi-thieu', 'services', 'ai', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
 
     const layout = mount(PublicLayout, context);
     const navTargets = layout.get('nav[aria-label="Điều hướng chính"]').findAll('a').map((a) => a.attributes('href'));
     // Every header item stays on the landing (PO 21/10/2026); "Giới thiệu" is its first screen.
-    expect(navTargets).toEqual(['/#gioi-thieu', '/#services', '/#ai', '/#how-it-works', '/#trust']);
+    expect(navTargets).toEqual(['/#gioi-thieu', '/#services', '/#ai', '/#trust']);
     layout.unmount();
     wrapper.unmount();
   });

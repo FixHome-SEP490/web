@@ -378,6 +378,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     expect(wrapper.get('[data-testid="visit-opt-in"]').text()).toContain('Có nhiều thiết bị cần sửa?');
     expect(wrapper.get('[data-testid="visit-opt-in-action"]').text()).toBe('Đặt nhiều thiết bị');
+    expect(wrapper.get('[data-testid="visit-opt-in-artwork"]').attributes('src')).toBe('/images/ui/booking-multi-visit.png');
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-quantity-increase"]').trigger('click');
     expect(wrapper.get('[data-testid="booking-quantity"]').text()).toBe('2');
@@ -449,8 +450,10 @@ describe('NewBookingWizardPage A+ service finder', () => {
     // Both saved into the visit, nothing for the customer to tap through.
     expect(wrapper.get('[data-testid="visit-device-0"]').text()).toContain('Máy 1 · Sửa chữa điều hòa mất lạnh');
     expect(wrapper.get('[data-testid="visit-device-description-0"]').text()).toBe('máy lạnh không mát');
-    expect(wrapper.get('[data-testid="visit-device-0"]').find('img').attributes('src')).toBe('data:image/jpeg;base64,AC');
+    expect(wrapper.get('[data-testid="visit-saved-artwork-0"]').attributes('src')).toBe('/images/services/svc-sua-dieu-hoa.png');
+    expect(wrapper.get('[data-testid="visit-device-0"]').find('[aria-label="Ảnh máy 1"] img').attributes('src')).toBe('data:image/jpeg;base64,AC');
     expect(wrapper.get('[data-testid="visit-device-1"]').text()).toContain('Máy 2 · Thay siphon lavabo');
+    expect(wrapper.get('[data-testid="visit-saved-artwork-1"]').attributes('src')).toBe('/images/services/svc-thay-siphon-lavabo.png');
     expect(wrapper.find('[data-testid="ai-visit-skip-rest"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="step1-next"]').text()).toBe('Tiếp tục với 2 thiết bị đã lưu');
 
@@ -651,10 +654,13 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await flushPromises();
     expect(wrapper.findAll('[data-testid^="visit-review-device-"]')).toHaveLength(3);
     expect(wrapper.get('[data-testid="booking-review"]').text()).toContain('Lịch và địa chỉ chung');
+    expect(wrapper.get('[data-testid="booking-review-artwork"]').attributes('src')).toBe('/images/ui/detail-order-home.png');
+    expect(wrapper.get('[data-testid="visit-review-price-artwork"]').attributes('src')).toBe('/images/ui/card-quote-checklist.png');
     expect(wrapper.findAll('[data-testid="booking-submit"]')).toHaveLength(1);
     for (let index = 0; index < 3; index += 1) {
       const machine = wrapper.get(`[data-testid="visit-review-device-${index}"]`);
       expect(machine.text()).toContain(`Máy số ${index + 1}`);
+      expect(machine.get(`[data-testid="visit-review-artwork-${index}"]`).attributes('src')).toMatch(/^\/images\/services\/.+\.png$/);
       expect(machine.get(`[data-testid="visit-device-edit-${index}"]`).attributes('aria-label')).toContain(`Sửa máy ${index + 1}`);
     }
     expect(wrapper.find('[data-testid="visit-add-device"]').exists()).toBe(false);

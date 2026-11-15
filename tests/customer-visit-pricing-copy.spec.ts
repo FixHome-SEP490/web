@@ -17,5 +17,11 @@ describe('partial visit labor is never the whole visit price', () => {
       expect(text).toContain('Chưa phải tổng 3 máy');
       expect(text).not.toContain('tối thiểu');
     }
+    expect(w.get('[data-testid="booking-summary-illustration"]').attributes('src')).toBe('/images/ui/booking-multi-visit.png');
+  });
+
+  it('uses booking-single-schedule artwork for single-device booking summaries', () => {
+    const w = mount(BookingSummary, { props: { price: { kind: 'firm', amount: 250000 }, ctaLabel: 'Tiếp tục' } });
+    expect(w.get('[data-testid="booking-summary-illustration"]').attributes('src')).toBe('/images/ui/booking-single-schedule.png');
   });
 });

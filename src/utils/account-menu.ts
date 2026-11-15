@@ -6,11 +6,14 @@ export type AccountMenuContext = 'public' | 'customer-app';
 
 export type AccountMenuIcon = 'orders' | 'history' | 'warranty' | 'wallet' | 'notifications' | 'profile' | 'area' | 'vouchers';
 
+export type AccountMenuGroup = 'account' | 'activity';
+
 export interface AccountMenuLink {
   to: string;
   label: string;
   icon: AccountMenuIcon;
   testId: string;
+  group: AccountMenuGroup;
   /** Hidden from the lg breakpoint up, where the top navigation already has it. */
   hiddenOnWide?: boolean;
 }
@@ -51,33 +54,33 @@ export function accountMenuLinks(role: string | null | undefined, context: Accou
   const r = normalise(role);
   if (r === 'CUSTOMER') {
     if (context === 'customer-app') {
-      // Orders sit in the top navigation and the bottom tab bar already.
+      // Orders, messages, and notifications live in the header/tab bar; vouchers & warranties
+      // sit in the desktop navbar too, so keep them here only for narrow screens.
       return [
-        { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history' },
-        { to: '/app/warranties', label: 'Bảo hành', icon: 'warranty', testId: 'menu-warranties', hiddenOnWide: true },
-        { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet' },
-        { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers' },
-        { to: '/app/notifications', label: 'Thông báo', icon: 'notifications', testId: 'menu-notifications' },
-        { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile' },
+        { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile', group: 'account' },
+        { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet', group: 'account' },
+        { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers', group: 'account', hiddenOnWide: true },
+        { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history', group: 'activity' },
+        { to: '/app/warranties', label: 'Bảo hành', icon: 'warranty', testId: 'menu-warranties', group: 'activity', hiddenOnWide: true },
       ];
     }
     return [
-      { to: '/app/orders', label: 'Đơn của tôi', icon: 'orders', testId: 'menu-orders' },
-      { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history' },
-      { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet' },
-        { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers' },
-      { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile' },
+      { to: '/app/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile', group: 'account' },
+      { to: '/app/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet', group: 'account' },
+      { to: '/app/vouchers', label: 'Ví ưu đãi', icon: 'vouchers', testId: 'menu-vouchers', group: 'account' },
+      { to: '/app/orders', label: 'Đơn của tôi', icon: 'orders', testId: 'menu-orders', group: 'activity' },
+      { to: '/app/history', label: 'Lịch sử sửa chữa', icon: 'history', testId: 'menu-history', group: 'activity' },
     ];
   }
   if (r === 'TECHNICIAN') {
     return [
-      { to: '/tech/jobs', label: 'Công việc', icon: 'orders', testId: 'menu-jobs' },
-      { to: '/tech/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet' },
-      { to: '/tech/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile' },
+      { to: '/tech/profile', label: 'Hồ sơ cá nhân', icon: 'profile', testId: 'menu-profile', group: 'account' },
+      { to: '/tech/wallet', label: 'Ví của tôi', icon: 'wallet', testId: 'menu-wallet', group: 'account' },
+      { to: '/tech/jobs', label: 'Công việc', icon: 'orders', testId: 'menu-jobs', group: 'activity' },
     ];
   }
   if (isStaff(r)) {
-    return [{ to: '/console/orders', label: 'Quản lý đơn', icon: 'orders', testId: 'menu-orders' }];
+    return [{ to: '/console/orders', label: 'Quản lý đơn', icon: 'orders', testId: 'menu-orders', group: 'activity' }];
   }
   return [];
 }

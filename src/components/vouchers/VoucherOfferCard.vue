@@ -156,9 +156,23 @@ function activate() {
         </span>
       </div>
 
-      <!-- Right Body: Concise Terms & Action -->
-      <div class="flex min-w-0 flex-1 flex-col justify-between gap-3 p-4 sm:p-5">
-        <div class="space-y-2">
+      <!-- Right Body: 7/3 Content & Visual Split -->
+      <div class="relative overflow-hidden flex min-w-0 flex-1 flex-col justify-between gap-3 p-4 sm:p-5 pr-20 sm:pr-[33%]">
+        <div
+          class="pointer-events-none select-none absolute inset-y-0 right-0 w-20 sm:w-[32%] flex items-center justify-center overflow-hidden"
+          :class="isTerminalWallet ? 'opacity-25 sm:opacity-45 grayscale' : 'opacity-45 sm:opacity-90'"
+          aria-hidden="true"
+        >
+          <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+          <img
+            :src="'/images/ui/voucher-general-ticket.png'"
+            alt=""
+            data-testid="voucher-card-artwork"
+            class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-1.5 sm:p-2"
+            loading="lazy"
+          />
+        </div>
+        <div class="relative z-10 space-y-2">
           <div class="flex items-start justify-between gap-2.5">
             <h3 class="min-w-0 break-words text-base font-semibold leading-snug text-ink-900">
               {{ offer.title }}
@@ -196,7 +210,7 @@ function activate() {
           </p>
         </div>
 
-        <div class="flex flex-wrap items-end justify-between gap-2.5 pt-1">
+        <div class="relative z-10 flex flex-wrap items-end justify-between gap-2.5 pt-1">
           <details v-if="hasExtraDetails" class="group/details min-w-0 text-xs text-ink-600">
             <summary class="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-ink-600 hover:text-brand-700 select-none [&::-webkit-details-marker]:hidden">
               <span>Điều kiện</span>

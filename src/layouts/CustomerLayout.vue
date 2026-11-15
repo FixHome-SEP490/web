@@ -289,7 +289,7 @@ const handleLogout = async () => {
 <template>
   <!-- The bottom tab bar is 64px below lg; --fh-dock lifts floating buttons above it. -->
   <div
-    class="min-h-screen flex flex-col bg-ink-50 text-ink-900"
+    class="min-h-screen flex flex-col bg-transparent text-ink-900"
     :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
