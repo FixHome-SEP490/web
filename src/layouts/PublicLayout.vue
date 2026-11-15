@@ -23,7 +23,6 @@ const navigation = [
   { label: 'Giới thiệu', to: '/#gioi-thieu' },
   { label: 'Dịch vụ', to: '/#services' },
   { label: 'Phân tích sự cố bằng AI', to: '/#ai' },
-  { label: 'Cách hoạt động', to: '/#how-it-works' },
   { label: 'Vì sao chọn FixHome', to: '/#trust' },
 ];
 
