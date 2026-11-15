@@ -86,12 +86,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="public-shell flex min-h-screen min-w-0 flex-col bg-white text-ink-900">
+  <div class="public-shell flex min-h-screen min-w-0 flex-col bg-transparent text-ink-900">
     <a href="#main-content" class="skip-link">Đến nội dung chính</a>
     <header
       ref="header"
       class="public-header sticky top-0 z-40 min-w-0 border-b transition-all duration-300"
-      :class="isScrolled ? 'border-transparent bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200 bg-white'"
+      :class="isScrolled ? 'border-transparent bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200/80 bg-white/90 backdrop-blur-md'"
     >
       <div
         class="public-container flex items-center justify-between gap-4 transition-all duration-300"

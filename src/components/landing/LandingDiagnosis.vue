@@ -26,7 +26,7 @@ const stages = [
 </script>
 
 <template>
-  <section id="ai" class="landing-section bg-white" aria-labelledby="ai-title">
+  <section id="ai" class="landing-section bg-transparent" aria-labelledby="ai-title">
     <div class="landing-container grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-16">
       <div class="max-w-[620px]">
         <p class="landing-eyebrow">Khi chưa rõ nguyên nhân</p>

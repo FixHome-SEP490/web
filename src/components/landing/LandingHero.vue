@@ -7,7 +7,7 @@ const router = useRouter();
 </script>
 
 <template>
-  <section id="gioi-thieu" class="hero-section bg-white" aria-labelledby="hero-title">
+  <section id="gioi-thieu" class="hero-section bg-transparent" aria-labelledby="hero-title">
     <div class="landing-container grid items-center gap-9 py-10 sm:py-12 lg:min-h-[680px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-14 lg:py-14">
       <div class="hero-copy max-w-[650px]">
         <p class="landing-eyebrow flex items-center gap-2">

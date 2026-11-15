@@ -4,7 +4,7 @@ import technicianImage from '../assets/auth-technician.png';
 </script>
 
 <template>
-  <div class="min-h-screen lg:h-screen lg:overflow-hidden flex bg-slate-50 font-sans">
+  <div class="min-h-screen lg:h-screen lg:overflow-hidden flex bg-transparent font-sans">
     <!-- Left Column (Visual/Brand) -->
     <section class="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-100" aria-label="Giới thiệu FixHome">
       <img
@@ -60,7 +60,7 @@ import technicianImage from '../assets/auth-technician.png';
     </section>
 
     <!-- Right Column (Form) -->
-    <main class="w-full lg:w-1/2 flex flex-col bg-white lg:h-screen lg:overflow-hidden">
+    <main class="w-full lg:w-1/2 flex flex-col bg-white/85 backdrop-blur-md lg:h-screen lg:overflow-hidden">
       <div class="flex-1 min-h-0 flex flex-col px-6 sm:px-12 xl:px-20 2xl:px-24 py-6 lg:py-7 2xl:py-9 relative">
 
         <!-- Mobile Logo -->

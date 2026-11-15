@@ -103,7 +103,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-ink-50 p-4">
+  <div class="min-h-screen flex items-center justify-center bg-transparent p-4">
     <div class="bg-white rounded-2xl max-w-sm w-full p-8 space-y-5 shadow-xl text-center border border-ink-100">
       <div v-if="phase === 'checking'" class="mx-auto w-12" aria-hidden="true"><FhSkeleton width="48px" height="48px" rounded="full" /></div>
       <CheckCircle2 v-else-if="phase === 'paid'" :size="48" class="text-emerald-600 mx-auto" />

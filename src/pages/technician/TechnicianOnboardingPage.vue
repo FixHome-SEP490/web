@@ -1153,7 +1153,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-ink-50 flex flex-col font-sans pb-16">
+  <div class="min-h-screen bg-transparent flex flex-col font-sans pb-16">
     <!-- Top Nav Header -->
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">

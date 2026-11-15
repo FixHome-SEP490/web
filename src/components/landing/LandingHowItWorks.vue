@@ -30,7 +30,7 @@ const steps = [
 </script>
 
 <template>
-  <section id="how-it-works" class="landing-section bg-ink-25/60" aria-labelledby="steps-title">
+  <section id="how-it-works" class="landing-section bg-transparent" aria-labelledby="steps-title">
     <div class="landing-container">
       <div class="grid gap-5 sm:grid-cols-[1.1fr_0.9fr] sm:items-end sm:gap-10">
         <div class="max-w-[700px]">
