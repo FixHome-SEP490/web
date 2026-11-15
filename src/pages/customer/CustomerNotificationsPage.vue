@@ -120,28 +120,43 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
 <template>
   <div class="w-full space-y-5 pb-16">
     <!-- Page Header -->
-    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 animate-slide-up">
-      <div>
-        <h1 class="text-2xl sm:text-[28px] font-bold text-ink-900 tracking-tight">
-          Thông báo
-        </h1>
-        <p class="text-sm text-ink-500 mt-1">
-          Cập nhật tiến độ đơn hàng, phản hồi từ kỹ thuật viên và thông báo từ hệ thống.
-        </p>
-      </div>
-
-      <FhButton
-        v-if="notifStore.unreadCount > 0"
-        variant="secondary"
-        size="md"
-        data-testid="notifications-mark-all"
-        class="self-start sm:self-auto shrink-0"
-        @click="handleMarkAllRead"
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
       >
-        <CheckCheck :size="16" class="text-brand-600" />
-        Đánh dấu đã đọc tất cả
-      </FhButton>
-    </div>
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/notifications-bell.png'"
+          alt=""
+          data-testid="notifications-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 flex w-full flex-col sm:flex-row sm:items-center justify-between gap-3 pr-20 sm:pr-36">
+        <div class="min-w-0">
+          <h1 class="text-2xl sm:text-[28px] font-bold text-ink-900 tracking-tight">
+            Thông báo
+          </h1>
+          <p class="text-sm text-ink-500 mt-1">
+            Cập nhật tiến độ đơn hàng, phản hồi từ kỹ thuật viên và thông báo từ hệ thống.
+          </p>
+        </div>
+
+        <FhButton
+          v-if="notifStore.unreadCount > 0"
+          variant="secondary"
+          size="md"
+          data-testid="notifications-mark-all"
+          class="self-start sm:self-auto shrink-0"
+          @click="handleMarkAllRead"
+        >
+          <CheckCheck :size="16" class="text-brand-600" />
+          Đánh dấu đã đọc tất cả
+        </FhButton>
+      </div>
+    </header>
 
     <!-- Search & Filters -->
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 animate-slide-up-delay-1">
@@ -240,7 +255,7 @@ const formatFullDate = (dateStr: string): string => (dateStr ? vnDateTimeString(
         :title="hasFilter ? (total > PAGE_SIZE ? 'Trang này không có thông báo phù hợp.' : 'Không có thông báo nào phù hợp.') : 'Bạn chưa có thông báo nào.'"
         :description="hasFilter ? 'Hãy thử thay đổi từ khóa hoặc bộ lọc danh mục để tìm thông báo.' : 'Các thông báo mới về đơn sửa chữa và tài khoản sẽ hiển thị ở đây.'"
         :action-text="hasFilter ? 'Xóa bộ lọc' : ''"
-        illustration="/images/ui/empty-state-search-service.png"
+        :illustration="hasFilter ? '/images/ui/empty-state-search-service.png' : '/images/ui/notifications-bell.png'"
         @action="clearFilters"
       />
     </div>

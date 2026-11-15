@@ -378,6 +378,7 @@ describe('NewBookingWizardPage A+ service finder', () => {
 
     expect(wrapper.get('[data-testid="visit-opt-in"]').text()).toContain('Có nhiều thiết bị cần sửa?');
     expect(wrapper.get('[data-testid="visit-opt-in-action"]').text()).toBe('Đặt nhiều thiết bị');
+    expect(wrapper.get('[data-testid="visit-opt-in-artwork"]').attributes('src')).toBe('/images/ui/booking-multi-visit.png');
     await cardByText(wrapper, 'Vệ sinh điều hòa treo tường').trigger('click');
     await wrapper.get('[data-testid="booking-quantity-increase"]').trigger('click');
     expect(wrapper.get('[data-testid="booking-quantity"]').text()).toBe('2');
@@ -653,6 +654,8 @@ describe('NewBookingWizardPage A+ service finder', () => {
     await flushPromises();
     expect(wrapper.findAll('[data-testid^="visit-review-device-"]')).toHaveLength(3);
     expect(wrapper.get('[data-testid="booking-review"]').text()).toContain('Lịch và địa chỉ chung');
+    expect(wrapper.get('[data-testid="booking-review-artwork"]').attributes('src')).toBe('/images/ui/detail-order-home.png');
+    expect(wrapper.get('[data-testid="visit-review-price-artwork"]').attributes('src')).toBe('/images/ui/card-quote-checklist.png');
     expect(wrapper.findAll('[data-testid="booking-submit"]')).toHaveLength(1);
     for (let index = 0; index < 3; index += 1) {
       const machine = wrapper.get(`[data-testid="visit-review-device-${index}"]`);

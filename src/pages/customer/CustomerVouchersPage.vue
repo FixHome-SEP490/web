@@ -123,9 +123,24 @@ async function claimCode(code: string) {
 
 <template>
   <div :key="customerId ?? 'guest'" lang="vi" class="w-full space-y-5 pb-12" data-testid="customer-vouchers-page">
-    <header class="animate-slide-up">
-      <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
-      <p class="mt-1 text-sm text-ink-500">Ưu đãi chung đã lưu và voucher dành riêng cho bạn, trong cùng một ví.</p>
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-28 sm:w-[30%] max-w-[14rem] flex items-center justify-center overflow-hidden opacity-50 sm:opacity-95"
+        aria-hidden="true"
+      >
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/voucher-general-ticket.png'"
+          alt=""
+          data-testid="vouchers-header-artwork"
+          class="relative h-24 w-24 sm:h-32 sm:w-32 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 pr-24 sm:pr-[32%]">
+        <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-[28px]">Ví ưu đãi</h1>
+        <p class="mt-1 text-sm text-ink-500">Ưu đãi chung đã lưu và voucher dành riêng cho bạn, trong cùng một ví.</p>
+      </div>
     </header>
 
     <Transition name="fh-fade-slide">

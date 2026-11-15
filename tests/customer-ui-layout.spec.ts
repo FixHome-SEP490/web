@@ -117,6 +117,8 @@ describe('Customer order detail', () => {
     await flushPromises();
     expect(w.find('[data-testid="order-not-quoted"]').exists()).toBe(true);
     expect(w.find('[data-testid="order-costs"]').text()).not.toContain('Tổng cộng');
+    expect(w.get('[data-testid="order-detail-ambient-artwork"]').attributes('src')).toBe('/images/ui/detail-order-home.png');
+    expect(w.get('[data-testid="order-costs-ambient-artwork"]').attributes('src')).toBe('/images/ui/card-quote-checklist.png');
   });
 
   it('offers to review once on a completed order', async () => {
@@ -147,6 +149,7 @@ describe('Customer warranties', () => {
     api.getOrderWarrantiesGrouped.mockRejectedValueOnce(new Error('timeout of 15000ms exceeded'));
     const w = mount(CustomerWarrantiesPage, { global: { stubs } });
     await flushPromises();
+    expect(w.get('[data-testid="warranties-header-artwork"]').attributes('src')).toBe('/images/ui/warranty-shield.png');
     expect(w.get('[data-testid="warranties-load-error"]').text()).toContain('Thử lại');
     expect(w.text()).not.toContain('timeout');
     expect(w.text()).not.toContain('Chưa có đơn nào đang được bảo hành');

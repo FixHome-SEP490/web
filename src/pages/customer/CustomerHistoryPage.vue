@@ -183,22 +183,37 @@ onUnmounted(() => {
 <template>
   <div class="w-full space-y-6 pb-16">
     <!-- Header banner -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up">
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
-          <History :size="28" class="text-brand-600 shrink-0" />
-          <span>Lịch sử sửa chữa</span>
-        </h1>
-      <p class="text-sm text-ink-500 mt-1">
-        {{ historyList === 'visits' ? 'Xem các lượt nhiều thiết bị đã kết thúc và trạng thái từng thiết bị.' : 'Theo dõi chi tiết các dịch vụ sửa chữa đã hoàn thành và chi phí thực hiện.' }}
-      </p>
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
+      >
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/history-archive.png'"
+          alt=""
+          data-testid="history-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
       </div>
+      <div class="relative z-10 flex w-full flex-col sm:flex-row sm:items-center justify-between gap-3 pr-20 sm:pr-36">
+        <div class="min-w-0">
+          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
+            <History :size="28" class="text-brand-600 shrink-0" />
+            <span>Lịch sử sửa chữa</span>
+          </h1>
+          <p class="text-sm text-ink-500 mt-1">
+            {{ historyList === 'visits' ? 'Xem các lượt nhiều thiết bị đã kết thúc và trạng thái từng thiết bị.' : 'Theo dõi chi tiết các dịch vụ sửa chữa đã hoàn thành và chi phí thực hiện.' }}
+          </p>
+        </div>
 
-      <div v-if="!currentLoading && currentTotal > 0" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto">
-        <Sparkles :size="14" class="text-brand-600" />
-        <span>Tổng {{ currentTotal }} {{ historyList === 'visits' ? 'lượt sửa' : 'đơn' }} trong lịch sử</span>
+        <div v-if="!currentLoading && currentTotal > 0" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto shrink-0">
+          <Sparkles :size="14" class="text-brand-600" />
+          <span>Tổng {{ currentTotal }} {{ historyList === 'visits' ? 'lượt sửa' : 'đơn' }} trong lịch sử</span>
+        </div>
       </div>
-    </div>
+    </header>
 
     <div class="flex max-w-full gap-2 overflow-x-auto pb-1 animate-slide-up-delay-1" role="group" aria-label="Chọn loại lịch sử">
       <button

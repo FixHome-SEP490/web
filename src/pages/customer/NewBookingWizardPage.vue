@@ -2629,11 +2629,24 @@ async function createAndFindTech() {
         <div class="min-w-0 space-y-4">
           <section
             v-if="visitEnabled && !isAiFlow && !visitGrouping"
-            class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm"
+            class="relative overflow-hidden flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-200 bg-gradient-to-r from-white via-white to-brand-50/85 px-4 py-3.5 sm:px-5 sm:py-4 text-sm"
             data-testid="visit-opt-in"
           >
-            <span class="font-medium text-ink-800">Có nhiều thiết bị cần sửa?</span>
-            <FhButton variant="secondary" size="md" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
+            <div class="relative z-10 min-w-0 flex-1 pr-2">
+              <p class="font-semibold text-ink-900">Có nhiều thiết bị cần sửa?</p>
+              <p class="mt-0.5 text-xs text-ink-600">Gộp nhiều hạng mục sửa chữa trong cùng 1 lượt thợ ghé nhà.</p>
+            </div>
+            <div class="relative z-10 flex items-center gap-3 shrink-0">
+              <FhButton variant="secondary" size="md" data-testid="visit-opt-in-action" @click="startVisitGrouping">Đặt nhiều thiết bị</FhButton>
+              <img
+                :src="'/images/ui/booking-multi-visit.png'"
+                alt=""
+                aria-hidden="true"
+                data-testid="visit-opt-in-artwork"
+                class="hidden sm:block h-16 w-20 object-contain select-none pointer-events-none"
+                loading="lazy"
+              />
+            </div>
           </section>
           <section
             v-if="aiVisitDevices.length >= 2 && visitGrouping"
@@ -3449,8 +3462,18 @@ async function createAndFindTech() {
           </div>
         </section>
 
-        <section class="divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review">
-          <h3 v-if="extraDevices.length" class="px-4 py-4 font-semibold text-ink-900 sm:px-6">Lịch và địa chỉ chung</h3>
+        <section class="overflow-hidden divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review">
+          <div class="relative overflow-hidden bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-3.5 sm:px-6 flex items-center justify-between gap-3">
+            <h3 class="relative z-10 font-semibold text-ink-900">{{ extraDevices.length ? 'Lịch và địa chỉ chung' : 'Thông tin đặt lịch' }}</h3>
+            <img
+              :src="'/images/ui/detail-order-home.png'"
+              alt=""
+              aria-hidden="true"
+              data-testid="booking-review-artwork"
+              class="h-14 w-16 sm:h-16 sm:w-20 object-contain select-none pointer-events-none shrink-0"
+              loading="lazy"
+            />
+          </div>
           <div v-if="selectedServiceId && !extraDevices.length" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">{{ extraDevices.length ? `Máy ${extraDevices.length + 1}` : 'Dịch vụ' }}</span>
             <div class="min-w-0 flex-1">
@@ -3485,7 +3508,19 @@ async function createAndFindTech() {
           </div>
         </section>
 
-        <section v-if="selectedServiceId && extraDevices.length === 0" class="space-y-2.5 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="booking-review-price">
+        <section v-if="selectedServiceId && extraDevices.length === 0" class="overflow-hidden rounded-2xl border border-ink-200 bg-white text-sm" data-testid="booking-review-price">
+          <div class="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-3 sm:px-6">
+            <h3 class="font-semibold text-ink-900">Chi phí dự kiến</h3>
+            <img
+              :src="'/images/ui/card-quote-checklist.png'"
+              alt=""
+              aria-hidden="true"
+              data-testid="booking-review-price-artwork"
+              class="h-14 w-14 sm:h-16 sm:w-16 object-contain select-none pointer-events-none shrink-0"
+              loading="lazy"
+            />
+          </div>
+          <div class="space-y-2.5 px-5 py-4 sm:px-6">
           <div v-if="summaryPrice.kind === 'firm'" class="flex justify-between gap-4" data-testid="confirm-v2-price">
             <span class="text-ink-700">Tiền công</span>
             <span class="font-semibold text-ink-900 font-num"><FhMoney :amount="summaryPrice.amount" /></span>
@@ -3509,6 +3544,7 @@ async function createAndFindTech() {
             Chưa gồm linh kiện hoặc phát sinh ngoài phạm vi (kỹ thuật viên sẽ báo giá và bạn duyệt trước khi làm).
           </p>
           <p v-else class="text-xs text-ink-500" data-testid="confirm-v2-range-note">Kỹ thuật viên kiểm tra tại nhà và gửi báo giá để bạn duyệt trước khi sửa.</p>
+          </div>
         </section>
 
         <div v-if="chatAttachmentSummary" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="confirm-attachments">
@@ -3542,7 +3578,19 @@ async function createAndFindTech() {
           <p v-if="chatUploads.busy > 0" class="text-xs text-ink-500">Ảnh, video vẫn đang gửi cho thợ. Mạng yếu thì có thể mất vài phút, bạn có thể bấm Bỏ để đặt thợ không kèm.</p>
         </div>
 
-        <section v-if="visitGrouping && extraDevices.length" class="space-y-2 rounded-2xl border border-ink-200 bg-white px-5 py-4 text-sm sm:px-6" data-testid="visit-review-price">
+        <section v-if="visitGrouping && extraDevices.length" class="overflow-hidden rounded-2xl border border-ink-200 bg-white text-sm" data-testid="visit-review-price">
+          <div class="flex items-center justify-between gap-3 border-b border-ink-100 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-3 sm:px-6">
+            <h3 class="font-semibold text-ink-900">Chi phí dự kiến</h3>
+            <img
+              :src="'/images/ui/card-quote-checklist.png'"
+              alt=""
+              aria-hidden="true"
+              data-testid="visit-review-price-artwork"
+              class="h-14 w-14 sm:h-16 sm:w-16 object-contain select-none pointer-events-none shrink-0"
+              loading="lazy"
+            />
+          </div>
+          <div class="space-y-2 px-5 py-4 sm:px-6">
           <div v-if="visitSummaryPrice.kind === 'firm'" class="flex flex-wrap items-baseline justify-between gap-2">
             <span class="font-semibold text-ink-900">Tổng tiền công đã xác định</span>
             <span class="text-lg font-semibold text-brand-700 font-num"><FhMoney :amount="visitSummaryPrice.amount" /></span>
@@ -3561,6 +3609,7 @@ async function createAndFindTech() {
           </div>
           <p v-if="visitSummaryPrice.kind === 'partial'" class="text-sm font-medium text-warning-800">+ {{ visitSummaryPrice.unresolvedCount }} máy chờ khảo sát báo giá.</p>
           <p class="text-xs leading-relaxed text-ink-500">Chưa gồm linh kiện hoặc phát sinh (thợ báo giá và bạn duyệt trước khi sửa).</p>
+          </div>
         </section>
 
         <div v-if="submitOutcomeUnknown" role="alert" class="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-4 text-sm text-warning-900" data-testid="booking-submit-unknown">
