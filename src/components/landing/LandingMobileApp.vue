@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, type Component } from 'vue';
 import {
   Wrench,
   Zap,
@@ -15,7 +15,7 @@ import {
 } from 'lucide-vue-next';
 
 interface FloatingBadge {
-  icon: any;
+  icon: Component;
   title: string;
   subtext: string;
   tone: 'brand' | 'purple' | 'emerald' | 'amber';
