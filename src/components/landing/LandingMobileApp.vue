@@ -21,7 +21,7 @@ const appFeatures = [
 </script>
 
 <template>
-  <section id="mobile-app" class="landing-section bg-ink-25/60" aria-labelledby="app-section-title">
+  <section id="mobile-app" class="landing-section bg-transparent" aria-labelledby="app-section-title">
     <div class="landing-container grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-16">
       <div class="mobile-intro max-w-[650px]">
         <div class="mobile-icon" aria-hidden="true">

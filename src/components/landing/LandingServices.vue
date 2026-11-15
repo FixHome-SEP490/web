@@ -56,7 +56,7 @@ onMounted(loadCategories);
 </script>
 
 <template>
-  <section class="landing-section bg-[#F8FAFC]" aria-labelledby="services-title">
+  <section class="landing-section bg-transparent" aria-labelledby="services-title">
     <div class="landing-container">
       <div class="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div class="max-w-xl">

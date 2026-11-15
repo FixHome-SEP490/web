@@ -261,7 +261,7 @@ const tabItems: TabNavItem[] = [
 <template>
   <!-- --fh-dock lifts floating buttons above the bottom tab bar on narrow screens. -->
   <div
-    class="min-h-screen bg-ink-50 text-ink-900 flex"
+    class="min-h-screen bg-transparent text-ink-900 flex"
     :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
     <!-- Collapsible Sidebar on wide screens -->

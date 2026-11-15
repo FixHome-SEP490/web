@@ -28,7 +28,7 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen flex bg-ink-50 text-ink-900">
+  <div class="min-h-screen flex bg-transparent text-ink-900">
     <AppSidebar :navigation="navigation" />
 
     <div class="flex-1 flex flex-col min-w-0">
