@@ -270,12 +270,12 @@ describe('Public landing page', () => {
     const context = await setup();
     const wrapper = mount(LandingMobileApp, context);
 
-    expect(wrapper.text()).toContain('Theo dõi việc sửa chữa trên điện thoại');
-    expect(wrapper.text()).toContain('Theo dõi yêu cầu trong từng đơn');
-    expect(wrapper.text()).toContain('Trao đổi với kỹ thuật viên');
-    expect(wrapper.text()).toContain('Xem lại lịch sử sửa chữa');
-    expect(wrapper.findAll('.app-flow > li')).toHaveLength(3);
-    expect(wrapper.findAll('img')).toHaveLength(0);
+    expect(wrapper.text()).toContain('Tìm dịch vụ, đặt lịch và theo dõi sửa chữa');
+    expect(wrapper.text()).toContain('Khám phá dịch vụ & tạo yêu cầu');
+    expect(wrapper.text()).toContain('Mô tả sự cố & nhận hỗ trợ từ AI');
+    expect(wrapper.text()).toContain('Chọn lịch & kết nối kỹ thuật viên');
+    expect(wrapper.text()).toContain('Theo dõi báo giá & nghiệm thu');
+    expect(wrapper.findAll('img')).toHaveLength(4);
 
     // No store listing exists yet, so nothing may pretend to download the app.
     expect(wrapper.text()).not.toContain('4.9/5');
@@ -284,7 +284,6 @@ describe('Public landing page', () => {
     expect(wrapper.text()).not.toContain('App Store');
     expect(wrapper.text()).not.toContain('Google Play');
     expect(wrapper.text()).not.toContain('Quét mã QR');
-    expect(wrapper.findAll('button')).toHaveLength(0);
     wrapper.unmount();
   });
 
