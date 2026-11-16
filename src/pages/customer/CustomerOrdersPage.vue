@@ -594,7 +594,25 @@ async function confirmCancel() {
 
 <template>
   <div class="w-full space-y-5 pb-12">
-    <h1 class="text-2xl font-bold tracking-tight text-ink-900 animate-slide-up">Đơn của tôi</h1>
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
+      >
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/customer-orders-board.png'"
+          alt=""
+          data-testid="orders-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 pr-20 sm:pr-36 space-y-1">
+        <h1 class="text-2xl sm:text-[28px] font-bold tracking-tight text-ink-900">Đơn của tôi</h1>
+        <p class="text-sm text-ink-600">Theo dõi yêu cầu đặt lịch, đơn sửa chữa đang thực hiện và các lượt nhiều thiết bị.</p>
+      </div>
+    </header>
 
     <div class="relative animate-slide-up-delay-1">
       <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />

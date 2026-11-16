@@ -137,7 +137,7 @@ const handleModalToggleSelect = (id: string) => {
   toggleSelect(id);
 };
 
-const MIN_RADAR_SCAN_MS = 1400;
+const MIN_RADAR_SCAN_MS = 3600;
 let pageUnmounted = false;
 
 const shouldUseMinScanDelay = () => {
@@ -291,22 +291,37 @@ const selectedTechs = computed(() => {
       <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
       <FhBackLink :label="isVisit ? 'Lượt sửa của bạn' : 'Yêu cầu của bạn'" @click="router.push(backTarget)" />
 
-      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
-          <p class="text-sm text-ink-500 mt-1">
-            Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong khung giờ bạn chọn
-          </p>
-        </div>
+      <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5">
         <div
-          v-if="showsReadyBadge"
-          data-testid="candidates-ready-badge"
-          class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+          class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+          aria-hidden="true"
         >
-          <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
-          Đang có thợ sẵn sàng nhận đơn
+          <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+          <img
+            :src="'/images/ui/booking-technician-match.png'"
+            alt=""
+            data-testid="candidates-header-artwork"
+            class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+            loading="lazy"
+          />
         </div>
-      </div>
+        <div class="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pr-20 sm:pr-36">
+          <div class="min-w-0 space-y-1">
+            <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
+            <p class="text-sm text-ink-600 text-pretty">
+              Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong khung giờ bạn chọn
+            </p>
+          </div>
+          <div
+            v-if="showsReadyBadge"
+            data-testid="candidates-ready-badge"
+            class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-600 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+          >
+            <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
+            Đang có thợ sẵn sàng nhận đơn
+          </div>
+        </div>
+      </header>
     </div>
 
     <!-- Customer-ranked invitations policy callout -->

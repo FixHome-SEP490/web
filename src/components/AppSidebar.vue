@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, useId, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, useId, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import {
@@ -61,35 +61,70 @@ const openAvatarDialog = () => {
   showAvatarDialog.value = true;
 };
 const profileMenu = ref<HTMLElement | null>(null);
+const profilePanel = ref<HTMLElement | null>(null);
 const profileTrigger = ref<HTMLButtonElement | null>(null);
 const profileMenuId = useId();
+const dropdownStyle = ref<Record<string, string>>({});
 const avatarFailed = ref(false);
 const fullName = computed(() => authStore.user?.fullName?.trim() || 'Tài khoản');
 const userAvatar = computed(() => authStore.user?.avatarUrl);
 const userInitial = computed(() => fullName.value.charAt(0).toLocaleUpperCase('vi'));
+
+const updateDropdownPosition = () => {
+  if (!isCollapsed.value || !profileTrigger.value || typeof window === 'undefined') {
+    dropdownStyle.value = {};
+    return;
+  }
+  const rect = profileTrigger.value.getBoundingClientRect();
+  const bottom = Math.min(Math.max(12, window.innerHeight - 140), Math.max(12, window.innerHeight - rect.bottom));
+  dropdownStyle.value = {
+    left: `${rect.right + 10}px`,
+    bottom: `${bottom}px`,
+  };
+};
 
 watch(userAvatar, () => { avatarFailed.value = false; });
 watch(() => route?.fullPath, () => {
   showProfileDropdown.value = false;
   hideTooltip();
 });
+watch([isCollapsed, showProfileDropdown], ([, open]) => {
+  if (open) void nextTick(updateDropdownPosition);
+});
 
+const toggleProfileMenu = () => {
+  if (showProfileDropdown.value) {
+    closeProfileMenu();
+    return;
+  }
+  hideTooltip();
+  updateDropdownPosition();
+  showProfileDropdown.value = true;
+};
 const closeProfileMenu = (restoreFocus = false) => {
   showProfileDropdown.value = false;
   if (restoreFocus) profileTrigger.value?.focus();
 };
+const isInsideProfileMenu = (target: EventTarget | null) =>
+  target instanceof Node && Boolean(profileMenu.value?.contains(target) || profilePanel.value?.contains(target));
 const handleOutsideClick = (event: PointerEvent) => {
-  if (event.target instanceof Node && !profileMenu.value?.contains(event.target)) {
+  if (!isInsideProfileMenu(event.target)) {
     closeProfileMenu();
   }
 };
 const handleProfileFocusOut = (event: FocusEvent) => {
-  if (!(event.relatedTarget instanceof Node) || !profileMenu.value?.contains(event.relatedTarget)) {
+  if (!isInsideProfileMenu(event.relatedTarget)) {
     closeProfileMenu();
   }
 };
-onMounted(() => document.addEventListener('pointerdown', handleOutsideClick));
-onBeforeUnmount(() => document.removeEventListener('pointerdown', handleOutsideClick));
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsideClick);
+  window.addEventListener('resize', updateDropdownPosition);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsideClick);
+  window.removeEventListener('resize', updateDropdownPosition);
+});
 
 const hoveredItem = ref<{ label: string, top: number } | null>(null);
 
@@ -276,7 +311,7 @@ const isActive = (item: NavItem) => {
           :aria-expanded="showProfileDropdown"
           :aria-controls="profileMenuId"
           :title="fullName"
-          @click="showProfileDropdown = !showProfileDropdown"
+          @click="toggleProfileMenu"
         >
           <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full profile-avatar text-sm font-semibold">
             <img v-if="userAvatar && !avatarFailed" :src="userAvatar" alt="" class="h-full w-full object-cover" @error="avatarFailed = true" />
@@ -289,32 +324,44 @@ const isActive = (item: NavItem) => {
             {{ fullName }}
           </span>
         </button>
-        <Transition name="profile-dropdown">
-          <div
-            v-if="showProfileDropdown"
-            :id="profileMenuId"
-            class="profile-dropdown absolute bottom-full left-0 z-50 mb-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"
-            :class="isCollapsed ? 'w-48' : 'w-full'"
-          >
-            <button
-              type="button"
-              class="group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-2"
-              data-testid="change-avatar"
-              @click="openAvatarDialog"
+        <Teleport to="body" :disabled="!isCollapsed">
+          <Transition name="profile-dropdown">
+            <div
+              v-if="showProfileDropdown"
+              :id="profileMenuId"
+              ref="profilePanel"
+              class="profile-dropdown overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-sm shadow-xl"
+              :class="isCollapsed ? 'fixed z-[9999] w-52 origin-bottom-left' : 'absolute bottom-full left-0 z-50 mb-2 w-full'"
+              :style="isCollapsed ? dropdownStyle : undefined"
+              @keydown.esc.stop.prevent="closeProfileMenu(true)"
+              @focusout="handleProfileFocusOut"
             >
-              <Camera :size="18" aria-hidden="true" class="shrink-0 text-slate-500" />
-              <span>Đổi ảnh đại diện</span>
-            </button>
-            <button
-              type="button"
-              class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-600 transition-colors duration-150 hover:bg-rose-50 hover:text-rose-700 active:bg-rose-100 focus-visible:outline-2"
-              @click="handleLogout"
-            >
-              <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-500 transition-colors group-hover:text-rose-600" />
-              <span>Đăng xuất</span>
-            </button>
-          </div>
-        </Transition>
+              <div
+                v-if="isCollapsed"
+                class="mb-1 border-b border-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500 truncate"
+              >
+                {{ fullName }}
+              </div>
+              <button
+                type="button"
+                class="group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-2"
+                data-testid="change-avatar"
+                @click="openAvatarDialog"
+              >
+                <Camera :size="18" aria-hidden="true" class="shrink-0 text-slate-500" />
+                <span>Đổi ảnh đại diện</span>
+              </button>
+              <button
+                type="button"
+                class="profile-logout group flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left font-semibold text-rose-600 transition-colors duration-150 hover:bg-rose-50 hover:text-rose-700 active:bg-rose-100 focus-visible:outline-2"
+                @click="handleLogout"
+              >
+                <LogOut :size="18" aria-hidden="true" class="shrink-0 text-rose-500 transition-colors group-hover:text-rose-600" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </Transition>
+        </Teleport>
       </div>
     </div>
 

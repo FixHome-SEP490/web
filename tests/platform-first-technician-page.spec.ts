@@ -47,6 +47,8 @@ beforeEach(() => { route.params.id = 'order-B'; get.mockReset(); post.mockReset(
 
 it('selects machine 2 in the report form and stops only that machine with its own source', async () => {
   const w = await render({ visitGroupId: 'visit-1' });
+  expect(w.get('[data-testid="tech-job-header-ambient-artwork"]').attributes('src')).toBe('/images/ui/detail-order-home.png');
+  expect(w.get('[data-testid="tech-job-costs-ambient-artwork"]').attributes('src')).toBe('/images/ui/card-quote-checklist.png');
   await w.get('[data-testid="job-more-button"]').trigger('click');
   await w.get('[data-testid="job-cannot-continue-menu"]').trigger('click');
   expect(w.get('[data-testid="report-device"]').findAll('option').map(item => item.text())).toEqual(['Máy 1', 'Máy 2', 'Máy 3']);

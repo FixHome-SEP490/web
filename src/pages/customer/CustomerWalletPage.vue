@@ -5,7 +5,7 @@
 // after a one-time identity check (CustomerWithdrawPanel).
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertCircle, ArrowDownLeft, ArrowUpRight, CreditCard, RefreshCw, Wallet } from 'lucide-vue-next';
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, RefreshCw } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton } from '../../components';
 import CustomerWithdrawPanel from '../../components/customer/CustomerWithdrawPanel.vue';
 import CustomerWithdrawalHistory from '../../components/customer/CustomerWithdrawalHistory.vue';
@@ -115,11 +115,8 @@ async function topUp() {
   <div class="w-full space-y-6 pb-16">
     <!-- Header -->
     <div class="animate-slide-up">
-      <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
-        <Wallet :size="28" class="text-brand-600 shrink-0" />
-        <span>Ví của tôi</span>
-      </h1>
-      <p class="text-sm text-ink-500 mt-1">
+      <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Ví của tôi</h1>
+      <p class="text-sm text-ink-600 mt-1">
         Nạp, rút và theo dõi các khoản thanh toán đơn sửa chữa, hoàn tiền linh kiện.
       </p>
     </div>
@@ -154,39 +151,39 @@ async function topUp() {
     </Transition>
 
     <!-- Balance and top-up: one surface -->
-    <section class="rounded-2xl border border-ink-200 bg-white overflow-hidden animate-slide-up-delay-1">
+    <section class="rounded-2xl border border-ink-200/85 bg-white overflow-hidden animate-slide-up-delay-1">
       <div class="relative overflow-hidden bg-gradient-to-r from-white via-white to-brand-50/85 p-5 sm:p-6">
         <div
-          class="pointer-events-none select-none absolute inset-y-0 right-0 w-28 sm:w-[30%] max-w-[13rem] flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+          class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
           aria-hidden="true"
         >
           <img
             :src="'/images/ui/wallet-3d.png'"
             alt=""
             data-testid="wallet-balance-artwork"
-            class="h-24 w-24 sm:h-28 sm:w-28 object-contain object-center p-2"
+            class="h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
             loading="lazy"
           />
         </div>
-        <div class="relative z-10 space-y-1 pr-24 sm:pr-[32%]">
-          <p class="text-sm text-ink-500">Số dư</p>
+        <div class="relative z-10 space-y-1 pr-20 sm:pr-36">
+          <p class="text-sm font-medium text-ink-600">Số dư</p>
           <p class="text-3xl font-bold text-ink-900 font-num whitespace-nowrap" data-testid="wallet-balance">
             <span v-if="!balanceLoaded && loading" class="block w-40" aria-busy="true" aria-label="Đang tải số dư"><FhSkeleton height="36px" /></span>
             <FhMoney v-else-if="balanceLoaded" :amount="balance" emphasis />
             <span v-else>—</span>
           </p>
-          <p class="text-sm text-ink-500 text-pretty">Dùng để trả đơn sửa chữa hoặc rút về tài khoản ngân hàng của bạn.</p>
+          <p class="text-sm text-ink-600 text-pretty">Dùng để trả đơn sửa chữa hoặc rút về tài khoản ngân hàng của bạn.</p>
         </div>
       </div>
 
-      <div class="px-5 pb-5 pt-3 border-t border-ink-100/70 bg-white">
+      <div class="px-5 pb-5 pt-3 border-t border-ink-100/80 bg-white">
         <div class="grid grid-cols-2 gap-2" role="group" aria-label="Chọn thao tác với ví">
           <button
             v-for="choice in ACTIONS"
             :key="choice.key"
             type="button"
-            class="h-11 rounded-xl border text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-            :class="action === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-2xs' : 'border-ink-200 text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
+            class="h-11 rounded-xl border text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-out active:scale-[0.96] motion-reduce:transform-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+            :class="action === choice.key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-700 hover:border-ink-300 hover:bg-ink-50/50'"
             :aria-pressed="action === choice.key"
             :data-testid="`wallet-action-${choice.key}`"
             @click="action = choice.key"
@@ -205,10 +202,7 @@ async function topUp() {
         <!-- Top-up Section -->
         <div v-else key="topup" class="p-6 sm:p-8 space-y-5 border-t border-ink-100">
           <div class="flex items-center justify-between gap-3">
-            <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-              <CreditCard :size="18" class="text-brand-600" />
-              <span>Nạp tiền qua VNPay</span>
-            </h2>
+            <h2 class="text-base font-bold text-ink-900">Nạp tiền qua VNPay</h2>
             <span class="text-xs text-ink-500 font-medium hidden sm:inline">Hỗ trợ mọi ngân hàng & thẻ ATM / QR</span>
           </div>
 
@@ -279,10 +273,7 @@ async function topUp() {
     <!-- History Section -->
     <section class="rounded-3xl border border-ink-200/90 bg-white p-6 sm:p-8 space-y-4 shadow-xs animate-slide-up-delay-2">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-base font-bold text-ink-900 flex items-center gap-2">
-          <RefreshCw :size="18" class="text-brand-600" />
-          <span>Lịch sử giao dịch</span>
-        </h2>
+        <h2 class="text-base font-bold text-ink-900">Lịch sử giao dịch</h2>
         <span v-if="transactions.length > 0" class="text-xs text-ink-500 font-num">
           Trang {{ page }} / {{ totalPages || 1 }}
         </span>

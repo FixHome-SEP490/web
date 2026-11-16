@@ -84,6 +84,7 @@ describe('Ví kỹ thuật viên: bố cục gọn', () => {
 
   it('refresh is one icon button with a label for screen readers', async () => {
     const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="tech-wallet-header-artwork"]').attributes('src')).toBe('/images/ui/wallet-3d.png');
     const refresh = wrapper.findAll('button[aria-label="Làm mới"]');
 
     expect(refresh).toHaveLength(1);
