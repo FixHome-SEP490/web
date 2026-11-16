@@ -198,9 +198,9 @@ onUnmounted(() => {
 <template>
   <div class="w-full space-y-6 pb-12">
     <!-- Header -->
-    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center animate-slide-up">
       <div
-        class="pointer-events-none select-none absolute inset-y-0 right-0 w-28 sm:w-[30%] max-w-[14rem] flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
         aria-hidden="true"
       >
         <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
@@ -208,13 +208,13 @@ onUnmounted(() => {
           :src="'/images/ui/warranty-shield.png'"
           alt=""
           data-testid="warranties-header-artwork"
-          class="relative h-24 w-24 sm:h-28 sm:w-28 object-contain object-center p-2"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
           loading="lazy"
         />
       </div>
-      <div class="relative z-10 pr-24 sm:pr-[32%] space-y-1">
-        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
-        <p class="text-sm text-ink-500">
+      <div class="relative z-10 pr-20 sm:pr-36 space-y-1">
+        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Bảo hành</h1>
+        <p class="text-sm text-ink-600 text-pretty">
           Theo dõi quyền lợi bảo hành các dịch vụ đã hoàn thành và gửi yêu cầu bảo hành trực tiếp.
         </p>
       </div>

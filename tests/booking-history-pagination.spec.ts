@@ -193,6 +193,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
       { page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' },
     ]);
     // A matched booking shows as its order only.
+    expect(wrapper.get('[data-testid="orders-header-artwork"]').attributes('src')).toBe('/images/ui/customer-orders-board.png');
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="order-card-o1"]').exists()).toBe(true);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');

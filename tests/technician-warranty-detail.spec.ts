@@ -85,6 +85,7 @@ describe('technician warranty claim page', () => {
     }));
 
     expect(apiClientMock.get).toHaveBeenCalledWith('/warranty-claims/claim-1');
+    expect(wrapper.get('[data-testid="tech-warranty-detail-artwork"]').attributes('src')).toBe('/images/ui/warranty-shield.png');
     const text = wrapper.get('[data-testid="warranty-claim-detail"]').text();
     for (const expected of ['#SO-1', 'Sửa đường nước', 'Khách A', '0911222333', '12 Lê Lợi, Quận 1', 'Nhắn tin', 'Gọi điện',
       'Sửa đường nước', 'Vòi nước lại rò rỉ sau ba ngày', 'Kết luận bạn đã đề xuất', 'Khách sử dụng sai cách', 'Khách tự tháo van', 'Đã ghi nhận kết luận.']) {

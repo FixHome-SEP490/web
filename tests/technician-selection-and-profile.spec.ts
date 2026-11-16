@@ -86,6 +86,8 @@ describe('Technician Selection and Profile Modal Feature', () => {
     const wrapper = mount(BookingCandidatesPage);
     await flushPromises();
 
+    expect(wrapper.get('[data-testid="candidates-header-artwork"]').attributes('src')).toBe('/images/ui/booking-technician-match.png');
+
     const cards = wrapper.findAll('[role="button"]');
     expect(cards.length).toBe(2);
 
@@ -193,6 +195,20 @@ describe('Technician Selection and Profile Modal Feature', () => {
     const modal = wrapper.findComponent(TechnicianProfileModal);
     expect(modal.text()).toContain('Chưa có đánh giá');
     expect(modal.text()).not.toMatch(/null|NaN|undefined/);
+
+    wrapper.unmount();
+  });
+
+  it('shows wide water-ripple radar loader while candidates are loading without fake pins', async () => {
+    vi.mocked(bookingsApi.getCandidatesWithDiagnostics).mockReturnValue(new Promise(() => {}));
+    const wrapper = mount(BookingCandidatesPage);
+    await flushPromises();
+
+    const loader = wrapper.get('[data-testid="candidates-radar-loader"]');
+    expect(loader.text()).toContain('Đang dò kỹ thuật viên quanh khu vực của bạn...');
+    expect(loader.findAll('.water-ripple')).toHaveLength(3);
+    expect(loader.findAll('[data-testid^="radar-tech-pin-"]')).toHaveLength(0);
+    expect(wrapper.find('[data-testid="candidates-radar-map"]').exists()).toBe(false);
 
     wrapper.unmount();
   });

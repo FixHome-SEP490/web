@@ -24,6 +24,7 @@ import { useQueryChoice, useQueryPage } from '../../composables/useQueryState';
 import { useChatStore } from '../../stores/chat.store';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const router = useRouter();
@@ -272,40 +273,58 @@ onUnmounted(() => {
 
 <template>
   <div class="w-full mx-auto space-y-4 sm:space-y-5">
-    <div class="animate-slide-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5 animate-slide-up">
       <div
-        class="inline-flex max-w-full items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-ink-200/80 bg-ink-100/80 p-1"
-        role="group"
-        aria-label="Chọn loại danh sách công việc"
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
       >
-        <button
-          v-for="choice in [
-            { key: 'jobs' as const, label: 'Công việc đơn', shortLabel: 'Đơn lẻ' },
-            { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều máy' },
-            { key: 'history' as const, label: 'Lịch sử · Đã rút, hủy', shortLabel: 'Lịch sử' },
-          ]"
-          :key="choice.key"
-          type="button"
-          :aria-pressed="listView === choice.key"
-          :aria-label="choice.label"
-          :data-testid="`jobs-list-switch-${choice.key}`"
-          class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer flex-1 sm:flex-initial"
-          :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
-          @click="listView = choice.key"
-        >
-          <span class="sm:hidden">{{ choice.shortLabel }}</span>
-          <span class="hidden sm:inline">{{ choice.label }}</span>
-          <span
-            v-if="choice.key === 'visits' && !loadingVisitGroups && visitGroupsTotal > 0"
-            class="rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none"
-            :class="listView === 'visits' ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
-          >
-            {{ visitGroupsTotal }}
-          </span>
-        </button>
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/tech-jobs-toolkit.png'"
+          alt=""
+          data-testid="tech-jobs-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
       </div>
-    </div>
+      <div class="relative z-10 flex flex-col gap-3 pr-20 sm:pr-36 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0 space-y-0.5">
+          <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Công việc</h1>
+          <p class="text-xs sm:text-sm text-ink-600">Quản lý đơn sửa chữa, lượt nhiều thiết bị và lịch sử thực hiện.</p>
+        </div>
+        <div
+          class="inline-flex max-w-full items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-ink-200/80 bg-ink-100/80 p-1 shrink-0"
+          role="group"
+          aria-label="Chọn loại danh sách công việc"
+        >
+          <button
+            v-for="choice in [
+              { key: 'jobs' as const, label: 'Công việc đơn', shortLabel: 'Đơn lẻ' },
+              { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều máy' },
+              { key: 'history' as const, label: 'Lịch sử · Đã rút, hủy', shortLabel: 'Lịch sử' },
+            ]"
+            :key="choice.key"
+            type="button"
+            :aria-pressed="listView === choice.key"
+            :aria-label="choice.label"
+            :data-testid="`jobs-list-switch-${choice.key}`"
+            class="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer flex-1 sm:flex-initial"
+            :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
+            @click="listView = choice.key"
+          >
+            <span class="sm:hidden">{{ choice.shortLabel }}</span>
+            <span class="hidden sm:inline">{{ choice.label }}</span>
+            <span
+              v-if="choice.key === 'visits' && !loadingVisitGroups && visitGroupsTotal > 0"
+              class="rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none"
+              :class="listView === 'visits' ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
+            >
+              {{ visitGroupsTotal }}
+            </span>
+          </button>
+        </div>
+      </div>
+    </header>
 
     <section v-if="listView === 'history'" class="animate-slide-up space-y-3" aria-label="Lịch sử đã rời công việc" data-testid="technician-withdrawn-history">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -575,11 +594,21 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Zone 2: Service + Customer & Address inset -->
+              <!-- Zone 2: Service Artwork + Title + Customer & Address inset -->
               <div class="mt-2.5 space-y-2">
-                <h3 class="text-base font-semibold text-ink-900 transition-colors group-hover:text-brand-700 sm:text-[17px] text-balance leading-snug">
-                  {{ row.job.serviceName }}
-                </h3>
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-11 h-11 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1 overflow-hidden">
+                    <img
+                      :src="getServiceArtworkUrl({ name: row.job.serviceName })"
+                      alt=""
+                      class="w-full h-full object-contain select-none pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
+                  <h3 class="min-w-0 flex-1 text-base font-semibold text-ink-900 transition-colors group-hover:text-brand-700 sm:text-[17px] text-balance leading-snug">
+                    {{ row.job.serviceName }}
+                  </h3>
+                </div>
                 <div class="space-y-1 rounded-xl bg-ink-50/75 px-3 py-2 text-sm">
                   <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-ink-900">
                     <span class="font-medium">{{ row.job.customerName }}</span>

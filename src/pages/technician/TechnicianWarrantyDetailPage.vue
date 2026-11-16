@@ -158,16 +158,32 @@ onMounted(load);
 
     <article v-else-if="claim && meta" class="animate-slide-up-delay-1 space-y-5 text-sm" data-testid="warranty-claim-detail">
       <!-- Compact Header Summary Card -->
-      <header class="bg-white rounded-2xl border border-ink-200/90 p-5 sm:p-6 shadow-2xs space-y-3">
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <router-link :to="`/tech/jobs/${claim.order.id}`" class="font-num font-semibold text-ink-600 hover:text-brand-700 whitespace-nowrap rounded" :class="focusRing">#{{ claim.order.code }}</router-link>
-          <span class="inline-flex items-center h-6 px-2.5 rounded-full text-xs font-semibold whitespace-nowrap" :class="warrantyClaimToneClasses[meta.tone]">{{ meta.label }}</span>
-          <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2.5 rounded-full bg-ink-100 text-xs font-medium text-ink-700 whitespace-nowrap">Gửi sau hạn bảo hành</span>
-          <span class="text-xs text-ink-500 whitespace-nowrap ml-auto">{{ vnDateString(claim.submittedAt) }}</span>
+      <header class="overflow-hidden bg-white rounded-2xl border border-ink-200/90 shadow-2xs">
+        <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4 sm:px-6 sm:py-5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-32 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+            aria-hidden="true"
+          >
+            <img
+              :src="'/images/ui/warranty-shield.png'"
+              alt=""
+              data-testid="tech-warranty-detail-artwork"
+              class="h-20 w-20 sm:h-24 sm:w-24 object-contain object-center p-1.5"
+              loading="lazy"
+            />
+          </div>
+          <div class="relative z-10 space-y-2 pr-20 sm:pr-32">
+            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <router-link :to="`/tech/jobs/${claim.order.id}`" class="font-num font-semibold text-ink-600 hover:text-brand-700 whitespace-nowrap rounded" :class="focusRing">#{{ claim.order.code }}</router-link>
+              <span class="inline-flex items-center h-6 px-2.5 rounded-full text-xs font-semibold whitespace-nowrap" :class="warrantyClaimToneClasses[meta.tone]">{{ meta.label }}</span>
+              <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2.5 rounded-full bg-ink-100 text-xs font-medium text-ink-700 whitespace-nowrap">Gửi sau hạn bảo hành</span>
+              <span class="text-xs text-ink-500 whitespace-nowrap sm:ml-auto">{{ vnDateString(claim.submittedAt) }}</span>
+            </div>
+            <h1 class="font-bold text-xl sm:text-2xl text-ink-900 tracking-tight text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h1>
+          </div>
         </div>
 
-        <div class="space-y-1.5">
-          <h1 class="font-bold text-xl sm:text-2xl text-ink-900 tracking-tight text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h1>
+        <div class="px-5 py-3.5 sm:px-6 bg-white">
           <div class="flex flex-col sm:flex-row sm:items-center gap-x-4 gap-y-1 text-sm text-ink-700">
             <p class="flex items-center gap-1.5 font-medium text-ink-900">
               <User :size="15" class="shrink-0 text-ink-400" aria-hidden="true" />

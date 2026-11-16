@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import TechnicianPrivateNote from '../../components/technician/TechnicianPrivateNote.vue';
 import { canDepartNow, sessionLabel } from '../../utils/booking-session';
 import TechnicianJobStepper from '../../components/technician/TechnicianJobStepper.vue';
@@ -2748,20 +2749,46 @@ const toggleMore = async () => {
     </div>
 
     <template v-else-if="job">
-      <!-- 1. Header: title, code, status, one overflow menu -->
-      <div class="animate-slide-up flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs">
-        <div class="min-w-0 space-y-1.5">
-          <div class="flex flex-wrap items-center gap-2">
-            <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
-            <span class="rounded-md bg-ink-100/90 px-2 py-0.5 text-xs font-semibold text-ink-700 font-num whitespace-nowrap">#{{ job.code }}</span>
+      <!-- 1. Header: service artwork, title, code, status, one overflow menu -->
+      <div class="animate-slide-up relative flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs">
+        <div
+          class="pointer-events-none select-none absolute inset-0 overflow-hidden rounded-2xl"
+          aria-hidden="true"
+        >
+          <div class="absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center opacity-25 sm:opacity-90">
+            <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+            <img
+              :src="'/images/ui/detail-order-home.png'"
+              alt=""
+              data-testid="tech-job-header-ambient-artwork"
+              class="relative h-20 w-20 sm:h-24 sm:w-24 object-contain object-center p-1.5"
+              loading="lazy"
+            />
           </div>
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance leading-snug">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
-          <p class="text-xs sm:text-sm text-ink-500">
-            {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
-          </p>
         </div>
 
-        <div class="relative shrink-0" data-more-menu>
+        <div class="relative z-10 flex items-start gap-3.5 min-w-0 flex-1 pr-4 sm:pr-24">
+          <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+            <img
+              :src="getServiceArtworkUrl({ name: job.serviceName })"
+              alt=""
+              class="w-full h-full object-contain select-none pointer-events-none"
+              loading="lazy"
+            />
+          </div>
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2">
+              <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
+              <span class="rounded-md bg-ink-100/90 px-2 py-0.5 text-xs font-semibold text-ink-700 font-num whitespace-nowrap">#{{ job.code }}</span>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance leading-snug">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
+            <p class="text-xs sm:text-sm text-ink-600">
+              {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
+            </p>
+          </div>
+        </div>
+
+        <div class="relative z-20 shrink-0" data-more-menu>
           <button
             type="button"
             class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
@@ -2912,11 +2939,26 @@ const toggleMore = async () => {
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
       <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-4 space-y-4">
-      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 rounded-2xl border border-ink-200/90 bg-white p-5 text-sm space-y-3.5 shadow-2xs">
-        <div class="flex items-center justify-between gap-2">
-          <h2 class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
+      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 overflow-hidden rounded-2xl border border-ink-200/90 bg-white text-sm shadow-2xs">
+        <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-20 sm:w-28 flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
+            aria-hidden="true"
+          >
+            <img
+              :src="'/images/ui/card-quote-checklist.png'"
+              alt=""
+              data-testid="tech-job-costs-ambient-artwork"
+              class="h-16 w-16 sm:h-20 sm:w-20 object-contain object-center p-1"
+              loading="lazy"
+            />
+          </div>
+          <div class="relative z-10 pr-20 sm:pr-28">
+            <h2 class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
+          </div>
         </div>
 
+        <div class="p-5 space-y-3.5 bg-white">
         <div class="rounded-xl border border-ink-200/70 bg-ink-50/80 px-4 py-3 space-y-2.5">
           <div class="flex items-baseline justify-between gap-3">
             <span class="text-xs font-medium uppercase tracking-wide text-ink-500">{{ jobInvoice ? 'Tổng hóa đơn' : 'Tổng báo giá' }}</span>
@@ -3009,6 +3051,7 @@ const toggleMore = async () => {
           </ul>
         </div>
         </details>
+        </div>
       </section>
       <TechnicianPrivateNote :order-id="jobIdRef" class="animate-slide-up-delay-1" />
       </aside>

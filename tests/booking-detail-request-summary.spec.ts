@@ -59,6 +59,8 @@ describe('BookingDetailPage request summary', () => {
       pricingModeSnapshot: 'fixed_price',
     }));
     const summary = wrapper.get('[data-testid="booking-request-summary"]');
+    expect(wrapper.get('[data-testid="booking-detail-ambient-artwork"]').attributes('src')).toBe('/images/ui/booking-single-schedule.png');
+    expect(wrapper.get('[data-testid="booking-detail-service-artwork"]').attributes('src')).toMatch(/^\/images\/services\/.+\.png$/);
     expect(summary.get('[data-testid="booking-request-device"]').text()).toBe('Treo tường · ≤ 1,5 HP');
     expect(summary.get('[data-testid="booking-request-price"]').find('[data-money="199000"]').exists()).toBe(true);
     expect(summary.get('[data-testid="booking-request-price"]').text()).toContain('Chưa gồm linh kiện');

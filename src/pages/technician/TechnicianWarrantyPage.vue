@@ -135,13 +135,31 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <div class="animate-slide-up flex items-center justify-between gap-3">
-      <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
-      <FhButton variant="secondary" size="sm" class="h-10" :disabled="loading" aria-label="Tải lại" @click="load">
-        <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
-        <span class="hidden sm:inline">Tải lại</span>
-      </FhButton>
-    </div>
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5 animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
+      >
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/warranty-shield.png'"
+          alt=""
+          data-testid="tech-warranty-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 flex items-center justify-between gap-3 pr-20 sm:pr-36">
+        <div class="min-w-0 space-y-0.5">
+          <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
+          <p class="text-xs sm:text-sm text-ink-600">Tiếp nhận lịch kiểm tra và xử lý các yêu cầu bảo hành từ khách hàng.</p>
+        </div>
+        <FhButton variant="secondary" size="sm" class="h-10 shrink-0" :disabled="loading" aria-label="Tải lại" @click="load">
+          <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
+          <span class="hidden sm:inline">Tải lại</span>
+        </FhButton>
+      </div>
+    </header>
 
     <Transition name="fh-fade-slide">
       <p

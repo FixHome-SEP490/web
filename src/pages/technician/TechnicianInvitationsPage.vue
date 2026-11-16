@@ -131,39 +131,57 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <div class="animate-slide-up flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
-        <span
-          v-if="!loading && !loadError && invitations.length > 0"
-          class="whitespace-nowrap text-sm font-medium font-num h-7 px-3 rounded-full bg-brand-50 text-brand-700 inline-flex items-center"
-        >
-          {{ invitations.length }} đang chờ
-        </span>
-      </div>
-      <button
-        v-if="autoAccept !== null"
-        type="button"
-        role="switch"
-        :aria-checked="autoAccept"
-        :disabled="savingAutoAccept"
-        class="inline-flex items-center gap-3 h-11 pl-4 pr-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-800 hover:bg-ink-50 disabled:opacity-60 whitespace-nowrap"
-        data-testid="auto-accept-toggle"
-        @click="toggleAutoAccept"
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5 animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
       >
-        Tự nhận việc
-        <span
-          class="relative w-11 h-6 rounded-full transition-colors"
-          :class="autoAccept ? 'bg-brand-600' : 'bg-ink-200'"
-          aria-hidden="true"
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/tech-invitations-radar.png'"
+          alt=""
+          data-testid="tech-invitations-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pr-20 sm:pr-36">
+        <div class="min-w-0 space-y-0.5">
+          <div class="flex items-center gap-3 min-w-0">
+            <h1 class="min-w-0 text-2xl font-bold text-ink-900 tracking-tight">Lời mời nhận việc</h1>
+            <span
+              v-if="!loading && !loadError && invitations.length > 0"
+              class="whitespace-nowrap text-sm font-medium font-num h-7 px-3 rounded-full bg-brand-50 text-brand-700 inline-flex items-center"
+            >
+              {{ invitations.length }} đang chờ
+            </span>
+          </div>
+          <p class="text-xs sm:text-sm text-ink-600">Xem nhanh yêu cầu mới phù hợp bán kính và lịch rảnh của bạn.</p>
+        </div>
+        <button
+          v-if="autoAccept !== null"
+          type="button"
+          role="switch"
+          :aria-checked="autoAccept"
+          :disabled="savingAutoAccept"
+          class="inline-flex items-center gap-3 h-11 pl-4 pr-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-800 hover:bg-ink-50 disabled:opacity-60 whitespace-nowrap"
+          data-testid="auto-accept-toggle"
+          @click="toggleAutoAccept"
         >
+          Tự nhận việc
           <span
-            class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white border transition-transform"
-            :class="autoAccept ? 'translate-x-5 border-white' : 'border-ink-300'"
-          />
-        </span>
-      </button>
-    </div>
+            class="relative w-11 h-6 rounded-full transition-colors"
+            :class="autoAccept ? 'bg-brand-600' : 'bg-ink-200'"
+            aria-hidden="true"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white border transition-transform"
+              :class="autoAccept ? 'translate-x-5 border-white' : 'border-ink-300'"
+            />
+          </span>
+        </button>
+      </div>
+    </header>
     <p v-if="autoAcceptError" class="text-sm text-danger-700" role="alert">{{ autoAcceptError }}</p>
 
     <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải lời mời">

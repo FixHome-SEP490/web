@@ -44,6 +44,7 @@ describe('TechnicianJobsPage', () => {
     const wrapper = mount(TechnicianJobsPage, { global: { stubs } });
     await flushPromises();
     expect(wrapper.get('h1').text()).toBe('Công việc');
+    expect(wrapper.get('[data-testid="tech-jobs-header-artwork"]').attributes('src')).toBe('/images/ui/tech-jobs-toolkit.png');
     expect(wrapper.text()).not.toMatch(/Hộp thư mời|Đơn Nhận Việc|Mở công việc/);
     const rowA = wrapper.get('[data-testid="technician-job-a"]');
     expect(rowA.findAll('a[href^="tel:"]')).toHaveLength(1);
@@ -103,6 +104,7 @@ describe('TechnicianInvitationsPage', () => {
     const wrapper = mount(TechnicianInvitationsPage, { global: { stubs }, attachTo: document.body });
     await flushPromises();
     expect(wrapper.get('h1').text()).toBe('Lời mời nhận việc');
+    expect(wrapper.get('[data-testid="tech-invitations-header-artwork"]').attributes('src')).toBe('/images/ui/tech-invitations-radar.png');
     expect(wrapper.text()).not.toContain('Bỏ qua');
     const card = wrapper.get('[data-testid="invitation-inv-1"]');
     expect(card.findAll('button').map((b) => b.text().trim())).toEqual([
@@ -162,6 +164,7 @@ describe('TechnicianEarningsPage', () => {
     });
     const wrapper = mount(TechnicianEarningsPage, { global: { stubs } });
     await flushPromises();
+    expect(wrapper.get('[data-testid="tech-earnings-header-artwork"]').attributes('src')).toBe('/images/ui/tech-earnings-chart.png');
     expect(wrapper.text()).toContain('500.000');
     await wrapper.get('[data-testid="earnings-wallet"]').trigger('click');
     expect(push).toHaveBeenCalledWith('/tech/wallet');
@@ -183,6 +186,7 @@ describe('TechnicianWarrantyPage', () => {
     mockGet.mockRejectedValueOnce(serverFailure);
     const wrapper = mount(TechnicianWarrantyPage, { global: { stubs } });
     await flushPromises();
+    expect(wrapper.get('[data-testid="tech-warranty-header-artwork"]').attributes('src')).toBe('/images/ui/warranty-shield.png');
     const alert = wrapper.get('[role="alert"]');
     expect(alert.text()).toContain('Không thể tải danh sách bảo hành');
     expect(wrapper.text()).not.toMatch(/Internal|INTERNAL_ERROR/);
