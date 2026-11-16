@@ -358,22 +358,40 @@ const handleWithdraw = async () => {
 
 <template>
   <div class="w-full mx-auto space-y-5">
-    <!-- Header: title + quiet refresh -->
-    <div class="animate-slide-up flex items-center justify-between gap-3">
-      <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
-        Ví của tôi
-      </h1>
-      <button
-        type="button"
-        class="shrink-0 w-10 h-10 rounded-xl text-ink-500 hover:text-ink-800 hover:bg-ink-100 flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50"
-        aria-label="Làm mới"
-        title="Làm mới"
-        :disabled="refreshing"
-        @click="refreshAll"
+    <!-- Header Banner Card: title + quiet refresh -->
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5 animate-slide-up">
+      <div
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+        aria-hidden="true"
       >
-        <RefreshCw :size="18" :class="refreshing ? 'animate-spin' : ''" />
-      </button>
-    </div>
+        <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+        <img
+          :src="'/images/ui/wallet-3d.png'"
+          alt=""
+          data-testid="tech-wallet-header-artwork"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+          loading="lazy"
+        />
+      </div>
+      <div class="relative z-10 flex items-center justify-between gap-3 pr-20 sm:pr-36">
+        <div class="min-w-0 space-y-0.5">
+          <h1 class="min-w-0 text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance">
+            Ví của tôi
+          </h1>
+          <p class="text-xs sm:text-sm text-ink-600">Theo dõi số dư ký quỹ, nạp tiền và rút về tài khoản ngân hàng.</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 w-10 h-10 rounded-xl text-ink-500 hover:text-ink-800 hover:bg-ink-100 flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50"
+          aria-label="Làm mới"
+          title="Làm mới"
+          :disabled="refreshing"
+          @click="refreshAll"
+        >
+          <RefreshCw :size="18" :class="refreshing ? 'animate-spin' : ''" />
+        </button>
+      </div>
+    </header>
 
     <!-- VNPay return -->
     <Transition name="fh-fade-slide">
