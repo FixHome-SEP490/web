@@ -563,7 +563,10 @@ const confirmMatchingExtension = async () => {
 <template>
   <div class="w-full mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
-    <div class="flex items-center justify-between gap-3 animate-slide-up">
+    <div
+      class="flex items-center justify-between gap-3 relative"
+      :class="moreOpen ? 'z-40' : 'z-10'"
+    >
       <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
       <div v-if="booking && canCancelBooking" class="relative">

@@ -2750,7 +2750,10 @@ const toggleMore = async () => {
 
     <template v-else-if="job">
       <!-- 1. Header: service artwork, title, code, status, one overflow menu -->
-      <div class="animate-slide-up relative flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs">
+      <div
+        class="relative flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs"
+        :class="moreOpen ? 'z-40' : 'z-10'"
+      >
         <div
           class="pointer-events-none select-none absolute inset-0 overflow-hidden rounded-2xl"
           aria-hidden="true"
@@ -2938,7 +2941,7 @@ const toggleMore = async () => {
       </section>
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
-      <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-4 space-y-4">
+      <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-20 space-y-4">
       <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 overflow-hidden rounded-2xl border border-ink-200/90 bg-white text-sm shadow-2xs">
         <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4">
           <div

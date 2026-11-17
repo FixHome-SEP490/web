@@ -1167,7 +1167,10 @@ const parsedReview = computed(() => {
       <span class="whitespace-nowrap font-semibold text-brand-700">Xem lượt sửa</span>
     </router-link>
     <!-- Back, one visible action for this state, rare ones in the "⋯" menu -->
-    <div class="flex items-center justify-between gap-3 animate-slide-up">
+    <div
+      class="flex items-center justify-between gap-3 relative"
+      :class="moreOpen ? 'z-40' : 'z-10'"
+    >
       <button
         type="button"
         class="whitespace-nowrap inline-flex items-center gap-1.5 h-9 text-sm font-medium text-ink-600 hover:text-ink-900 transition-colors"
@@ -1208,32 +1211,41 @@ const parsedReview = computed(() => {
             <MoreHorizontal :size="18" />
           </button>
           <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
-          <div
-            v-if="moreOpen"
-            role="menu"
-            class="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
-            @keydown.esc="moreOpen = false"
+          <Transition
+            enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+            enter-from-class="opacity-0 scale-95 -translate-y-1"
+            enter-to-class="opacity-100 scale-100 translate-y-0"
+            leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+            leave-from-class="opacity-100 scale-100 translate-y-0"
+            leave-to-class="opacity-0 scale-95 -translate-y-1"
           >
-            <button
-              v-if="claimInMenu"
-              type="button"
-              role="menuitem"
-              class="w-full text-left px-4 py-2.5 text-ink-700 hover:bg-ink-50 whitespace-nowrap"
-              @click="openMenuAction(() => (showWarrantyClaimModal = true))"
+            <div
+              v-if="moreOpen"
+              role="menu"
+              class="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+              @keydown.esc="moreOpen = false"
             >
-              Yêu cầu bảo hành
-            </button>
-            <button
-              v-if="canCancel"
-              type="button"
-              role="menuitem"
-              class="w-full text-left px-4 py-2.5 text-danger-600 hover:bg-danger-50 whitespace-nowrap"
-              data-testid="order-cancel"
-              @click="openMenuAction(() => (showCancelModal = true))"
-            >
-              Huỷ đơn
-            </button>
-          </div>
+              <button
+                v-if="claimInMenu"
+                type="button"
+                role="menuitem"
+                class="w-full text-left px-4 py-2.5 text-ink-700 hover:bg-ink-50 whitespace-nowrap"
+                @click="openMenuAction(() => (showWarrantyClaimModal = true))"
+              >
+                Yêu cầu bảo hành
+              </button>
+              <button
+                v-if="canCancel"
+                type="button"
+                role="menuitem"
+                class="w-full text-left px-4 py-2.5 text-danger-600 hover:bg-danger-50 whitespace-nowrap"
+                data-testid="order-cancel"
+                @click="openMenuAction(() => (showCancelModal = true))"
+              >
+                Huỷ đơn
+              </button>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -1774,7 +1786,7 @@ const parsedReview = computed(() => {
 
       <!-- 6. Costs: sticky right column on desktop, clean grouped surfaces -->
       <section
-        class="rounded-2xl bg-white border border-ink-200/80 overflow-hidden shadow-2xs text-sm lg:col-start-2 lg:row-start-1 lg:row-span-6 lg:sticky lg:top-4"
+        class="rounded-2xl bg-white border border-ink-200/80 overflow-hidden shadow-2xs text-sm lg:col-start-2 lg:row-start-1 lg:row-span-6 lg:sticky lg:top-20"
         :class="canDecideQuotation ? 'order-1 lg:order-none ring-1 ring-brand-300/80' : 'order-3 lg:order-none'"
         data-testid="order-costs"
       >

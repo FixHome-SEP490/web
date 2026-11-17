@@ -273,7 +273,7 @@ const tabItems: TabNavItem[] = [
     />
 
     <div class="flex-1 min-w-0 min-h-screen flex flex-col">
-      <header class="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
+      <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
         <div class="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 max-w-360 mx-auto">
           <!-- Logo only when the sidebar is hidden (narrow screens) -->
           <router-link to="/" class="lg:hidden inline-flex items-center gap-2 shrink-0 group" aria-label="FixHome - Trang chủ">

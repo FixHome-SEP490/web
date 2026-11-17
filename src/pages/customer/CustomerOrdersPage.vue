@@ -164,15 +164,11 @@ function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<Ser
   });
 }
 
-const bookingStatusTotals = ref<Record<string, number>>({});
-
 async function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<BookingItem>> {
   const statuses = BOOKING_STATES[activeTab.value];
   if (statuses.length === 0) return emptyPage<BookingItem>(page, pageSize);
   if (statuses.length === 1 && !search.value) {
-    const result = await bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
-    bookingStatusTotals.value = { ...bookingStatusTotals.value, [statuses[0]]: result.total };
-    return result;
+    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
   }
   return readMergedPage({
     page,
@@ -182,21 +178,8 @@ async function fetchBookingsPage(page: number, pageSize: number): Promise<PageRe
     fetchPage: (statusPage, statusPageSize, status) =>
       bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
     searchableText: (booking) => booking.serviceName ?? '',
-    onStatusTotals: (totals) => {
-      bookingStatusTotals.value = { ...bookingStatusTotals.value, ...totals };
-    },
   });
 }
-
-const pendingBookingsCount = computed(() => {
-  if (activeTab.value === 'IN_PROGRESS') {
-    return bookingsTotal.value;
-  }
-  if (activeTab.value === 'CANCELLED' || activeTab.value === 'COMPLETED') {
-    return 0;
-  }
-  return (bookingStatusTotals.value['submitted'] ?? 0) + (bookingStatusTotals.value['matching'] ?? 0);
-});
 
 const ordersList = usePagedList<ServiceOrderItem>({
   key: () => queryKeys.orders.customerList({ tab: activeTab.value, search: search.value }),
@@ -259,20 +242,47 @@ const chosenList = useQueryState<ListView | null>(
   (raw) => (raw === 'orders' || raw === 'requests' || raw === 'visits' ? raw : null),
   (value) => value ?? undefined,
 );
-// Default to "Đơn sửa chữa" whenever repair orders exist (or are loading); only switch to requests/visits if orders are empty.
+// Lock initial auto-picked list once on first unfiltered ALL load so filtering/searching never jumps across lists.
+const initialListPicked = ref<ListView | null>(null);
 const listView = computed<ListView>(() => {
   if (chosenList.value) return chosenList.value;
+  if (initialListPicked.value) return initialListPicked.value;
   if (!loadingOrders.value && ordersTotal.value === 0) {
     if (!loadingBookings.value && bookingsTotal.value > 0) return 'requests';
     if (!loadingVisitGroups.value && visitGroupsTotal.value > 0) return 'visits';
   }
   return 'orders';
 });
+watch(
+  [loadingOrders, loadingBookings, loadingVisitGroups, ordersTotal, bookingsTotal, visitGroupsTotal],
+  ([ordLoading, reqLoading, visitLoading, ordTotal, reqTotal, visTotal]) => {
+    if (chosenList.value || initialListPicked.value || activeTab.value !== 'ALL' || search.value) return;
+    if (ordLoading) return;
+    if (ordTotal > 0) {
+      initialListPicked.value = 'orders';
+      return;
+    }
+    if (!reqLoading && reqTotal > 0) {
+      initialListPicked.value = 'requests';
+      return;
+    }
+    if (!reqLoading && !visitLoading && visTotal > 0) {
+      initialListPicked.value = 'visits';
+    }
+  },
+  { immediate: true },
+);
 const listChoices = computed(() => [
   { key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa', count: ordersTotal.value, loading: loadingOrders.value },
   { key: 'requests' as const, label: 'Yêu cầu đặt lịch', shortLabel: 'Đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value },
   { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị', count: visitGroupsTotal.value, loading: loadingVisitGroups.value },
 ]);
+function switchList(choice: ListView) {
+  chosenList.value = choice;
+  if (choice === 'requests' && activeTab.value === 'COMPLETED') {
+    activeTab.value = 'ALL';
+  }
+}
 
 // ── Tab sliding indicator animation ──
 const tabListRef = ref<HTMLElement | null>(null);
@@ -302,6 +312,9 @@ function updateTabIndicator() {
 }
 
 function selectTab(key: Tab) {
+  if (!chosenList.value) {
+    chosenList.value = listView.value;
+  }
   activeTab.value = key;
   const el = tabRefs.value[key];
   if (el) {
@@ -309,22 +322,49 @@ function selectTab(key: Tab) {
   }
 }
 
+watch(search, (next) => {
+  if (next && !chosenList.value) {
+    chosenList.value = listView.value;
+  }
+});
+
 // ── Computed & Count ──
 const loading = computed(() => loadingOrders.value && loadingBookings.value && loadingVisitGroups.value);
 const hasError = computed(() => !!(ordersError.value || bookingsError.value));
 
-// Keep total count persistent once fetched so switching tabs doesn't cause tab width jitter
-const totalCount = ref<number | null>(null);
+// Count only the currently selected list's items on "Tất cả (N)" so orders & requests never mix.
+const ordersAllCount = ref<number | null>(null);
+const requestsAllCount = ref<number | null>(null);
 
 watch(
   [ordersTotal, bookingsTotal, loadingOrders, loadingBookings, hasError, activeTab],
   () => {
-    if (activeTab.value === 'ALL' && !loadingOrders.value && !loadingBookings.value && !hasError.value) {
-      totalCount.value = ordersTotal.value + bookingsTotal.value;
+    if (activeTab.value === 'ALL' && !loadingOrders.value && !ordersError.value) {
+      ordersAllCount.value = ordersTotal.value;
+    }
+    if (activeTab.value === 'ALL' && !loadingBookings.value && !bookingsError.value) {
+      requestsAllCount.value = bookingsTotal.value;
     }
   },
   { immediate: true },
 );
+
+const activeListAllCount = computed(() =>
+  listView.value === 'requests' ? requestsAllCount.value : ordersAllCount.value,
+);
+
+const statusTabs = computed(() => {
+  const allLabel = activeListAllCount.value === null ? 'Tất cả' : `Tất cả (${activeListAllCount.value})`;
+  const list: { key: Tab; label: string }[] = [
+    { key: 'ALL', label: allLabel },
+    { key: 'IN_PROGRESS', label: 'Đang xử lý' },
+  ];
+  if (listView.value !== 'requests') {
+    list.push({ key: 'COMPLETED', label: 'Hoàn tất' });
+  }
+  list.push({ key: 'CANCELLED', label: 'Đã huỷ' });
+  return list;
+});
 
 const isOverdue = (booking: BookingItem) =>
   !!booking.preferredEndAt && new Date(booking.preferredEndAt) < new Date();
@@ -376,7 +416,7 @@ function visitGroupStatus(group: VisitGroupPageItem) {
 
 let tabResizeObserver: ResizeObserver | null = null;
 
-watch([activeTab, totalCount], () => {
+watch([activeTab, activeListAllCount, listView], () => {
   void nextTick(updateTabIndicator);
 });
 
@@ -635,12 +675,41 @@ async function confirmCancel() {
       </button>
     </div>
 
+    <!-- Primary view switcher (Level 1): Đơn sửa chữa | Yêu cầu đặt lịch | Nhiều thiết bị -->
+    <div
+      v-if="!loading"
+      class="inline-flex w-full sm:w-auto max-w-full gap-1 overflow-x-auto scrollbar-none rounded-xl bg-ink-100/85 p-1 animate-slide-up-delay-1"
+      role="group"
+      aria-label="Chọn danh sách"
+    >
+      <button
+        v-for="choice in listChoices"
+        :key="choice.key"
+        type="button"
+        class="flex h-9 min-w-[5.5rem] flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-3.5 sm:text-sm cursor-pointer"
+        :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
+        :aria-pressed="listView === choice.key"
+        :aria-label="choice.label"
+        :data-testid="`list-switch-${choice.key}`"
+        @click="switchList(choice.key)"
+      >
+        <span class="truncate whitespace-nowrap sm:hidden">{{ choice.shortLabel }}</span>
+        <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
+        <span
+          v-if="!choice.loading"
+          class="shrink-0 rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none transition-colors"
+          :class="listView === choice.key ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
+        >{{ choice.count }}</span>
+      </button>
+    </div>
+
+    <!-- Secondary status filter bar (Level 2): scoped strictly to the active list -->
     <div
       v-if="listView !== 'visits'"
       ref="tabListRef"
       class="relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-ink-100 p-1 select-none scrollbar-none animate-slide-up-delay-1"
       role="tablist"
-      aria-label="Lọc đơn sửa chữa"
+      :aria-label="listView === 'requests' ? 'Lọc yêu cầu đặt lịch' : 'Lọc đơn sửa chữa'"
     >
       <!-- Sliding active background pill -->
       <div
@@ -650,12 +719,7 @@ async function confirmCancel() {
       />
 
       <button
-        v-for="tab in [
-          { key: 'ALL' as const, label: totalCount === null ? 'Tất cả' : `Tất cả (${totalCount})` },
-          { key: 'IN_PROGRESS' as const, label: 'Đang xử lý' },
-          { key: 'COMPLETED' as const, label: 'Hoàn tất' },
-          { key: 'CANCELLED' as const, label: 'Đã huỷ' },
-        ]"
+        v-for="tab in statusTabs"
         :key="tab.key"
         :ref="(el) => { tabRefs[tab.key] = el as HTMLElement }"
         :data-testid="`history-tab-${tab.key}`"
@@ -759,29 +823,6 @@ async function confirmCancel() {
     </div>
 
     <div v-else class="space-y-4 animate-slide-up-delay-2">
-      <!-- Repair orders or booking requests: segmented pill switcher -->
-      <div class="inline-flex w-full sm:w-auto max-w-full gap-1 overflow-x-auto scrollbar-none rounded-xl bg-ink-100/85 p-1" role="group" aria-label="Chọn danh sách">
-        <button
-          v-for="choice in listChoices"
-          :key="choice.key"
-          type="button"
-          class="flex h-9 min-w-[5.5rem] flex-1 sm:flex-initial items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-3.5 sm:text-sm cursor-pointer"
-          :class="listView === choice.key ? 'bg-white text-brand-700 shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
-          :aria-pressed="listView === choice.key"
-          :aria-label="choice.label"
-          :data-testid="`list-switch-${choice.key}`"
-          @click="chosenList = choice.key"
-        >
-          <span class="truncate whitespace-nowrap sm:hidden">{{ choice.shortLabel }}</span>
-          <span class="hidden truncate whitespace-nowrap sm:inline">{{ choice.label }}</span>
-          <span
-            v-if="!choice.loading"
-            class="shrink-0 rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none transition-colors"
-            :class="listView === choice.key ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
-          >{{ choice.count }}</span>
-        </button>
-      </div>
-
       <Transition name="fh-fade-slide" mode="out-in">
       <!-- One server-paged parent row per multi-device visit. -->
       <section v-if="listView === 'visits'" key="visits" class="space-y-3" data-testid="visit-groups-section">
@@ -1059,37 +1100,6 @@ async function confirmCancel() {
 
       <!-- Service orders -->
       <section v-else-if="listView === 'orders'" :key="`orders-${activeTab}`" class="space-y-3" data-testid="orders-section">
-          <!-- Pending booking requests callout banner when viewing orders -->
-          <Transition name="fh-fade-slide">
-            <div
-              v-if="pendingBookingsCount > 0 && (activeTab === 'ALL' || activeTab === 'IN_PROGRESS')"
-              class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50/60 p-3.5 sm:p-4 transition-colors"
-              data-testid="pending-requests-callout"
-            >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
-                  <Clock :size="20" />
-                </div>
-                <div class="min-w-0">
-                  <p class="font-semibold text-brand-900 text-sm">
-                    Bạn có {{ pendingBookingsCount }} yêu cầu đặt lịch đang tìm thợ
-                  </p>
-                  <p class="text-xs text-brand-700 truncate">
-                    Hệ thống đang kết nối kỹ thuật viên phù hợp cho bạn
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-700 active:scale-[0.96] transition-[background-color,transform] duration-150"
-                @click="chosenList = 'requests'"
-              >
-                <span>Xem yêu cầu</span>
-                <ChevronRight :size="14" />
-              </button>
-            </div>
-          </Transition>
-
           <div class="space-y-3">
             <div v-if="loadingOrders" class="space-y-3" aria-busy="true" aria-label="Đang tải đơn">
               <div v-for="i in 3" :key="i" class="rounded-2xl bg-white border border-ink-200/80 p-4 sm:p-5 space-y-2">

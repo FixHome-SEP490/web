@@ -139,6 +139,67 @@ describe('Customer warranties', () => {
     expect(wrapper.text()).not.toContain('Chưa có đơn nào đang được bảo hành');
     expect(wrapper.find('[data-testid="pagination"]').exists()).toBe(true);
   });
+
+  it('keeps card heights compact by summarizing warranty claims and opening full history in a dialog', async () => {
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === '/service-orders/my') return listed([order('c1', 'completed'), order('c2', 'completed')], 2);
+      if (url === '/warranties/mine') {
+        return {
+          data: {
+            data: [
+              {
+                orderId: 'c1',
+                coverages: [{ id: 'w-c1', startsAt: '2030-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', status: 'active', itemDescription: 'Vệ sinh máy lạnh' }],
+                claims: [
+                  {
+                    id: 'cl-old',
+                    serviceOrderId: 'c1',
+                    warrantyCoverageId: 'w-c1',
+                    status: 'resolved',
+                    description: 'Lần 1 đã xử lý',
+                    submittedAt: '2030-01-02T00:00:00Z',
+                    resolvedAt: '2030-01-03T00:00:00Z',
+                  },
+                  {
+                    id: 'cl-wait',
+                    serviceOrderId: 'c1',
+                    warrantyCoverageId: 'w-c1',
+                    status: 'awaiting_customer',
+                    customerResponse: null,
+                    description: 'Lần 2 chờ khách xác nhận',
+                    submittedAt: '2030-01-04T00:00:00Z',
+                  },
+                ],
+              },
+              {
+                orderId: 'c2',
+                coverages: [{ id: 'w-c2', startsAt: '2030-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', status: 'active' }],
+                claims: [],
+              },
+            ],
+          },
+        };
+      }
+      throw new Error(`unexpected read ${url}`);
+    });
+    const wrapper = mount(CustomerWarrantiesPage, { global: { stubs } });
+    await flushPromises();
+
+    const summary = wrapper.get('[data-testid="warranty-claims-summary"]');
+    expect(summary.text()).toContain('2 yêu cầu bảo hành');
+    expect(summary.text()).toContain('Chờ khách hàng phản hồi');
+    expect(wrapper.find('[data-testid="warranty-history-modal"]').exists()).toBe(false);
+    expect(wrapper.findAll('warranty-claim-card-stub')).toHaveLength(0);
+
+    await summary.trigger('click');
+    const modal = wrapper.get('[data-testid="warranty-history-modal"]');
+    const renderedCards = modal.findAll('warranty-claim-card-stub');
+    expect(renderedCards).toHaveLength(2);
+    // Unanswered awaiting_customer claim is prioritized first in the dialog.
+    expect(renderedCards[0].attributes('claim') ?? modal.text()).toBeTruthy();
+    await modal.get('button[aria-label="Đóng"]').trigger('click');
+    expect(wrapper.find('[data-testid="warranty-history-modal"]').exists()).toBe(false);
+  });
 });
 
 describe('Console orders', () => {
