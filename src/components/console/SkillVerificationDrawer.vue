@@ -11,6 +11,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-vue-next';
+import FhButton from '../FhButton.vue';
 import type {
   SkillVerification,
   SkillVerificationDocument,
@@ -113,32 +114,27 @@ const handlePreview = (title: string, documentId: string) => {
 </script>
 
 <template>
-  <Transition name="drawer">
-    <div v-if="open" class="fixed inset-0 z-50 flex justify-end">
-      <!-- Backdrop -->
-      <div 
-        class="absolute inset-0 bg-black/50 backdrop-blur-sm drawer-backdrop" 
-        @click="close"
-      ></div>
-      
-      <!-- Panel -->
+  <Transition name="fh-drawer">
+    <div v-if="open" class="fixed inset-0 z-50 flex justify-end bg-ink-950/50" @click.self="close" @keydown.esc="close">
       <div
-        class="relative w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col drawer-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="skill-drawer-title"
+        class="fh-drawer-panel relative flex h-full w-full max-w-2xl flex-col border-l border-ink-200/80 bg-white shadow-(--shadow-e3)"
       >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white shrink-0">
-          <div class="flex flex-col">
-            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <header class="flex items-start justify-between gap-3 border-b border-ink-100 bg-ink-50/70 px-6 py-4 shrink-0">
+          <div class="min-w-0">
+            <h2 id="skill-drawer-title" class="text-lg font-bold text-ink-900">
               Hồ sơ kỹ thuật viên
             </h2>
-            <p class="flex flex-wrap items-center gap-2 text-sm text-gray-500 font-medium">
-              {{ technician?.fullName || 'Kỹ thuật viên' }}
+            <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-ink-600 font-medium">
+              <span class="truncate">{{ technician?.fullName || 'Kỹ thuật viên' }}</span>
               <span
-                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
                 :class="{
-                  'bg-amber-100 text-amber-700': verification?.status === 'PENDING',
-                  'bg-green-100 text-green-700': verification?.status === 'VERIFIED',
-                  'bg-red-100 text-red-700': verification?.status === 'REJECTED'
+                  'border-warning-200/80 bg-warning-50 text-warning-700': verification?.status === 'PENDING',
+                  'border-success-200/80 bg-success-50 text-success-700': verification?.status === 'VERIFIED',
+                  'border-danger-200/80 bg-danger-50 text-danger-700': verification?.status === 'REJECTED'
                 }"
               >
                 {{ statusText }}
@@ -147,92 +143,101 @@ const handlePreview = (title: string, documentId: string) => {
           </div>
           <button
             type="button"
-            class="p-2 text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
             aria-label="Đóng"
             @click="close"
           >
-            <X :size="24" />
+            <X :size="20" />
           </button>
-        </div>
+        </header>
 
-        <!-- Body -->
-        <div v-if="verification" class="flex-1 overflow-y-auto p-6 space-y-8 bg-gray-50/50">
-          
-          <!-- 1. Thông tin kỹ thuật viên -->
-          <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-            <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-              <User class="text-brand-600" :size="20" />
+        <div v-if="verification" class="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6 text-sm">
+          <Transition name="fh-fade-slide">
+            <div
+              v-if="verification.status === 'REJECTED' && verification.rejectionReason"
+              class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800 flex items-start gap-2.5"
+            >
+              <AlertCircle :size="18" class="text-danger-600 shrink-0 mt-0.5" />
+              <div>
+                <strong class="font-semibold">Lý do từ chối:</strong>
+                <p class="mt-0.5 leading-relaxed">{{ verification.rejectionReason }}</p>
+              </div>
+            </div>
+          </Transition>
+
+          <section class="space-y-2.5">
+            <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+              <User class="text-brand-600" :size="17" />
               Thông tin kỹ thuật viên
             </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
-              <div>
-                <p class="text-xs text-gray-500 font-medium mb-1">Họ và tên</p>
-                <p class="text-sm font-semibold text-gray-900">{{ technician?.fullName || '—' }}</p>
+            <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40">
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Họ và tên</dt>
+                <dd class="text-right font-semibold text-ink-900">{{ technician?.fullName || '—' }}</dd>
               </div>
-              <div>
-                <p class="text-xs text-gray-500 font-medium mb-1">Email</p>
-                <p class="text-sm font-semibold text-gray-900">{{ technician?.email || '—' }}</p>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Email</dt>
+                <dd class="break-all text-right font-medium text-ink-900">{{ technician?.email || '—' }}</dd>
               </div>
-              <div>
-                <p class="text-xs text-gray-500 font-medium mb-1">Dịch vụ / Kỹ năng</p>
-                <p class="text-sm font-semibold text-brand-700">{{ verification.serviceName || '—' }}</p>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Dịch vụ / Kỹ năng</dt>
+                <dd class="text-right font-semibold text-brand-700">{{ verification.serviceName || '—' }}</dd>
               </div>
-              <div>
-                <p class="text-xs text-gray-500 font-medium mb-1">Ngày gửi yêu cầu</p>
-                <p class="text-sm font-semibold text-gray-900">{{ formatDate(verification.submittedAt) }}</p>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Ngày gửi yêu cầu</dt>
+                <dd class="font-num font-medium text-ink-900">{{ formatDate(verification.submittedAt) }}</dd>
               </div>
-              <div v-if="verification.reviewedAt">
-                <p class="text-xs text-gray-500 font-medium mb-1">Ngày xét duyệt</p>
-                <p class="text-sm font-semibold text-gray-900">{{ formatDate(verification.reviewedAt) }}</p>
+              <div v-if="verification.reviewedAt" class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Ngày xét duyệt</dt>
+                <dd class="font-num font-medium text-ink-900">{{ formatDate(verification.reviewedAt) }}</dd>
               </div>
-            </div>
+            </dl>
           </section>
 
-          <!-- 2. Giấy tờ xác minh / Chứng chỉ -->
-          <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-            <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-              <FileBadge class="text-brand-600" :size="20" />
+          <section class="space-y-2.5">
+            <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+              <FileBadge class="text-brand-600" :size="17" />
               Giấy tờ xác minh
             </h3>
-            
-            <div v-if="verification.documents.length === 0" class="text-center py-6 text-gray-400">
-              <FileText :size="36" class="mx-auto mb-2 text-gray-300" />
-              <p class="text-sm italic">Chưa có chứng chỉ hoặc tài liệu nào được gửi kèm.</p>
+
+            <div v-if="verification.documents.length === 0" class="rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/50 py-8 text-center text-ink-400">
+              <FileText :size="32" class="mx-auto mb-2 text-ink-300" />
+              <p class="text-sm">Chưa có chứng chỉ hoặc tài liệu nào được gửi kèm.</p>
             </div>
 
-            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-2">
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div
                 v-for="doc in verification.documents"
                 :key="doc.id"
-                class="space-y-2"
+                class="space-y-1.5"
               >
-                <p class="text-xs font-semibold text-gray-600 text-center truncate px-1" :title="doc.fileName">
+                <p class="text-xs font-medium text-ink-600 text-center truncate px-1" :title="doc.fileName">
                   {{ doc.issuedById ? 'Chứng chỉ FixHome cấp' : (doc.fileName || 'Chứng chỉ chuyên môn') }}
                 </p>
-                <button 
+                <button
                   type="button"
-                  class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  class="group relative flex aspect-[1.6/1] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-1 transition-colors hover:border-brand-300 hover:bg-brand-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
                   :disabled="!doc.id"
                   :title="doc.fileName ? `Nhấn để xem lớn: ${doc.fileName}` : 'Xem chứng chỉ'"
                   @click="handlePreview(doc.fileName, doc.id)"
                 >
                   <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                    <Loader2 class="animate-spin text-brand-500" :size="24" />
+                    <Loader2 class="animate-spin text-brand-500" :size="22" />
                   </div>
                   <template v-else-if="documentUrls[doc.id]">
                     <img
                       v-if="isImageDoc(doc)"
                       :src="documentUrls[doc.id]"
                       :alt="doc.fileName"
-                      class="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform"
+                      class="h-full w-full rounded-[calc(var(--radius-sm)-2px)] object-cover transition-transform duration-200 group-hover:scale-105"
                     />
-                    <div v-else class="flex flex-col items-center gap-2">
-                      <FileText class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
+                    <div v-else class="flex flex-col items-center gap-1.5">
+                      <FileText class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
                       <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
                     </div>
                   </template>
-                  <div v-else class="flex flex-col items-center gap-2">
-                    <FileBadge class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
+                  <div v-else class="flex flex-col items-center gap-1.5">
+                    <FileBadge class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
                     <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
                   </div>
                 </button>
@@ -240,106 +245,41 @@ const handlePreview = (title: string, documentId: string) => {
             </div>
           </section>
 
-          <!-- 3. Chuyên môn -->
-          <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-            <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-              <Briefcase class="text-brand-600" :size="20" />
+          <section class="space-y-2.5">
+            <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+              <Briefcase class="text-brand-600" :size="17" />
               Chuyên môn
             </h3>
-            
-            <div class="space-y-4">
-              <div>
-                <p class="text-sm font-medium text-gray-500 mb-2">Dịch vụ đăng ký xét duyệt</p>
-                <div class="flex flex-wrap gap-2">
-                  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-800 text-sm font-semibold rounded-lg border border-gray-200">
-                    {{ verification.serviceName || 'Dịch vụ' }}
-                    <span class="text-xs font-normal text-gray-500 bg-white px-1.5 rounded border border-gray-200">Đăng ký duyệt</span>
-                  </span>
-                </div>
-              </div>
-
-              <!-- Lý do từ chối nếu có -->
-              <div
-                v-if="verification.status === 'REJECTED' && verification.rejectionReason"
-                class="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-800 flex items-start gap-2.5"
-              >
-                <AlertCircle :size="18" class="text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong class="font-semibold">Lý do từ chối:</strong>
-                  <p class="mt-0.5 leading-relaxed">{{ verification.rejectionReason }}</p>
-                </div>
+            <div class="rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 p-4">
+              <p class="text-xs font-medium text-ink-500 mb-2">Dịch vụ đăng ký xét duyệt</p>
+              <div class="flex flex-wrap gap-2">
+                <span class="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 py-1.5 text-sm font-semibold text-ink-900">
+                  {{ verification.serviceName || 'Dịch vụ' }}
+                  <span class="rounded bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">Đăng ký duyệt</span>
+                </span>
               </div>
             </div>
           </section>
-          
         </div>
 
-        <!-- Footer Actions -->
-        <div
+        <footer
           v-if="verification?.status === 'PENDING'"
-          class="p-6 bg-white border-t border-gray-100 shrink-0 flex items-center justify-between"
+          class="flex items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/50 px-6 py-4 shrink-0"
         >
-          <button 
-            type="button"
-            class="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
-            @click="close"
-          >
-            Đóng
-          </button>
-          <div class="flex gap-3">
-            <button 
-              type="button"
-              class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors focus:ring-4 focus:ring-red-50"
-              :disabled="loadingApprove"
-              @click="handleReject"
-            >
-              <XCircle :size="18" />
-              Từ chối
-            </button>
-            <button 
-              type="button"
-              class="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 transition-colors focus:ring-4 focus:ring-green-100 shadow-sm disabled:opacity-70"
-              :disabled="loadingApprove"
-              @click="handleApprove"
-            >
-              <Loader2 v-if="loadingApprove" class="animate-spin" :size="18" />
-              <CheckCircle2 v-else :size="18" />
-              Duyệt hồ sơ
-            </button>
+          <FhButton variant="secondary" size="md" @click="close">Đóng</FhButton>
+          <div class="flex items-center gap-2.5">
+            <FhButton variant="danger" size="md" :disabled="loadingApprove" @click="handleReject">
+              <XCircle :size="16" /> Từ chối
+            </FhButton>
+            <FhButton variant="primary" size="md" :loading="loadingApprove" :disabled="loadingApprove" @click="handleApprove">
+              <CheckCircle2 v-if="!loadingApprove" :size="16" /> Duyệt hồ sơ
+            </FhButton>
           </div>
-        </div>
-        <div v-else class="p-6 bg-white border-t border-gray-100 shrink-0 flex items-center justify-end">
-          <button 
-            type="button"
-            class="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
-            @click="close"
-          >
-            Đóng
-          </button>
-        </div>
+        </footer>
+        <footer v-else class="flex items-center justify-end border-t border-ink-100 bg-ink-50/50 px-6 py-4 shrink-0">
+          <FhButton variant="secondary" size="md" @click="close">Đóng</FhButton>
+        </footer>
       </div>
     </div>
   </Transition>
 </template>
-
-<style scoped>
-.drawer-enter-active,
-.drawer-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.drawer-enter-from,
-.drawer-leave-to {
-  opacity: 0;
-}
-
-.drawer-enter-active .drawer-panel,
-.drawer-leave-active .drawer-panel {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.drawer-enter-from .drawer-panel,
-.drawer-leave-to .drawer-panel {
-  transform: translateX(100%);
-}
-</style>

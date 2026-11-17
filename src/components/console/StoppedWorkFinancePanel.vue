@@ -34,18 +34,20 @@ const reasons = computed(() => result.value?.reasonCodes.map(code => {
 </script>
 
 <template>
-  <section v-if="canRead" class="space-y-3 rounded-xl border border-ink-200 bg-white p-4 text-sm" aria-label="Đối soát công việc gián đoạn" data-testid="staff-stopped-work-finance">
+  <section v-if="canRead" class="space-y-3 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 text-sm shadow-(--shadow-e1)" aria-label="Đối soát công việc gián đoạn" data-testid="staff-stopped-work-finance">
     <h2 class="font-semibold text-ink-900">Đối soát công việc gián đoạn</h2>
     <FhButton variant="secondary" size="md" :loading="busy" :disabled="busy" @click="read">{{ error ? 'Thử lại' : 'Kiểm tra nghĩa vụ cũ' }}</FhButton>
-    <p v-if="error" role="alert">Chưa đọc được thông tin đối soát. Vui lòng thử lại.</p>
-    <div v-else-if="result" class="space-y-2">
-      <p>{{ result.customer.state === 'VERIFIED_WORK_STOPPED_UNBILLED' ? 'Công việc đã dừng, chưa phát hiện chứng từ thu tiền.' : 'Nghĩa vụ tài chính cần đối soát.' }}</p>
-      <p>Báo giá cũ chỉ để xem lịch sử. Số tiền phải trả và hoàn tiền: Chưa xác định.</p>
-      <ul class="list-disc pl-5"><li v-for="reason in reasons" :key="reason">{{ reason }}</li></ul>
-      <p v-if="result.evidence.invoices?.length">Hóa đơn cần đối chiếu: {{ result.evidence.invoices.length }}</p>
-      <router-link v-if="auth.userRole === 'SERVICE_MANAGER' && (result.evidence.partRequests?.length || result.evidence.partCustodies?.length)" to="/console/part-returns" class="text-brand-700 underline">Kiểm tra linh kiện hoàn trả</router-link>
-      <p class="text-ink-600">Thông tin chỉ để đối chiếu, chưa thực hiện thu tiền, hoàn tiền hoặc nhận kho. Khách vẫn được đặt lịch mới độc lập.</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-danger-700">Chưa đọc được thông tin đối soát. Vui lòng thử lại.</p>
+    </Transition>
+    <div v-if="!error && result" class="space-y-2 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 p-3">
+      <p class="font-medium text-ink-900">{{ result.customer.state === 'VERIFIED_WORK_STOPPED_UNBILLED' ? 'Công việc đã dừng, chưa phát hiện chứng từ thu tiền.' : 'Nghĩa vụ tài chính cần đối soát.' }}</p>
+      <p class="text-ink-700">Báo giá cũ chỉ để xem lịch sử. Số tiền phải trả và hoàn tiền: Chưa xác định.</p>
+      <ul class="list-disc pl-5 text-ink-700"><li v-for="reason in reasons" :key="reason">{{ reason }}</li></ul>
+      <p v-if="result.evidence.invoices?.length" class="text-ink-800">Hóa đơn cần đối chiếu: <span class="font-num font-semibold text-ink-900">{{ result.evidence.invoices.length }}</span></p>
+      <router-link v-if="auth.userRole === 'SERVICE_MANAGER' && (result.evidence.partRequests?.length || result.evidence.partCustodies?.length)" to="/console/part-returns" class="inline-block font-medium text-brand-700 hover:underline">Kiểm tra linh kiện hoàn trả</router-link>
+      <p class="text-xs text-ink-600">Thông tin chỉ để đối chiếu, chưa thực hiện thu tiền, hoàn tiền hoặc nhận kho. Khách vẫn được đặt lịch mới độc lập.</p>
     </div>
-    <p v-else-if="checked">Chưa có thông tin đối soát công việc gián đoạn cho đơn này.</p>
+    <p v-else-if="!error && checked" class="text-ink-500">Chưa có thông tin đối soát công việc gián đoạn cho đơn này.</p>
   </section>
 </template>

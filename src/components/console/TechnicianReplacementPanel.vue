@@ -162,9 +162,9 @@ onMounted(load);
     <p class="mb-4 text-sm text-ink-600 text-pretty">Mỗi quyết định được máy chủ kiểm tra và ghi nhận cùng với trạng thái đơn. Tiền, ưu đãi, báo giá và linh kiện không được chuyển sang thợ khác.</p>
     <p v-if="supportCase.reasonClass" class="mb-4 text-sm text-ink-600 text-pretty">Đây là xử lý vận hành của đơn, tách biệt với kết luận trách nhiệm và điểm uy tín của kỹ thuật viên.</p>
     <FhSkeleton v-if="loading" height="40px" :count="3" />
-    <div v-else-if="loadError" class="text-sm text-ink-700" role="alert">{{ CONSOLE_LOAD_ERROR }} <button type="button" class="ml-1 font-medium text-brand-700 hover:underline" @click="load">Thử lại</button></div>
+    <div v-else-if="loadError" class="text-sm text-ink-700" role="alert">{{ CONSOLE_LOAD_ERROR }} <button type="button" class="ml-1 font-medium text-brand-700 hover:underline cursor-pointer" @click="load">Thử lại</button></div>
     <template v-else-if="options">
-      <div class="mb-4 grid gap-2 rounded-xl border border-ink-200 bg-ink-50 p-3 text-xs text-ink-700 sm:grid-cols-2" data-testid="replacement-preflight-flags">
+      <div class="mb-4 grid gap-2 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/70 p-3 text-xs text-ink-700 sm:grid-cols-2" data-testid="replacement-preflight-flags">
         <p>Báo giá đã duyệt: <strong>{{ options.flags.approvedQuote ? 'Có' : 'Không' }}</strong></p>
         <p>Hóa đơn: <strong>{{ options.flags.invoice ? 'Có' : 'Không' }}</strong></p>
         <p>Thanh toán: <strong>{{ options.flags.payment ? 'Cần kiểm tra' : 'Chưa ghi nhận' }}</strong></p>
@@ -174,7 +174,7 @@ onMounted(load);
       </div>
 
       <div v-if="!closeForRebook?.allowed" class="space-y-1 text-sm text-ink-600" data-testid="replacement-close-blocked">
-        <p class="font-medium">Chưa thể kết thúc đơn để đặt lại</p>
+        <p class="font-medium text-ink-900">Chưa thể kết thúc đơn để đặt lại</p>
         <ul class="list-inside list-disc"><li v-for="message in explainReasons(closeForRebook?.reasons ?? [])" :key="message">{{ message }}</li></ul>
       </div>
 
@@ -187,18 +187,22 @@ onMounted(load);
       <label class="mt-4 flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do xử lý (10–2.000 ký tự)
         <textarea v-model="reason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="replacement-reason" />
       </label>
-      <p v-if="error" class="mt-2 text-sm text-danger-700" role="alert">{{ error }}</p>
+      <Transition name="fh-fade-slide">
+        <p v-if="error" class="mt-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ error }}</p>
+      </Transition>
       <FhButton v-if="pendingCommand && !needsPreflight" variant="secondary" size="md" :loading="busy" :disabled="busy" data-testid="replacement-command-retry" @click="retryCommand">Thử lại đúng lệnh</FhButton>
       <FhButton v-if="needsPreflight" variant="secondary" size="md" :disabled="busy" data-testid="replacement-command-refresh" @click="load">Tải lại trạng thái</FhButton>
     </template>
 
-    <div v-if="confirmOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="cancelConfirmation">
-      <section class="w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="replacement-confirm-title" data-testid="replacement-confirm-dialog">
-        <h2 id="replacement-confirm-title" class="text-lg font-semibold text-ink-900">Xác nhận xử lý yêu cầu</h2>
-        <p class="text-sm text-ink-700">{{ confirmationText }}</p>
-        <p class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">Điều kiện được kiểm tra lại khi gửi. Nếu có thay đổi, máy chủ từ chối và yêu cầu tải lại trạng thái.</p>
-        <div class="flex justify-end gap-2"><FhButton variant="ghost" size="md" :disabled="busy || !!pendingCommand" @click="cancelConfirmation">Quay lại</FhButton><FhButton size="md" :loading="busy" :disabled="busy" data-testid="replacement-confirm" @click="runCommand">Xác nhận</FhButton></div>
-      </section>
-    </div>
+    <Transition name="fh-modal">
+      <div v-if="confirmOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="cancelConfirmation" @keydown.esc="cancelConfirmation">
+        <section class="fh-modal-panel w-full max-w-lg space-y-4 rounded-[var(--radius-lg)] border border-ink-200/90 bg-white p-5 shadow-(--shadow-e3) sm:p-6" role="dialog" aria-modal="true" aria-labelledby="replacement-confirm-title" data-testid="replacement-confirm-dialog">
+          <h2 id="replacement-confirm-title" class="text-lg font-semibold text-ink-900">Xác nhận xử lý yêu cầu</h2>
+          <p class="text-sm text-ink-700">{{ confirmationText }}</p>
+          <p class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">Điều kiện được kiểm tra lại khi gửi. Nếu có thay đổi, máy chủ từ chối và yêu cầu tải lại trạng thái.</p>
+          <div class="flex justify-end gap-2"><FhButton variant="ghost" size="md" :disabled="busy || !!pendingCommand" @click="cancelConfirmation">Quay lại</FhButton><FhButton size="md" :loading="busy" :disabled="busy" data-testid="replacement-confirm" @click="runCommand">Xác nhận</FhButton></div>
+        </section>
+      </div>
+    </Transition>
   </FhCard>
 </template>

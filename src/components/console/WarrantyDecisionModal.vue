@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
+import { consoleField, consoleTextarea } from './console-ui';
 import { warrantyManagerApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
 import type { FixHomePart } from '../../api/admin-parts.api';
@@ -180,239 +181,246 @@ async function submit() {
 </script>
 
 <template>
-  <div
-    v-if="open && claim && mode"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
-    @keydown.esc="close"
-  >
+  <Transition name="fh-modal">
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="warranty-decision-title"
-      class="bg-white rounded-[var(--radius-lg)] max-w-lg w-full p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+      v-if="open && claim && mode"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4"
+      @click.self="close"
+      @keydown.esc="close"
     >
-      <div class="flex items-center justify-between">
-        <h3 id="warranty-decision-title" class="text-base font-bold text-ink-900">{{ title }}</h3>
-        <button type="button" class="p-1 rounded-full hover:bg-ink-100" aria-label="Đóng" @click="close">
-          <X :size="18" />
-        </button>
-      </div>
-
-      <div class="p-3 rounded-[var(--radius-sm)] bg-ink-50 text-xs space-y-1">
-        <p>
-          Đơn <span class="font-mono font-bold text-brand-700">{{ claim.order.code }}</span> ·
-          {{ claim.order.serviceName || 'Bảo hành dịch vụ' }} · Khách hàng: {{ claim.order.customerName }}
-        </p>
-        <p class="whitespace-pre-line text-ink-700">{{ claim.description }}</p>
-        <p v-if="claim.submittedAfterExpiry" class="text-warning-700">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành.</p>
-      </div>
-
-      <template v-if="mode === 'assign'">
-        <div class="space-y-1">
-          <label for="warranty-assign" class="text-xs font-medium text-ink-700">Kỹ thuật viên</label>
-          <select
-            id="warranty-assign"
-            v-model="technicianId"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          >
-            <option value="" disabled>Chọn kỹ thuật viên</option>
-            <option v-for="tech in assignable" :key="tech.id" :value="tech.id">{{ tech.fullName }}</option>
-          </select>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="warranty-decision-title"
+        class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-lg w-full flex flex-col max-h-[90dvh] overflow-hidden shadow-(--shadow-e3)"
+      >
+        <div class="flex items-center justify-between border-b border-ink-100 bg-ink-50/70 px-6 py-4 shrink-0">
+          <h3 id="warranty-decision-title" class="text-base font-bold text-ink-900">{{ title }}</h3>
+          <button type="button" class="rounded-[var(--radius-sm)] p-1 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="close">
+            <X :size="18" />
+          </button>
         </div>
-        <p class="text-xs text-ink-500">Yêu cầu quay lại bước chờ nhận; các lượt kiểm tra đang mở sẽ bị hủy.</p>
-      </template>
 
-      <template v-else-if="mode === 'approve'">
-        <div v-if="claim.visit" class="p-3 rounded-[var(--radius-sm)] border border-ink-200 text-xs space-y-1.5">
-          <p class="font-semibold text-ink-800">Đề xuất của kỹ thuật viên</p>
-          <p>{{ proposal ? inspectionResultLabels[proposal] : '—' }}</p>
-          <p v-if="claim.visit.notCoveredReasonCode">
-            Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
-          </p>
-          <p class="whitespace-pre-line text-ink-700">{{ claim.visit.findings }}</p>
-          <div v-if="claim.visit.evidenceRefs?.length" class="flex flex-wrap gap-2">
-            <a v-for="url in claim.visit.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
-              <img :src="url" alt="Bằng chứng của kỹ thuật viên" class="w-14 h-14 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
-            </a>
+        <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-4 space-y-4">
+          <div class="p-3 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/80 text-xs space-y-1">
+            <p>
+              Đơn <span class="font-num font-bold text-brand-700">{{ claim.order.code }}</span> ·
+              {{ claim.order.serviceName || 'Bảo hành dịch vụ' }} · Khách hàng: {{ claim.order.customerName }}
+            </p>
+            <p class="whitespace-pre-line text-ink-700">{{ claim.description }}</p>
+            <p v-if="claim.submittedAfterExpiry" class="text-warning-700">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành.</p>
           </div>
-        </div>
-        <div v-if="!changing" class="flex items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] border border-ink-200 text-xs">
-          <span class="text-ink-700">Kết luận cuối cùng: <strong class="text-ink-900">{{ inspectionResultLabels[result] }}</strong></span>
-          <button type="button" class="shrink-0 font-medium text-brand-700 hover:underline" @click="changing = true">Đổi kết luận / chọn linh kiện khác</button>
-        </div>
-        <fieldset v-if="changing" class="space-y-1.5">
-          <legend class="text-xs font-medium text-ink-700 mb-1">Kết luận cuối cùng</legend>
-          <label
-            v-for="(label, value) in inspectionResultLabels"
-            :key="value"
-            class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer"
-            :class="result === value ? 'border-brand-600 bg-brand-50' : ''"
-          >
-            <input v-model="result" type="radio" name="warranty-final" :value="value" />
-            {{ label }}
-            <span v-if="value === proposal" class="ml-auto text-ink-500">Đề xuất</span>
-          </label>
-        </fieldset>
-        <div v-if="overriding" class="space-y-1">
-          <label for="warranty-override-reason" class="text-xs font-medium text-warning-700">Lý do đổi kết luận của kỹ thuật viên</label>
-          <textarea
-            id="warranty-override-reason"
-            v-model="overrideReason"
-            rows="2"
-            maxlength="2000"
-            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          ></textarea>
-        </div>
-        <div v-if="result === 'covered_part' && faultyLines.length" class="space-y-1 p-3 rounded-[var(--radius-sm)] border border-ink-200" data-testid="faulty-lines">
-          <p class="text-xs font-medium text-ink-700">Kỹ thuật viên báo linh kiện hỏng</p>
-          <ul class="text-sm text-ink-900">
-            <li v-for="line in faultyLines" :key="line.id">{{ line.name }} <span class="text-ink-500">× {{ claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity }}<template v-if="(claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity) !== line.quantity"> / {{ line.quantity }}</template></span></li>
-          </ul>
-          <p class="text-xs text-ink-500">FixHome cấp đúng các linh kiện này (dòng linh kiện thợ tự mua thì thợ tự thay).</p>
-        </div>
-        <div v-if="changing && workmanship" class="space-y-1.5 p-3 rounded-[var(--radius-sm)] border border-ink-200">
-          <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
-          <input
-            v-model="partSearch"
-            type="search"
-            placeholder="Tìm linh kiện theo tên hoặc mã"
-            aria-label="Tìm linh kiện FixHome"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          />
-          <div v-if="partOptions.length" class="flex gap-2">
-            <select v-model="partId" aria-label="Linh kiện" class="flex-1 h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm">
-              <option value="" disabled>Chọn linh kiện</option>
-              <option v-for="part in partOptions" :key="part.id" :value="part.id">{{ part.name }}</option>
-            </select>
-            <input
-              v-model.number="partQty"
-              type="number"
-              min="1"
-              max="100"
-              aria-label="Số lượng"
-              class="w-20 h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-            />
-          </div>
-        </div>
-        <div v-if="notCovered" class="space-y-1">
-          <label for="warranty-final-reason" class="text-xs font-medium text-ink-700">Lý do không bảo hành</label>
-          <select
-            id="warranty-final-reason"
-            v-model="reasonCode"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          >
-            <option v-for="(label, value) in notCoveredReasonLabels" :key="value" :value="value">{{ label }}</option>
-          </select>
-        </div>
-        <div class="space-y-1">
-          <label for="warranty-customer-note" class="text-xs font-medium text-ink-700">
-            Nội dung gửi khách hàng {{ notCovered ? '' : '(không bắt buộc)' }}
-          </label>
-          <textarea
-            id="warranty-customer-note"
-            v-model="customerNote"
-            rows="4"
-            maxlength="2000"
-            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          ></textarea>
-        </div>
-      </template>
 
-      <template v-else-if="mode === 'reject'">
-        <div class="space-y-1">
-          <label for="warranty-reject-reason" class="text-xs font-medium text-ink-700">Lý do từ chối</label>
-          <select
-            id="warranty-reject-reason"
-            v-model="reasonCode"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          >
-            <option v-for="(label, value) in notCoveredReasonLabels" :key="value" :value="value">{{ label }}</option>
-          </select>
-        </div>
-        <div class="space-y-1">
-          <label for="warranty-reject-note" class="text-xs font-medium text-ink-700">Nội dung gửi khách hàng</label>
-          <textarea
-            id="warranty-reject-note"
-            v-model="customerNote"
-            rows="4"
-            maxlength="2000"
-            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          ></textarea>
-        </div>
-      </template>
+          <template v-if="mode === 'assign'">
+            <div class="space-y-1.5">
+              <label for="warranty-assign" class="text-xs font-medium text-ink-700">Kỹ thuật viên</label>
+              <select
+                id="warranty-assign"
+                v-model="technicianId"
+                :class="[consoleField, 'w-full']"
+              >
+                <option value="" disabled>Chọn kỹ thuật viên</option>
+                <option v-for="tech in assignable" :key="tech.id" :value="tech.id">{{ tech.fullName }}</option>
+              </select>
+            </div>
+            <p class="text-xs text-ink-500">Yêu cầu quay lại bước chờ nhận; các lượt kiểm tra đang mở sẽ bị hủy.</p>
+          </template>
 
-      <template v-else-if="mode === 'review'">
-        <p class="text-xs text-ink-700">
-          {{ claim.noShowFlaggedAt ? 'Kỹ thuật viên đã nhận nhưng chưa check-in đúng hạn.' : 'Lý do từ chối: ' + (claim.declineReasonCode || '—') }}
-        </p>
-        <fieldset class="space-y-1.5">
-          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="reviewValid ? 'border-brand-600 bg-brand-50' : ''">
-            <input v-model="reviewValid" type="radio" name="warranty-review" :value="true" /> Hợp lệ, không trừ điểm
-          </label>
-          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="!reviewValid ? 'border-brand-600 bg-brand-50' : ''">
-            <input v-model="reviewValid" type="radio" name="warranty-review" :value="false" /> Không chính đáng, trừ điểm uy tín
-          </label>
-        </fieldset>
-        <div class="space-y-1">
-          <label for="warranty-review-note" class="text-xs font-medium text-ink-700">Nhận xét</label>
-          <textarea
-            id="warranty-review-note"
-            v-model="reviewNote"
-            rows="3"
-            maxlength="2000"
-            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          ></textarea>
-        </div>
-      </template>
+          <template v-else-if="mode === 'approve'">
+            <div v-if="claim.visit" class="p-3 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 text-xs space-y-1.5">
+              <p class="font-semibold text-ink-800">Đề xuất của kỹ thuật viên</p>
+              <p>{{ proposal ? inspectionResultLabels[proposal] : '—' }}</p>
+              <p v-if="claim.visit.notCoveredReasonCode">
+                Lý do: {{ notCoveredReasonLabels[claim.visit.notCoveredReasonCode as NotCoveredReason] || 'Khác' }}
+              </p>
+              <p class="whitespace-pre-line text-ink-700">{{ claim.visit.findings }}</p>
+              <div v-if="claim.visit.evidenceRefs?.length" class="flex flex-wrap gap-2">
+                <a v-for="url in claim.visit.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
+                  <img :src="url" alt="Bằng chứng của kỹ thuật viên" class="w-14 h-14 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
+                </a>
+              </div>
+            </div>
+            <div v-if="!changing" class="flex items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] border border-ink-200 text-xs">
+              <span class="text-ink-700">Kết luận cuối cùng: <strong class="text-ink-900">{{ inspectionResultLabels[result] }}</strong></span>
+              <button type="button" class="shrink-0 font-medium text-brand-700 transition-colors hover:text-brand-800 hover:underline cursor-pointer" @click="changing = true">Đổi kết luận / chọn linh kiện khác</button>
+            </div>
+            <fieldset v-if="changing" class="space-y-1.5">
+              <legend class="text-xs font-medium text-ink-700 mb-1">Kết luận cuối cùng</legend>
+              <label
+                v-for="(label, value) in inspectionResultLabels"
+                :key="value"
+                class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer"
+                :class="result === value ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'"
+              >
+                <input v-model="result" type="radio" name="warranty-final" :value="value" class="accent-brand-600" />
+                {{ label }}
+                <span v-if="value === proposal" class="ml-auto text-ink-500">Đề xuất</span>
+              </label>
+            </fieldset>
+            <div v-if="overriding" class="space-y-1.5">
+              <label for="warranty-override-reason" class="text-xs font-medium text-warning-700">Lý do đổi kết luận của kỹ thuật viên</label>
+              <textarea
+                id="warranty-override-reason"
+                v-model="overrideReason"
+                rows="2"
+                maxlength="2000"
+                :class="consoleTextarea"
+              ></textarea>
+            </div>
+            <div v-if="result === 'covered_part' && faultyLines.length" class="space-y-1 p-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/40" data-testid="faulty-lines">
+              <p class="text-xs font-medium text-ink-700">Kỹ thuật viên báo linh kiện hỏng</p>
+              <ul class="text-sm text-ink-900">
+                <li v-for="line in faultyLines" :key="line.id">{{ line.name }} <span class="font-num text-ink-500">× {{ claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity }}<template v-if="(claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity) !== line.quantity"> / {{ line.quantity }}</template></span></li>
+              </ul>
+              <p class="text-xs text-ink-500">FixHome cấp đúng các linh kiện này (dòng linh kiện thợ tự mua thì thợ tự thay).</p>
+            </div>
+            <div v-if="changing && workmanship" class="space-y-2 p-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/40">
+              <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
+              <input
+                v-model="partSearch"
+                type="search"
+                placeholder="Tìm linh kiện theo tên hoặc mã"
+                aria-label="Tìm linh kiện FixHome"
+                :class="[consoleField, 'w-full']"
+              />
+              <div v-if="partOptions.length" class="flex gap-2">
+                <select v-model="partId" aria-label="Linh kiện" :class="[consoleField, 'flex-1']">
+                  <option value="" disabled>Chọn linh kiện</option>
+                  <option v-for="part in partOptions" :key="part.id" :value="part.id">{{ part.name }}</option>
+                </select>
+                <input
+                  v-model.number="partQty"
+                  type="number"
+                  min="1"
+                  max="100"
+                  aria-label="Số lượng"
+                  :class="[consoleField, 'w-20 font-num']"
+                />
+              </div>
+            </div>
+            <div v-if="notCovered" class="space-y-1.5">
+              <label for="warranty-final-reason" class="text-xs font-medium text-ink-700">Lý do không bảo hành</label>
+              <select
+                id="warranty-final-reason"
+                v-model="reasonCode"
+                :class="[consoleField, 'w-full']"
+              >
+                <option v-for="(label, value) in notCoveredReasonLabels" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="space-y-1.5">
+              <label for="warranty-customer-note" class="text-xs font-medium text-ink-700">
+                Nội dung gửi khách hàng {{ notCovered ? '' : '(không bắt buộc)' }}
+              </label>
+              <textarea
+                id="warranty-customer-note"
+                v-model="customerNote"
+                rows="4"
+                maxlength="2000"
+                :class="consoleTextarea"
+              ></textarea>
+            </div>
+          </template>
 
-      <template v-else>
-        <fieldset class="space-y-1.5">
-          <legend class="text-xs font-medium text-ink-700 mb-1">Kết quả đóng</legend>
-          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="outcome === 'resolved' ? 'border-brand-600 bg-brand-50' : ''">
-            <input v-model="outcome" type="radio" name="warranty-outcome" value="resolved" /> Đã hoàn tất bảo hành
-          </label>
-          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="outcome === 'rejected' ? 'border-brand-600 bg-brand-50' : ''">
-            <input v-model="outcome" type="radio" name="warranty-outcome" value="rejected" /> Không được bảo hành
-          </label>
-          <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border border-ink-300 text-xs cursor-pointer" :class="outcome === 'unfixed' ? 'border-brand-600 bg-brand-50' : ''">
-            <input v-model="outcome" type="radio" name="warranty-outcome" value="unfixed" /> Không khắc phục được: hoàn tiền cho khách
-          </label>
-        </fieldset>
-        <div v-if="unfixed" class="space-y-1">
-          <label for="warranty-refund" class="text-xs font-medium text-ink-700">Số tiền hoàn vào ví khách (₫, để trống = cả hạng mục)</label>
-          <input
-            id="warranty-refund"
-            v-model="refundAmount"
-            inputmode="numeric"
-            class="w-full h-[44px] px-3 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          />
-          <p class="text-xs text-ink-500">Số tiền này bị trừ từ ví kỹ thuật viên đã làm đơn gốc và thợ nhận bảo hành bị trừ điểm uy tín.</p>
-        </div>
-        <p v-if="claim.status === 'disputed'" class="text-xs text-warning-700">
-          Yêu cầu bị khách phản đối: quản lý đã duyệt lần đầu không thể tự đóng, cần một quản lý khác xem xét.
-        </p>
-        <div class="space-y-1">
-          <label for="warranty-close-note" class="text-xs font-medium text-ink-700">
-            Ghi chú {{ customerAgreed && !unfixed ? '(không bắt buộc vì khách hàng đã đồng ý)' : '' }}
-          </label>
-          <textarea
-            id="warranty-close-note"
-            v-model="closeNote"
-            rows="3"
-            maxlength="2000"
-            class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
-          ></textarea>
-        </div>
-      </template>
+          <template v-else-if="mode === 'reject'">
+            <div class="space-y-1.5">
+              <label for="warranty-reject-reason" class="text-xs font-medium text-ink-700">Lý do từ chối</label>
+              <select
+                id="warranty-reject-reason"
+                v-model="reasonCode"
+                :class="[consoleField, 'w-full']"
+              >
+                <option v-for="(label, value) in notCoveredReasonLabels" :key="value" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="space-y-1.5">
+              <label for="warranty-reject-note" class="text-xs font-medium text-ink-700">Nội dung gửi khách hàng</label>
+              <textarea
+                id="warranty-reject-note"
+                v-model="customerNote"
+                rows="4"
+                maxlength="2000"
+                :class="consoleTextarea"
+              ></textarea>
+            </div>
+          </template>
 
-      <p v-if="error" role="alert" class="text-xs text-danger-700">{{ error }}</p>
+          <template v-else-if="mode === 'review'">
+            <p class="text-xs text-ink-700">
+              {{ claim.noShowFlaggedAt ? 'Kỹ thuật viên đã nhận nhưng chưa check-in đúng hạn.' : 'Lý do từ chối: ' + (claim.declineReasonCode || '—') }}
+            </p>
+            <fieldset class="space-y-1.5">
+              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="reviewValid ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+                <input v-model="reviewValid" type="radio" name="warranty-review" :value="true" class="accent-brand-600" /> Hợp lệ, không trừ điểm
+              </label>
+              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="!reviewValid ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+                <input v-model="reviewValid" type="radio" name="warranty-review" :value="false" class="accent-brand-600" /> Không chính đáng, trừ điểm uy tín
+              </label>
+            </fieldset>
+            <div class="space-y-1.5">
+              <label for="warranty-review-note" class="text-xs font-medium text-ink-700">Nhận xét</label>
+              <textarea
+                id="warranty-review-note"
+                v-model="reviewNote"
+                rows="3"
+                maxlength="2000"
+                :class="consoleTextarea"
+              ></textarea>
+            </div>
+          </template>
 
-      <div class="flex gap-2 pt-2">
-        <FhButton variant="ghost" size="sm" class="flex-1" :disabled="submitting" @click="close">Đóng</FhButton>
-        <FhButton variant="primary" size="sm" class="flex-1" :loading="submitting" :disabled="submitting" @click="submit">
-          {{ submitting ? 'Đang gửi yêu cầu…' : 'Xác nhận' }}
-        </FhButton>
+          <template v-else>
+            <fieldset class="space-y-1.5">
+              <legend class="text-xs font-medium text-ink-700 mb-1">Kết quả đóng</legend>
+              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'resolved' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+                <input v-model="outcome" type="radio" name="warranty-outcome" value="resolved" class="accent-brand-600" /> Đã hoàn tất bảo hành
+              </label>
+              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'rejected' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+                <input v-model="outcome" type="radio" name="warranty-outcome" value="rejected" class="accent-brand-600" /> Không được bảo hành
+              </label>
+              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'unfixed' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+                <input v-model="outcome" type="radio" name="warranty-outcome" value="unfixed" class="accent-brand-600" /> Không khắc phục được: hoàn tiền cho khách
+              </label>
+            </fieldset>
+            <div v-if="unfixed" class="space-y-1.5">
+              <label for="warranty-refund" class="text-xs font-medium text-ink-700">Số tiền hoàn vào ví khách (₫, để trống = cả hạng mục)</label>
+              <input
+                id="warranty-refund"
+                v-model="refundAmount"
+                inputmode="numeric"
+                :class="[consoleField, 'w-full font-num']"
+              />
+              <p class="text-xs text-ink-500">Số tiền này bị trừ từ ví kỹ thuật viên đã làm đơn gốc và thợ nhận bảo hành bị trừ điểm uy tín.</p>
+            </div>
+            <p v-if="claim.status === 'disputed'" class="text-xs text-warning-700">
+              Yêu cầu bị khách phản đối: quản lý đã duyệt lần đầu không thể tự đóng, cần một quản lý khác xem xét.
+            </p>
+            <div class="space-y-1.5">
+              <label for="warranty-close-note" class="text-xs font-medium text-ink-700">
+                Ghi chú {{ customerAgreed && !unfixed ? '(không bắt buộc vì khách hàng đã đồng ý)' : '' }}
+              </label>
+              <textarea
+                id="warranty-close-note"
+                v-model="closeNote"
+                rows="3"
+                maxlength="2000"
+                :class="consoleTextarea"
+              ></textarea>
+            </div>
+          </template>
+
+          <Transition name="fh-fade-slide">
+            <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700">{{ error }}</p>
+          </Transition>
+        </div>
+
+        <div class="flex gap-2 border-t border-ink-100 bg-ink-50/50 px-6 py-3.5 shrink-0">
+          <FhButton variant="ghost" size="sm" class="flex-1" :disabled="submitting" @click="close">Đóng</FhButton>
+          <FhButton variant="primary" size="sm" class="flex-1" :loading="submitting" :disabled="submitting" @click="submit">
+            {{ submitting ? 'Đang gửi yêu cầu…' : 'Xác nhận' }}
+          </FhButton>
+        </div>
       </div>
     </div>
-  </div>
+  </Transition>
 </template>

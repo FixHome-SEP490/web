@@ -66,33 +66,37 @@ async function submit() {
 </script>
 
 <template>
-  <div v-if="canOperate" class="space-y-2 border-t border-ink-100 pt-3 text-sm">
-    <p v-if="row.manualReviewState">{{ labels[row.manualReviewState] }} · Phiên bản {{ version }}</p>
-    <p v-if="row.lastManualReview" class="text-ink-600">{{ row.lastManualReview.reason }} · {{ vnDateTimeString(row.lastManualReview.occurredAt) }}<span v-if="row.lastManualReview.observedQty !== undefined"> · Số lượng quan sát: {{ row.lastManualReview.observedQty }}</span></p>
-    <p class="text-warning-800">Đây là ghi nhận quan sát, không phải xác nhận nhận kho. Trạng thái biên nhận vẫn chưa xác định.</p>
-    <form v-if="row.manualReviewState" class="space-y-3" data-testid="legacy-review-form" @submit.prevent="submit">
+  <div v-if="canOperate" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/60 p-3.5 text-sm">
+    <p v-if="row.manualReviewState" class="font-medium text-ink-900">{{ labels[row.manualReviewState] }} · Phiên bản <span class="font-num">{{ version }}</span></p>
+    <p v-if="row.lastManualReview" class="text-ink-600">{{ row.lastManualReview.reason }} · <span class="font-num">{{ vnDateTimeString(row.lastManualReview.occurredAt) }}</span><span v-if="row.lastManualReview.observedQty !== undefined"> · Số lượng quan sát: <span class="font-num font-semibold text-ink-900">{{ row.lastManualReview.observedQty }}</span></span></p>
+    <p class="text-xs text-ink-600">Đây là ghi nhận quan sát, không phải xác nhận nhận kho. Trạng thái biên nhận vẫn chưa xác định.</p>
+    <form v-if="row.manualReviewState" class="space-y-3 pt-1" data-testid="legacy-review-form" @submit.prevent="submit">
       <fieldset :disabled="locked" class="grid gap-3 sm:grid-cols-2">
-        <label class="space-y-1">Kết quả xác minh
+        <label class="space-y-1 text-xs font-medium text-ink-700">Kết quả xác minh
           <select v-model="status" :class="consoleField" class="min-h-11 w-full">
             <option value="INVESTIGATING">Đang xác minh</option><option value="PHYSICALLY_VERIFIED">Đã kiểm tra vật lý</option><option value="DISCREPANCY_RECORDED">Đã ghi nhận chênh lệch</option>
           </select>
         </label>
-        <label class="space-y-1">Mã bằng chứng nội bộ (UUID)
-          <input v-model="evidence" :class="consoleField" class="min-h-11 w-full" autocomplete="off" data-testid="legacy-review-evidence" />
+        <label class="space-y-1 text-xs font-medium text-ink-700">Mã bằng chứng nội bộ (UUID)
+          <input v-model="evidence" :class="consoleField" class="min-h-11 w-full font-num" autocomplete="off" data-testid="legacy-review-evidence" />
         </label>
-        <label class="space-y-1 sm:col-span-2">Lý do xác minh
+        <label class="space-y-1 text-xs font-medium text-ink-700 sm:col-span-2">Lý do xác minh
           <textarea v-model="reason" :disabled="locked" rows="2" maxlength="300" :class="consoleTextarea" class="w-full" data-testid="legacy-review-reason" />
-          <span class="text-xs text-ink-600">5–300 ký tự, không nhập liên kết hoặc thông tin cá nhân.</span>
+          <span class="text-xs font-normal text-ink-500">5–300 ký tự, không nhập liên kết hoặc thông tin cá nhân.</span>
         </label>
-        <label class="space-y-1">Số lượng quan sát (không bắt buộc)
-          <input v-model.number="observedQty" type="number" min="0" max="100" step="1" :class="consoleField" class="min-h-11 w-full" data-testid="legacy-review-quantity" />
+        <label class="space-y-1 text-xs font-medium text-ink-700">Số lượng quan sát (không bắt buộc)
+          <input v-model.number="observedQty" type="number" min="0" max="100" step="1" :class="consoleField" class="min-h-11 w-full font-num" data-testid="legacy-review-quantity" />
         </label>
-        <label v-if="correcting" class="space-y-1">Lý do đính chính kết luận trước
+        <label v-if="correcting" class="space-y-1 text-xs font-medium text-ink-700">Lý do đính chính kết luận trước
           <textarea v-model="correctionReason" maxlength="300" rows="2" :class="consoleTextarea" class="w-full" data-testid="legacy-review-correction" />
         </label>
       </fieldset>
-      <p v-if="error" role="alert" class="text-danger-700">{{ error }}</p>
-      <p v-if="saved" role="status">Đã ghi nhận xác minh; chưa phải biên nhận kho.</p>
+      <Transition name="fh-fade-slide">
+        <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-danger-700">{{ error }}</p>
+      </Transition>
+      <Transition name="fh-fade-slide">
+        <p v-if="saved" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-3 py-2 text-success-700">Đã ghi nhận xác minh; chưa phải biên nhận kho.</p>
+      </Transition>
       <FhButton v-if="reloadRequired" type="button" size="md" variant="secondary" @click="emit('refresh')">Tải lại xác minh</FhButton>
       <FhButton v-else type="submit" size="md" :loading="busy" :disabled="busy || saved">{{ uncertain ? 'Thử lại cùng lệnh' : correcting ? 'Ghi đính chính' : 'Ghi nhận xác minh' }}</FhButton>
     </form>

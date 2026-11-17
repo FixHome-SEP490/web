@@ -257,11 +257,11 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 
 <template>
   <div class="space-y-4">
-    <section v-if="faultyRows.length || faultyDone.length" class="rounded-[var(--radius-md)] border border-ink-200 bg-white" data-testid="faulty-part-returns" aria-label="Linh kiện hỏng bảo hành">
-      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3">
+    <section v-if="faultyRows.length || faultyDone.length" class="animate-slide-up overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" data-testid="faulty-part-returns" aria-label="Linh kiện hỏng bảo hành">
+      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 bg-ink-50/70 px-5 py-3.5">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <h2 class="text-base font-semibold text-ink-900">Linh kiện hỏng bảo hành</h2>
-          <span class="font-num text-sm text-ink-500">{{ faultyRows.length }}</span>
+          <span class="font-num text-sm font-medium text-ink-500">{{ faultyRows.length }}</span>
         </div>
         <p class="text-xs text-ink-500">Thợ nhận linh kiện thay thế trước, rồi nộp linh kiện hỏng về kho trong hạn.</p>
       </header>
@@ -274,13 +274,13 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
               <router-link :to="`/console/orders/${r.serviceOrderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
             </div>
             <div class="break-words text-sm font-semibold text-ink-900">{{ r.items.map((i) => i.partNameSnapshot).join(', ') }}</div>
-            <span class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="faultyTone(r)">{{ faultyStatus(r) }}</span>
+            <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium" :class="faultyTone(r)">{{ faultyStatus(r) }}</span>
           </div>
           <FhButton v-if="canOperate && r.faultyReturnedAt" variant="primary" size="md" class="w-full sm:w-auto" @click="inspectionRequest = r">Kiểm tra linh kiện hỏng</FhButton>
         </li>
       </ul>
       <details v-if="faultyDone.length" class="border-t border-ink-100 px-5 py-3 text-sm" data-testid="faulty-part-history">
-        <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Lịch sử đã kiểm tra ({{ faultyDone.length }})</summary>
+        <summary class="flex min-h-11 cursor-pointer items-center rounded-[var(--radius-sm)] font-medium text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Lịch sử đã kiểm tra (<span class="font-num">{{ faultyDone.length }}</span>)</summary>
         <ul class="mt-2 divide-y divide-ink-100">
           <li v-for="r in faultyDone" :key="r.id" class="space-y-1 py-3">
             <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
@@ -289,7 +289,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
               <span v-if="r.faultyInspectedAt" class="font-num">{{ vnDateTimeString(r.faultyInspectedAt) }}</span>
             </div>
             <div class="text-ink-900">{{ r.items.map((i) => i.partNameSnapshot).join(', ') }}</div>
-            <span class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="r.faultyInspectionResult === 'installation' ? 'bg-warning-50 text-warning-800' : 'bg-success-50 text-success-800'">{{ resultLabel(r.faultyInspectionResult) }}</span>
+            <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium" :class="r.faultyInspectionResult === 'installation' ? 'bg-warning-50 text-warning-800' : 'bg-success-50 text-success-800'">{{ resultLabel(r.faultyInspectionResult) }}</span>
             <p v-if="r.faultyInspectionNote" class="text-xs text-ink-600">{{ r.faultyInspectionNote }}</p>
           </li>
         </ul>
@@ -299,28 +299,30 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
     <section
       v-if="!returnsUnavailable"
       data-testid="part-returns-queue"
-      class="rounded-[var(--radius-md)] border border-ink-200 bg-white"
+      class="animate-slide-up-delay-1 overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)"
       aria-label="Linh kiện chờ nhận hoàn trả"
     >
-      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-3">
+      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 bg-ink-50/70 px-5 py-3.5">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <h2 class="text-base font-semibold text-ink-900">Chờ nhận linh kiện hoàn trả</h2>
-          <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-sm text-ink-500" data-testid="part-returns-count">{{ awaiting.length }}</span>
+          <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-sm font-medium text-ink-500" data-testid="part-returns-count">{{ awaiting.length }}</span>
         </div>
         <FhButton variant="ghost" size="md" :disabled="returnsLoading" @click="loadReturns">Làm mới</FhButton>
       </header>
 
-      <div
-        v-if="toastMessage"
-        class="mx-5 mt-3 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
-        :class="toastMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-800 border-danger-200'"
-        :role="toastMessage.type === 'success' ? 'status' : 'alert'"
-      >
-        <span>{{ toastMessage.text }}</span>
-        <button type="button" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng thông báo" @click="toastMessage = null">
-          <X :size="16" aria-hidden="true" />
-        </button>
-      </div>
+      <Transition name="fh-fade-slide">
+        <div
+          v-if="toastMessage"
+          class="mx-5 mt-3 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
+          :class="toastMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-800 border-danger-200'"
+          :role="toastMessage.type === 'success' ? 'status' : 'alert'"
+        >
+          <span>{{ toastMessage.text }}</span>
+          <button type="button" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] transition-colors hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer" aria-label="Đóng thông báo" @click="toastMessage = null">
+            <X :size="16" aria-hidden="true" />
+          </button>
+        </div>
+      </Transition>
 
       <div v-if="returnsLoading && !returnQueue.length" class="space-y-2 px-5 py-4" aria-busy="true" aria-label="Đang tải linh kiện chờ nhận">
         <FhSkeleton height="14px" width="30%" />
@@ -348,7 +350,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
           <div v-for="row in group.rows" :key="returnKey(row)" class="space-y-3 border-t border-ink-100 pt-3">
             <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
               <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
-              <span class="rounded-md bg-warning-50 px-2 py-1 text-sm font-medium text-warning-800" :data-testid="`part-return-pending-${row.partRequestItemId}`">Chờ nhận {{ pendingDeclaredQty(row) }}</span>
+              <span class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 font-num text-xs font-semibold text-warning-800" :data-testid="`part-return-pending-${row.partRequestItemId}`">Chờ nhận {{ pendingDeclaredQty(row) }}</span>
             </div>
             <dl class="flex flex-wrap gap-x-3 gap-y-2 text-sm text-ink-600" :aria-label="`Số lượng ${row.partNameSnapshot}`">
               <div class="inline-flex items-baseline gap-1"><dt>Cấp{{ ' ' }}</dt><dd class="font-num font-semibold text-ink-900">{{ row.issuedQty }}<span aria-hidden="true" class="ml-3 font-sans font-normal text-ink-600">{{ ' · ' }}</span></dd></div>
@@ -370,10 +372,10 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                   :max="maxAcceptQty(row)"
                   :aria-describedby="`accept-hint-${returnKey(row)}`"
                   :class="consoleField"
-                  class="min-h-11 w-24"
+                  class="min-h-11 w-24 font-num"
                 />
               </div>
-              <span :id="`accept-hint-${returnKey(row)}`" class="min-w-0 flex-1 pb-3 text-sm text-ink-600">Nhận thực tế tối đa {{ maxAcceptQty(row) }}</span>
+              <span :id="`accept-hint-${returnKey(row)}`" class="min-w-0 flex-1 pb-3 text-sm text-ink-600">Nhận thực tế tối đa <span class="font-num">{{ maxAcceptQty(row) }}</span></span>
               <FhButton
                 data-testid="accept-return"
                 variant="primary"
@@ -391,7 +393,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </ul>
 
       <details v-if="!returnsLoading && !returnsLoadError && heldGroups.length" class="border-t border-ink-100 px-5 py-3 text-sm" data-testid="part-returns-held">
-        <summary class="cursor-pointer rounded-lg font-medium text-ink-700 min-h-11 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Thợ đang giữ, chưa khai trả ({{ undeclared.length }})</summary>
+        <summary class="cursor-pointer rounded-[var(--radius-sm)] font-medium text-ink-700 min-h-11 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Thợ đang giữ, chưa khai trả (<span class="font-num">{{ undeclared.length }}</span>)</summary>
         <ul class="mt-2 space-y-2">
           <li v-for="group in heldGroups" :key="group.id" class="space-y-1">
             <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
@@ -401,7 +403,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
             </div>
             <p v-for="row in group.rows" :key="returnKey(row)" class="flex flex-wrap justify-between gap-x-3 gap-y-1 text-ink-700">
               <span class="min-w-0 break-words">{{ row.partNameSnapshot }}</span>
-              <span class="text-sm text-ink-600">Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Còn giữ {{ row.outstandingQty }}</span>
+              <span class="font-num text-sm text-ink-600">Cấp {{ row.issuedQty }} · Dùng {{ row.usedQty }} · Còn giữ {{ row.outstandingQty }}</span>
             </p>
           </li>
         </ul>
@@ -413,22 +415,22 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       v-if="canOperate && !legacyUnavailable"
       data-testid="legacy-part-returns"
       role="region"
-      class="rounded-[var(--radius-md)] border border-warning-200 bg-white"
+      class="animate-slide-up-delay-2 overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)"
       aria-labelledby="legacy-part-returns-title"
     >
-      <header class="flex flex-wrap items-start justify-between gap-2 border-b border-warning-200/70 px-5 py-3">
+      <header class="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 bg-ink-50/70 px-5 py-3.5">
         <div class="min-w-0">
           <h2 id="legacy-part-returns-title" class="text-base font-semibold text-ink-900">Linh kiện lịch sử cần xác minh</h2>
           <p class="mt-0.5 text-xs text-ink-600">Các dòng FixHome đã bàn giao trước khi bật sổ custody; không có sổ để đối chiếu.</p>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          <span v-if="!legacyLoading && !legacyLoadError" class="font-num text-sm text-ink-500" data-testid="legacy-part-returns-count">{{ legacyTotal }}</span>
+          <span v-if="!legacyLoading && !legacyLoadError" class="font-num text-sm font-medium text-ink-500" data-testid="legacy-part-returns-count">{{ legacyTotal }}</span>
           <FhButton variant="ghost" size="md" :disabled="legacyLoading" @click="loadLegacyReview">Làm mới</FhButton>
         </div>
       </header>
 
-      <div role="note" class="mx-5 mt-3 flex items-start gap-2 rounded-[var(--radius-sm)] border border-warning-300 bg-warning-50 px-4 py-3 text-sm text-warning-800" data-testid="legacy-part-returns-alert">
-        <AlertTriangle :size="18" class="mt-0.5 shrink-0" aria-hidden="true" />
+      <div role="note" class="mx-5 mt-3 flex items-start gap-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/80 px-4 py-3 text-sm text-ink-700" data-testid="legacy-part-returns-alert">
+        <AlertTriangle :size="18" class="mt-0.5 shrink-0 text-warning-600" aria-hidden="true" />
         <span>Chưa có chứng từ custody – quản lý dịch vụ (SM) xác minh thủ công. Không hiển thị số đã nhận, còn lại hoặc khai trả cho các dòng này.</span>
       </div>
 
@@ -448,11 +450,11 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </p>
 
       <template v-else>
-        <ul class="divide-y divide-warning-200/70">
-          <li v-for="row in legacyRows" :key="row.partRequestItemId" class="space-y-2 px-5 py-4" data-testid="legacy-part-return">
+        <ul class="divide-y divide-ink-100">
+          <li v-for="row in legacyRows" :key="row.partRequestItemId" class="space-y-2.5 px-5 py-4" data-testid="legacy-part-return">
             <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
               <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
-              <span class="rounded-md border border-warning-300 bg-white px-2 py-1 text-xs font-medium text-warning-800" data-testid="legacy-receipt-state">Chưa xác định (UNKNOWN)</span>
+              <span class="rounded-full border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-800" data-testid="legacy-receipt-state">Chưa xác định (UNKNOWN)</span>
             </div>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
               <span class="font-num font-semibold text-ink-700">{{ legacyRequestCode(row) }}</span>
@@ -469,8 +471,8 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
             <LegacyManualReviewForm :row="row" @saved="loadLegacyReview" @refresh="loadLegacyReview" />
           </li>
         </ul>
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-warning-200/70 px-5 py-3">
-          <p class="text-xs text-ink-600">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 bg-ink-50/50 px-5 py-3">
+          <p class="font-num text-xs text-ink-600">
             Trang {{ legacyPage }}/{{ legacyTotalPages }} · {{ legacyTotal }} dòng linh kiện lịch sử
             <span v-if="legacyTotal > legacyPage * legacyPageSize" class="block">Còn {{ legacyTotal - legacyPage * legacyPageSize }} dòng ở trang sau.</span>
           </p>
