@@ -135,10 +135,10 @@ onMounted(load);
     </template>
 
     <template v-else-if="claim && detail && meta">
-      <ConsolePageHeader :title="claim.order.serviceName || 'Bảo hành dịch vụ'" back-to="/console/warranty" back-label="Yêu cầu bảo hành">
+      <ConsolePageHeader class="animate-slide-up" :title="claim.order.serviceName || 'Bảo hành dịch vụ'" back-to="/console/warranty" back-label="Yêu cầu bảo hành">
         <template #badges>
           <span class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium" :class="warrantyClaimToneClasses[meta.tone]">{{ meta.label }}</span>
-          <span v-if="claim.submittedAfterExpiry" class="whitespace-nowrap rounded bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700">Gửi sau khi hết hạn</span>
+          <span v-if="claim.submittedAfterExpiry" class="whitespace-nowrap rounded-full border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700">Gửi sau khi hết hạn</span>
         </template>
         <template #meta>
           <p class="mt-2 text-sm text-ink-600">
@@ -156,16 +156,22 @@ onMounted(load);
         </template>
       </ConsolePageHeader>
 
-      <p v-if="!canDecide" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các quyết định.</p>
-      <div v-if="notice" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-        <CheckCircle2 :size="16" aria-hidden="true" /> {{ notice }}
-      </div>
-      <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</div>
-      <div v-if="!claim.detailLoaded" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800" role="status" data-testid="warranty-detail-missing">
-        Máy chủ chưa gửi đủ thông tin chi tiết (đơn gốc, lượt kiểm tra, quyết định). Đang hiện phần có sẵn; cập nhật Backend để xem đầy đủ.
-      </div>
+      <p v-if="!canDecide" class="animate-slide-up-delay-1 text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các quyết định.</p>
+      <Transition name="fh-fade-slide">
+        <div v-if="notice" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
+          <CheckCircle2 :size="16" aria-hidden="true" /> {{ notice }}
+        </div>
+      </Transition>
+      <Transition name="fh-fade-slide">
+        <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</div>
+      </Transition>
+      <Transition name="fh-fade-slide">
+        <div v-if="!claim.detailLoaded" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-4 py-3 text-sm text-ink-700" role="status" data-testid="warranty-detail-missing">
+          Máy chủ chưa gửi đủ thông tin chi tiết (đơn gốc, lượt kiểm tra, quyết định). Đang hiện phần có sẵn; cập nhật Backend để xem đầy đủ.
+        </div>
+      </Transition>
 
-      <div class="grid gap-6 lg:grid-cols-2">
+      <div class="animate-slide-up-delay-1 grid gap-6 lg:grid-cols-2">
         <FhCard title="Yêu cầu của khách">
           <p class="whitespace-pre-line text-sm text-ink-800 text-pretty">{{ claim.description }}</p>
           <div v-if="claim.evidenceRefs?.length" class="mt-3 flex flex-wrap gap-2">
@@ -191,7 +197,7 @@ onMounted(load);
             <div class="flex justify-between gap-3"><dt class="text-ink-500">Hết hạn</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ date(claim.coverage.expiresAt) }}</dd></div>
           </dl>
           <p v-else class="text-sm text-ink-500">Không tìm thấy hạng mục bảo hành.</p>
-          <p v-if="claim.submittedAfterExpiry" class="mt-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành. Bạn quyết định có nhận hay không.</p>
+          <p v-if="claim.submittedAfterExpiry" class="mt-3 rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành. Bạn quyết định có nhận hay không.</p>
           <div v-if="detail.otherClaims.length" class="mt-4 border-t border-ink-100 pt-4">
             <div class="mb-2 text-sm text-ink-500">Yêu cầu khác của đơn này</div>
             <ul class="space-y-1.5 text-sm">
@@ -204,7 +210,7 @@ onMounted(load);
         </FhCard>
       </div>
 
-      <FhCard v-if="claim.detailLoaded || orderPhotos.length" title="Đơn gốc">
+      <FhCard v-if="claim.detailLoaded || orderPhotos.length" class="animate-slide-up-delay-2" title="Đơn gốc">
         <dl v-if="claim.detailLoaded" class="grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2">
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Hoàn tất lúc</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ date(detail.originalJob.completedAt) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Thanh toán</dt><dd class="text-ink-900">{{ paymentStatusLabels[detail.originalJob.paymentStatus] ?? detail.originalJob.paymentStatus }}</dd></div>
@@ -218,25 +224,33 @@ onMounted(load);
             </dd>
           </div>
         </dl>
-        <div v-if="claim.detailLoaded" class="mt-4 overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead class="text-xs text-ink-500">
-              <tr><th class="py-2 pr-3 font-medium">Hạng mục</th><th class="py-2 pr-3 font-medium">Nguồn</th><th class="py-2 pr-3 text-right font-medium">SL</th><th class="py-2 pr-3 text-right font-medium">Thành tiền</th><th class="py-2 text-right font-medium">Bảo hành</th></tr>
-            </thead>
-            <tbody class="divide-y divide-ink-100">
-              <tr v-for="line in detail.originalJob.lines" :key="line.id" :class="line.faulty ? 'bg-brand-50' : ''" :data-testid="`warranty-line-${line.id}`">
-                <td class="py-2 pr-3 text-ink-900">
-                  {{ line.description }}
-                  <span v-if="line.faulty" class="ml-1 whitespace-nowrap rounded bg-brand-100 px-1.5 py-0.5 text-xs font-medium text-brand-700">Thợ báo hỏng{{ line.faultyQuantity && line.faultyQuantity !== line.quantity ? ` ${line.faultyQuantity}/${line.quantity}` : "" }}</span>
-                  <span class="block text-xs text-ink-500">{{ invoiceLineTypeLabels[line.type] ?? line.type }}</span>
-                </td>
-                <td class="py-2 pr-3 text-ink-700">{{ partSourceLabel(line.partSource) || '—' }}</td>
-                <td class="py-2 pr-3 text-right font-num">{{ line.quantity }}</td>
-                <td class="py-2 pr-3 text-right font-num"><FhMoney :amount="line.lineTotal" /></td>
-                <td class="py-2 text-right font-num text-ink-700">{{ line.warrantyDays > 0 ? `${line.warrantyDays} ngày` : 'Không' }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-if="claim.detailLoaded" class="mt-4 overflow-hidden rounded-[var(--radius-sm)] border border-ink-200/80">
+          <div class="overflow-x-auto overscroll-x-contain">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-ink-200/80 bg-ink-50/90 text-xs font-semibold text-ink-600">
+                  <th scope="col" class="px-3.5 py-2.5">Hạng mục</th>
+                  <th scope="col" class="px-3.5 py-2.5">Nguồn</th>
+                  <th scope="col" class="px-3.5 py-2.5 text-right">SL</th>
+                  <th scope="col" class="px-3.5 py-2.5 text-right">Thành tiền</th>
+                  <th scope="col" class="px-3.5 py-2.5 text-right">Bảo hành</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr v-for="line in detail.originalJob.lines" :key="line.id" :class="line.faulty ? 'bg-brand-50/60' : 'hover:bg-brand-50/25'" :data-testid="`warranty-line-${line.id}`">
+                  <td class="px-3.5 py-2.5 text-ink-900">
+                    {{ line.description }}
+                    <span v-if="line.faulty" class="ml-1 whitespace-nowrap rounded-full bg-brand-100 px-2 py-0.5 font-num text-xs font-medium text-brand-700">Thợ báo hỏng{{ line.faultyQuantity && line.faultyQuantity !== line.quantity ? ` ${line.faultyQuantity}/${line.quantity}` : "" }}</span>
+                    <span class="block text-xs text-ink-500">{{ invoiceLineTypeLabels[line.type] ?? line.type }}</span>
+                  </td>
+                  <td class="px-3.5 py-2.5 text-ink-700">{{ partSourceLabel(line.partSource) || '—' }}</td>
+                  <td class="px-3.5 py-2.5 text-right font-num">{{ line.quantity }}</td>
+                  <td class="px-3.5 py-2.5 text-right font-num"><FhMoney :amount="line.lineTotal" /></td>
+                  <td class="px-3.5 py-2.5 text-right font-num text-ink-700">{{ line.warrantyDays > 0 ? `${line.warrantyDays} ngày` : 'Không' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <dl v-if="claim.detailLoaded" class="mt-3 flex flex-wrap justify-end gap-x-6 gap-y-1 border-t border-ink-100 pt-3 text-sm">
           <div class="flex gap-2"><dt class="text-ink-500">Tiền công</dt><dd class="font-num"><FhMoney :amount="detail.originalJob.laborTotal" /></dd></div>
@@ -253,20 +267,20 @@ onMounted(load);
         </div>
       </FhCard>
 
-      <FhCard v-if="claim.detailLoaded" title="Lượt kiểm tra và sửa lại">
+      <FhCard v-if="claim.detailLoaded" class="animate-slide-up-delay-2" title="Lượt kiểm tra và sửa lại">
         <p v-if="!detail.visits.length" class="text-sm text-ink-500">Chưa có kỹ thuật viên nhận và hẹn kiểm tra.</p>
         <ol v-else class="space-y-5">
           <li v-for="(visit, index) in detail.visits" :key="visit.id" class="text-sm" :data-testid="`warranty-visit-${visit.id}`">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span class="font-semibold text-ink-900">Lượt {{ index + 1 }} · {{ visit.technician?.fullName || '—' }}</span>
-              <span class="rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-700">{{ visitStatusLabels[visit.status] ?? visit.status }}</span>
+              <span class="font-semibold text-ink-900">Lượt <span class="font-num">{{ index + 1 }}</span> · {{ visit.technician?.fullName || '—' }}</span>
+              <span class="rounded-full border border-ink-200 bg-ink-50 px-2.5 py-0.5 text-xs font-medium text-ink-700">{{ visitStatusLabels[visit.status] ?? visit.status }}</span>
             </div>
             <dl class="mt-2 grid gap-x-6 gap-y-1 text-ink-700 sm:grid-cols-3">
               <div><dt class="text-xs text-ink-500">Hẹn lúc</dt><dd class="font-num">{{ date(visit.scheduledAt) }}</dd></div>
               <div><dt class="text-xs text-ink-500">Có mặt lúc</dt><dd class="font-num">{{ date(visit.checkedInAt) }}</dd></div>
               <div><dt class="text-xs text-ink-500">Sửa xong lúc</dt><dd class="font-num">{{ date(visit.completedAt) }}</dd></div>
             </dl>
-            <div v-if="visit.proposedResult" class="mt-3 rounded-xl bg-ink-50 p-3">
+            <div v-if="visit.proposedResult" class="mt-3 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/70 p-3">
               <p class="font-medium text-ink-900">Đề xuất: {{ resultLabel(visit.proposedResult) }}<span v-if="claim.autoApproved" class="ml-2 text-xs font-normal text-ink-500">· Tự động duyệt (lỗi do công, không linh kiện)</span></p>
               <p v-if="visit.notCoveredReasonCode" class="text-ink-700">Lý do: {{ reasonLabel(visit.notCoveredReasonCode) }}</p>
               <p class="mt-1 whitespace-pre-line text-ink-700 text-pretty">{{ visit.findings }}</p>
@@ -274,7 +288,7 @@ onMounted(load);
                 <a v-for="url in visit.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer"><img :src="url" alt="Bằng chứng của kỹ thuật viên" class="h-14 w-14 rounded-[var(--radius-sm)] border border-ink-200 object-cover" /></a>
               </div>
             </div>
-            <div v-if="visit.reServiceNotes" class="mt-3 rounded-xl bg-ink-50 p-3">
+            <div v-if="visit.reServiceNotes" class="mt-3 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/70 p-3">
               <p class="font-medium text-ink-900">Việc đã sửa lại</p>
               <p class="mt-1 whitespace-pre-line text-ink-700 text-pretty">{{ visit.reServiceNotes }}</p>
               <div v-if="visit.reServiceEvidenceRefs?.length" class="mt-2 flex flex-wrap gap-2">
@@ -285,7 +299,7 @@ onMounted(load);
         </ol>
       </FhCard>
 
-      <div v-if="claim.detailLoaded" class="grid gap-6 lg:grid-cols-2">
+      <div v-if="claim.detailLoaded" class="animate-slide-up-delay-3 grid gap-6 lg:grid-cols-2">
         <FhCard title="Quyết định">
           <dl class="space-y-2.5 text-sm">
             <div class="flex justify-between gap-3"><dt class="text-ink-500">Kết luận</dt><dd class="text-right text-ink-900">{{ resultLabel(detail.decision.finalResult) }}</dd></div>
@@ -295,7 +309,7 @@ onMounted(load);
             <div v-else-if="claim.status === 'awaiting_customer'" class="flex justify-between gap-3"><dt class="text-ink-500">Chờ khách từ</dt><dd class="font-num text-ink-900">{{ date(detail.decision.awaitingSince) }}</dd></div>
             <div v-if="claim.outcomeCode" class="flex justify-between gap-3"><dt class="text-ink-500">Kết cục</dt><dd class="text-right text-ink-900">{{ claimOutcomeLabels[claim.outcomeCode] }}<template v-if="claim.refundAmount"> · <FhMoney :amount="claim.refundAmount" /></template></dd></div>
           </dl>
-          <p v-if="detail.decision.smOverrodeProposal" class="mt-3 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800">Quản lý đã đổi kết luận so với đề xuất của kỹ thuật viên.</p>
+          <p v-if="detail.decision.smOverrodeProposal" class="mt-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3 text-sm text-ink-700">Quản lý đã đổi kết luận so với đề xuất của kỹ thuật viên.</p>
           <div v-if="claim.resolutionNotes" class="mt-4 border-t border-ink-100 pt-4">
             <div class="text-sm text-ink-500">Đã gửi khách hàng</div>
             <p class="mt-1 text-sm text-ink-900 text-pretty">{{ claim.resolutionNotes }}</p>
@@ -314,7 +328,7 @@ onMounted(load);
         </FhCard>
       </div>
 
-      <FhCard v-if="detail.partRequest" title="Linh kiện bảo hành">
+      <FhCard v-if="detail.partRequest" class="animate-slide-up-delay-3" title="Linh kiện bảo hành">
         <dl class="space-y-2.5 text-sm">
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Yêu cầu linh kiện</dt><dd class="text-right"><router-link to="/console/part-requests" class="text-brand-700 hover:underline">{{ detail.partRequest.status }}</router-link></dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Kiểm tra linh kiện hỏng</dt><dd class="text-right text-ink-900">{{ detail.partRequest.faultyInspectionResult ? faultyInspectionLabels[detail.partRequest.faultyInspectionResult] : 'Chưa kiểm tra' }}</dd></div>
@@ -329,7 +343,7 @@ onMounted(load);
         </div>
         <ul class="mt-4 divide-y divide-ink-100 border-t border-ink-100 text-sm">
           <li v-for="item in detail.partRequest.items" :key="item.id" class="flex justify-between gap-3 py-2">
-            <span class="text-ink-900">{{ item.name }} <span class="text-ink-500">× {{ item.quantity }}</span></span>
+            <span class="text-ink-900">{{ item.name }} <span class="font-num text-ink-500">× {{ item.quantity }}</span></span>
             <FhMoney :amount="item.unitPrice * item.quantity" />
           </li>
         </ul>

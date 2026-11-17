@@ -4,7 +4,7 @@ import { FhButton, FhConfirmDialog, FhStatusPill } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
-import { CONSOLE_LOAD_ERROR } from '../../components/console/console-ui';
+import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../components/console/console-ui';
 import { useAuthStore } from '../../stores/auth.store';
 import { warehousesApi, type StockMovement, type Warehouse, type WarehouseStockRow } from '../../api/warehouses.api';
 import { partsCatalogApi } from '../../api/parts-catalog.api';
@@ -274,86 +274,95 @@ function movementKind(kind: string) { return MOVEMENT_KINDS[kind] ?? 'Điều ch
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Kho và tồn linh kiện" :count="loading ? null : warehouses.length" />
+    <ConsolePageHeader class="animate-slide-up" title="Kho và tồn linh kiện" :count="loading ? null : warehouses.length" />
 
-    <p v-if="error" role="alert" class="rounded-lg border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ error }}</p>
-    <p v-if="success" role="status" class="rounded-lg border border-success-200 bg-success-50 p-3 text-sm text-success-800">{{ success }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">{{ error }}</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="success" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">{{ success }}</p>
+    </Transition>
 
-    <section v-if="isAdmin" class="rounded-lg border border-ink-200 bg-white p-4">
+    <section v-if="isAdmin" class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
       <h2 class="text-base font-semibold text-ink-900">Thêm kho</h2>
       <p v-if="managerLoadError" class="mt-2 text-sm text-danger-700">{{ managerLoadError }}</p>
       <p v-else-if="!managers.length" class="mt-2 text-sm text-ink-600">Chưa có quản lý dịch vụ đang hoạt động để giao phụ trách.</p>
       <form class="mt-3 grid gap-3 md:grid-cols-2" @submit.prevent="createWarehouse">
-        <label class="space-y-1 text-sm font-medium text-ink-700">Tên kho<input v-model="createForm.name" required maxlength="120" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-        <label class="space-y-1 text-sm font-medium text-ink-700">Địa chỉ<input v-model="createForm.address" maxlength="500" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-        <label class="space-y-1 text-sm font-medium text-ink-700">Quản lý phụ trách<select v-model="createForm.responsibleUserId" required class="w-full rounded-md border border-ink-300 px-3 py-2"><option value="" disabled>Chọn quản lý đang hoạt động</option><option v-for="manager in managers" :key="manager.id" :value="manager.id">{{ manager.fullName }} · {{ manager.email }}</option></select></label>
+        <label :class="consoleLabel">Tên kho<input v-model="createForm.name" required maxlength="120" :class="[consoleField, 'w-full']" /></label>
+        <label :class="consoleLabel">Địa chỉ<input v-model="createForm.address" maxlength="500" :class="[consoleField, 'w-full']" /></label>
+        <label :class="consoleLabel">Quản lý phụ trách<select v-model="createForm.responsibleUserId" required :class="[consoleField, 'w-full']"><option value="" disabled>Chọn quản lý đang hoạt động</option><option v-for="manager in managers" :key="manager.id" :value="manager.id">{{ manager.fullName }} · {{ manager.email }}</option></select></label>
         <div class="flex items-end"><FhButton type="submit" size="sm" :loading="saving" :disabled="!managers.length">Tạo kho</FhButton></div>
       </form>
     </section>
 
-    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadWarehouses(); loadRows()" />
-    <section v-else-if="!loading && !warehouses.length" class="rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-600">
+    <ConsoleLoadError v-if="loadError" class="animate-slide-up-delay-1" :message="loadError" @retry="loadWarehouses(); loadRows()" />
+    <section v-else-if="!loading && !warehouses.length" class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-8 text-center text-sm text-ink-600 shadow-(--shadow-e1)">
       {{ isAdmin ? 'Chưa có kho nào. Tạo kho để bắt đầu quản lý tồn.' : 'Bạn chưa được giao phụ trách kho nào.' }}
     </section>
 
     <template v-else-if="warehouses.length">
-      <section class="flex flex-wrap items-end gap-3 rounded-lg border border-ink-200 bg-white p-4">
-        <label class="min-w-64 flex-1 space-y-1 text-sm font-medium text-ink-700">Kho<select v-model="selectedId" class="w-full rounded-md border border-ink-300 px-3 py-2"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}<template v-if="warehouse.status !== 'active'"> · Ngừng hoạt động</template></option></select></label>
-        <FhStatusPill :status="selectedWarehouse?.status === 'active' ? 'success' : 'warning'" :label="selectedWarehouse?.status === 'active' ? 'Đang hoạt động' : 'Ngừng hoạt động'" />
-        <span class="text-sm text-ink-600">{{ selectedWarehouse?.address || 'Chưa có địa chỉ' }}</span>
-        <span v-if="isAdmin && selectedWarehouse" class="text-sm text-ink-700">
-          Quản lý phụ trách: <strong>{{ selectedManager?.fullName || 'Chưa xác định' }}</strong>
-          <span v-if="selectedManager?.email"> ({{ selectedManager.email }})</span>
-        </span>
-        <template v-if="isAdmin && selectedWarehouse">
+      <section class="animate-slide-up-delay-1 flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
+        <label class="min-w-64 flex-1" :class="consoleLabel">Kho<select v-model="selectedId" :class="[consoleField, 'w-full']"><option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}<template v-if="warehouse.status !== 'active'"> · Ngừng hoạt động</template></option></select></label>
+        <div class="flex flex-wrap items-center gap-2.5 pb-1">
+          <FhStatusPill :status="selectedWarehouse?.status === 'active' ? 'success' : 'warning'" :label="selectedWarehouse?.status === 'active' ? 'Đang hoạt động' : 'Ngừng hoạt động'" />
+          <span class="text-sm text-ink-600">{{ selectedWarehouse?.address || 'Chưa có địa chỉ' }}</span>
+          <span v-if="isAdmin && selectedWarehouse" class="text-sm text-ink-700">
+            Quản lý phụ trách: <strong class="font-semibold text-ink-900">{{ selectedManager?.fullName || 'Chưa xác định' }}</strong>
+            <span v-if="selectedManager?.email" class="text-ink-500"> ({{ selectedManager.email }})</span>
+          </span>
+        </div>
+        <div v-if="isAdmin && selectedWarehouse" class="flex items-center gap-2 ml-auto">
           <FhButton variant="secondary" size="sm" @click="startEdit(selectedWarehouse)">Sửa kho</FhButton>
           <FhButton variant="danger" size="sm" @click="warehouseToDelete = selectedWarehouse">Xóa kho</FhButton>
-        </template>
+        </div>
       </section>
 
-      <section v-if="isAdmin && editing" class="rounded-lg border border-ink-200 bg-white p-4">
-        <h2 class="font-semibold text-ink-900">Cập nhật kho</h2>
-        <form class="mt-3 grid gap-3 md:grid-cols-2" @submit.prevent="saveEdit">
-          <label class="space-y-1 text-sm font-medium text-ink-700">Tên kho<input v-model="editForm.name" required maxlength="120" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">Địa chỉ<input v-model="editForm.address" maxlength="500" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">Quản lý phụ trách<select v-model="editForm.responsibleUserId" required class="w-full rounded-md border border-ink-300 px-3 py-2"><option v-for="manager in managers" :key="manager.id" :value="manager.id">{{ manager.fullName }} · {{ manager.email }}</option></select></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">Trạng thái<select v-model="editForm.status" class="w-full rounded-md border border-ink-300 px-3 py-2"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></label>
-          <div class="flex gap-2"><FhButton type="submit" size="sm" :loading="saving">Lưu thay đổi</FhButton><FhButton type="button" variant="secondary" size="sm" @click="editing = null">Đóng</FhButton></div>
-        </form>
-      </section>
+      <Transition name="fh-fade-slide">
+        <section v-if="isAdmin && editing" class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
+          <h2 class="font-semibold text-ink-900">Cập nhật kho</h2>
+          <form class="mt-3 grid gap-3 md:grid-cols-2" @submit.prevent="saveEdit">
+            <label :class="consoleLabel">Tên kho<input v-model="editForm.name" required maxlength="120" :class="[consoleField, 'w-full']" /></label>
+            <label :class="consoleLabel">Địa chỉ<input v-model="editForm.address" maxlength="500" :class="[consoleField, 'w-full']" /></label>
+            <label :class="consoleLabel">Quản lý phụ trách<select v-model="editForm.responsibleUserId" required :class="[consoleField, 'w-full']"><option v-for="manager in managers" :key="manager.id" :value="manager.id">{{ manager.fullName }} · {{ manager.email }}</option></select></label>
+            <label :class="consoleLabel">Trạng thái<select v-model="editForm.status" :class="[consoleField, 'w-full']"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></label>
+            <div class="flex gap-2"><FhButton type="submit" size="sm" :loading="saving">Lưu thay đổi</FhButton><FhButton type="button" variant="secondary" size="sm" @click="editing = null">Đóng</FhButton></div>
+          </form>
+        </section>
+      </Transition>
 
-      <section class="rounded-lg border border-ink-200 bg-white p-4">
+      <section class="animate-slide-up-delay-2 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
         <h2 class="text-base font-semibold text-ink-900">Điều chỉnh tồn</h2>
-        <p v-if="!canAdjust" class="mt-2 text-sm text-warning-800">Kho ngừng hoạt động; không thể điều chỉnh tồn.</p>
+        <p v-if="!canAdjust" class="mt-2 rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Kho ngừng hoạt động; không thể điều chỉnh tồn.</p>
         <form class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5" @submit.prevent="submitAdjustment">
-          <label class="space-y-1 text-sm font-medium text-ink-700 xl:col-span-2">SKU đang hoạt động<select v-model="partId" required :disabled="Boolean(pendingCommand)" class="w-full rounded-md border border-ink-300 px-3 py-2"><option value="" disabled>Chọn từ danh mục linh kiện</option><option v-for="part in parts" :key="part.id" :value="part.id">{{ part.name }} · {{ part.sku || 'Chưa có SKU' }}</option></select></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">Loại<select v-model="adjustment.kind" :disabled="Boolean(pendingCommand)" class="w-full rounded-md border border-ink-300 px-3 py-2"><option value="stock_in">Nhập kho</option><option value="correction">Điều chỉnh kiểm kê</option></select></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">{{ adjustment.kind === 'stock_in' ? 'Số lượng nhập' : 'Thay đổi (+/-)' }}<input v-model="adjustment.delta" required inputmode="numeric" type="number" step="1" :disabled="Boolean(pendingCommand)" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-          <label class="space-y-1 text-sm font-medium text-ink-700">Lý do<input v-model="adjustment.reason" required maxlength="500" :disabled="Boolean(pendingCommand)" class="w-full rounded-md border border-ink-300 px-3 py-2" /></label>
-          <p v-if="partId && activeStock" class="text-sm text-ink-600 md:col-span-2 xl:col-span-4">Tồn hiện tại: {{ activeStock.onHand }} · Đã giữ: {{ activeStock.reserved }} · Khả dụng: {{ activeStock.available }}</p>
+          <label :class="[consoleLabel, 'xl:col-span-2']">SKU đang hoạt động<select v-model="partId" required :disabled="Boolean(pendingCommand)" :class="[consoleField, 'w-full']"><option value="" disabled>Chọn từ danh mục linh kiện</option><option v-for="part in parts" :key="part.id" :value="part.id">{{ part.name }} · {{ part.sku || 'Chưa có SKU' }}</option></select></label>
+          <label :class="consoleLabel">Loại<select v-model="adjustment.kind" :disabled="Boolean(pendingCommand)" :class="[consoleField, 'w-full']"><option value="stock_in">Nhập kho</option><option value="correction">Điều chỉnh kiểm kê</option></select></label>
+          <label :class="consoleLabel">{{ adjustment.kind === 'stock_in' ? 'Số lượng nhập' : 'Thay đổi (+/-)' }}<input v-model="adjustment.delta" required inputmode="numeric" type="number" step="1" :disabled="Boolean(pendingCommand)" :class="[consoleField, 'w-full font-num']" /></label>
+          <label :class="consoleLabel">Lý do<input v-model="adjustment.reason" required maxlength="500" :disabled="Boolean(pendingCommand)" :class="[consoleField, 'w-full']" /></label>
+          <p v-if="partId && activeStock" class="font-num text-sm text-ink-600 md:col-span-2 xl:col-span-4">Tồn hiện tại: <strong class="text-ink-900">{{ activeStock.onHand }}</strong> · Đã giữ: <strong class="text-ink-900">{{ activeStock.reserved }}</strong> · Khả dụng: <strong class="text-ink-900">{{ activeStock.available }}</strong></p>
           <p v-else-if="partId" class="text-sm text-ink-600 md:col-span-2 xl:col-span-4">Chưa có dòng tồn kho được ghi nhận cho SKU này.</p>
           <FhButton type="submit" size="sm" :loading="saving" :disabled="!canAdjust || Boolean(quantityError)" class="md:col-start-2 xl:col-start-5">{{ pendingCommand ? 'Thử lại cùng lệnh' : 'Ghi nhận' }}</FhButton>
           <p v-if="quantityError" class="text-xs text-ink-500 md:col-span-2 xl:col-span-4">{{ quantityError }}</p>
         </form>
       </section>
 
-      <section class="space-y-3">
-        <div class="flex gap-2" role="tablist" aria-label="Dữ liệu kho">
-          <button type="button" role="tab" :aria-selected="activeTab === 'stock'" class="min-h-10 rounded-md px-3 text-sm font-medium" :class="activeTab === 'stock' ? 'bg-brand-50 text-brand-800' : 'text-ink-600 hover:bg-ink-50'" @click="activeTab = 'stock'">Tồn kho</button>
-          <button type="button" role="tab" :aria-selected="activeTab === 'movements'" class="min-h-10 rounded-md px-3 text-sm font-medium" :class="activeTab === 'movements' ? 'bg-brand-50 text-brand-800' : 'text-ink-600 hover:bg-ink-50'" @click="activeTab = 'movements'">Lịch sử điều chỉnh</button>
+      <section class="animate-slide-up-delay-3 space-y-3">
+        <div class="inline-flex rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-100 p-1" role="tablist" aria-label="Dữ liệu kho">
+          <button type="button" role="tab" :aria-selected="activeTab === 'stock'" class="h-9 rounded-[calc(var(--radius-sm)-2px)] px-3.5 text-sm font-medium transition-colors duration-150 cursor-pointer" :class="activeTab === 'stock' ? 'bg-white text-brand-700 font-semibold shadow-2xs' : 'text-ink-600 hover:text-ink-900'" @click="activeTab = 'stock'">Tồn kho</button>
+          <button type="button" role="tab" :aria-selected="activeTab === 'movements'" class="h-9 rounded-[calc(var(--radius-sm)-2px)] px-3.5 text-sm font-medium transition-colors duration-150 cursor-pointer" :class="activeTab === 'movements' ? 'bg-white text-brand-700 font-semibold shadow-2xs' : 'text-ink-600 hover:text-ink-900'" @click="activeTab = 'movements'">Lịch sử điều chỉnh</button>
         </div>
         <ConsoleTable v-if="activeTab === 'stock'" :columns="columns" :rows="stock" :loading="dataLoading" empty-text="Kho chưa có dòng tồn được ghi nhận.">
-          <template #cell-sku="{ row }">{{ row.sku || '—' }}</template>
-          <template #cell-onHand="{ row }">{{ row.onHand }}</template>
-          <template #cell-reserved="{ row }">{{ row.reserved }}</template>
-          <template #cell-available="{ row }">{{ row.available }}</template>
+          <template #cell-sku="{ row }"><span class="font-num text-ink-600">{{ row.sku || '—' }}</span></template>
+          <template #cell-onHand="{ row }"><span class="font-num font-medium text-ink-900">{{ row.onHand }}</span></template>
+          <template #cell-reserved="{ row }"><span class="font-num text-ink-600">{{ row.reserved }}</span></template>
+          <template #cell-available="{ row }"><span class="font-num font-semibold text-ink-900">{{ row.available }}</span></template>
         </ConsoleTable>
         <ConsoleTable v-else :columns="movementColumns" :rows="movements" :loading="dataLoading" empty-text="Chưa có lịch sử điều chỉnh.">
           <template #cell-partId="{ row }">{{ parts.find((part) => part.id === row.partId)?.name || row.partId }}</template>
           <template #cell-kind="{ row }">{{ movementKind(row.kind) }}</template>
-          <template #cell-delta="{ row }">{{ row.delta > 0 ? '+' : '' }}{{ row.delta }}</template>
+          <template #cell-delta="{ row }"><span class="font-num font-semibold" :class="row.delta > 0 ? 'text-success-700' : row.delta < 0 ? 'text-danger-700' : 'text-ink-700'">{{ row.delta > 0 ? '+' : '' }}{{ row.delta }}</span></template>
+          <template #cell-onHandAfter="{ row }"><span class="font-num text-ink-800">{{ row.onHandAfter }}</span></template>
         </ConsoleTable>
-        <div v-if="currentTotalPages > 1" class="flex items-center justify-end gap-2 text-sm"><FhButton variant="secondary" size="sm" :disabled="currentPage <= 1 || dataLoading" @click="offset = Math.max(0, offset - pageSize)">Trước</FhButton><span>Trang {{ currentPage }} / {{ currentTotalPages }}</span><FhButton variant="secondary" size="sm" :disabled="currentPage >= currentTotalPages || dataLoading" @click="offset += pageSize">Sau</FhButton></div>
+        <div v-if="currentTotalPages > 1" class="flex items-center justify-end gap-2 text-sm"><FhButton variant="secondary" size="sm" :disabled="currentPage <= 1 || dataLoading" @click="offset = Math.max(0, offset - pageSize)">Trước</FhButton><span class="font-num text-ink-600">Trang {{ currentPage }} / {{ currentTotalPages }}</span><FhButton variant="secondary" size="sm" :disabled="currentPage >= currentTotalPages || dataLoading" @click="offset += pageSize">Sau</FhButton></div>
       </section>
     </template>
 

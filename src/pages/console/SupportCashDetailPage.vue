@@ -57,7 +57,7 @@ watch(caseId, (id) => {
     </template>
 
     <template v-else-if="supportCase">
-      <ConsolePageHeader :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
+      <ConsolePageHeader class="animate-slide-up" :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
         <template #badges>
           <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
         </template>
@@ -74,7 +74,7 @@ watch(caseId, (id) => {
 
       <p
         v-if="!isCashCase(supportCase.caseType)"
-        class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800"
+        class="animate-slide-up-delay-1 rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800"
         role="status"
       >
         Yêu cầu này không phải tranh chấp tiền mặt.
@@ -82,9 +82,10 @@ watch(caseId, (id) => {
 
       <SupportCaseContext
         v-if="supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement || supportCase.booking"
+        class="animate-slide-up-delay-1"
         :support-case="supportCase"
       />
-      <p v-else class="text-sm text-ink-500">Chưa có thông tin đơn, hoá đơn hay tiền mặt.</p>
+      <p v-else class="animate-slide-up-delay-1 text-sm text-ink-500">Chưa có thông tin đơn, hoá đơn hay tiền mặt.</p>
     </template>
   </div>
 </template>

@@ -82,66 +82,71 @@ async function handleGrantBoost(row: CancellationRow) {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Huỷ đơn" :count="loading || loadError ? null : total" />
+    <ConsolePageHeader class="animate-slide-up" title="Huỷ đơn" :count="loading || loadError ? null : total" />
 
-    <ConsoleLoadError v-if="loadError" @retry="loadCancellations" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="rows"
-      :loading="loading"
-      class="transition-opacity"
-      :class="{ 'opacity-60': changingPage }"
-      empty-text="Chưa có đơn nào bị huỷ."
-    >
-      <template #cell-orderCode="{ row }">
-        <span class="whitespace-nowrap font-num font-medium text-ink-900">{{ row.orderCode }}</span>
-      </template>
+    <Transition name="fh-fade-slide">
+      <p v-if="boostError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm text-danger-800" role="alert">{{ boostError }}</p>
+    </Transition>
 
-      <template #cell-actor="{ row }">
-        <div class="whitespace-nowrap text-ink-900">{{ row.actorName }}</div>
-        <div class="whitespace-nowrap text-xs text-ink-500">{{ roleLabel(row.actor) }}</div>
-      </template>
+    <div class="animate-slide-up-delay-1 space-y-5">
+      <ConsoleLoadError v-if="loadError" @retry="loadCancellations" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="rows"
+        :loading="loading"
+        class="transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
+        empty-text="Chưa có đơn nào bị huỷ."
+      >
+        <template #cell-orderCode="{ row }">
+          <span class="whitespace-nowrap font-num font-medium text-ink-900">{{ row.orderCode }}</span>
+        </template>
 
-      <template #cell-state="{ row }">
-        <FhStatusPill :status="row.stateAtCancel" :label="orderStatusLabel(row.stateAtCancel)" />
-      </template>
+        <template #cell-actor="{ row }">
+          <div class="whitespace-nowrap text-ink-900">{{ row.actorName }}</div>
+          <div class="whitespace-nowrap text-xs text-ink-500">{{ roleLabel(row.actor) }}</div>
+        </template>
 
-      <template #cell-reason="{ row }">
-        <span class="line-clamp-2 block max-w-64 text-ink-700" :title="row.reason">{{ row.reason }}</span>
-      </template>
+        <template #cell-state="{ row }">
+          <FhStatusPill :status="row.stateAtCancel" :label="orderStatusLabel(row.stateAtCancel)" />
+        </template>
 
-      <template #cell-remedy="{ row }">
-        <span
-          class="whitespace-nowrap"
-          :class="typeof row.reputationDelta === 'number' && row.reputationDelta < 0 ? 'text-danger-600' : 'text-ink-500'"
-          data-testid="cancellation-points"
-        >
-          {{ pointsLabel(row) }}
-        </span>
-      </template>
+        <template #cell-reason="{ row }">
+          <span class="line-clamp-2 block max-w-64 text-ink-700" :title="row.reason">{{ row.reason }}</span>
+        </template>
 
-      <template #cell-actions="{ row }">
-        <span v-if="row.reviewedByUserId" class="whitespace-nowrap text-ink-500">Đã xử lý</span>
-        <FhButton
-          v-else
-          variant="secondary"
-          size="sm"
-          :disabled="busyId === row.id"
-          @click="handleGrantBoost(row)"
-        >
-          Cấp Boost
-        </FhButton>
-      </template>
-    </ConsoleTable>
-    <ConsolePagination
-      v-if="!loadError"
-      v-model:page="page"
-      :total="total"
-      :page-size="PAGE_SIZE"
-      :disabled="loading"
-      @prefetch="prefetch"
-    />
-    <p v-if="boostError" class="text-sm text-danger-600" role="alert">{{ boostError }}</p>
+        <template #cell-remedy="{ row }">
+          <span
+            class="whitespace-nowrap font-num"
+            :class="typeof row.reputationDelta === 'number' && row.reputationDelta < 0 ? 'font-medium text-danger-700' : 'text-ink-500'"
+            data-testid="cancellation-points"
+          >
+            {{ pointsLabel(row) }}
+          </span>
+        </template>
+
+        <template #cell-actions="{ row }">
+          <span v-if="row.reviewedByUserId" class="whitespace-nowrap text-xs font-medium text-ink-500">Đã xử lý</span>
+          <FhButton
+            v-else
+            variant="secondary"
+            size="sm"
+            :disabled="busyId === row.id"
+            @click="handleGrantBoost(row)"
+          >
+            Cấp Boost
+          </FhButton>
+        </template>
+      </ConsoleTable>
+      <ConsolePagination
+        v-if="!loadError"
+        v-model:page="page"
+        :total="total"
+        :page-size="PAGE_SIZE"
+        :disabled="loading"
+        @prefetch="prefetch"
+      />
+    </div>
   </div>
 </template>

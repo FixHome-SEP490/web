@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { foldForSearch } from '../../utils/formatters';
 import { computed, onMounted, ref, watch } from 'vue';
-import { X } from 'lucide-vue-next';
+import { RotateCcw, X } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhSkeleton, FhStatusPill } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -225,6 +225,12 @@ const openDocumentAccess = async (title: string, documentId: string) => {
 
 
 
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || statusFilter.value !== 'ALL');
+const resetFilters = () => {
+  searchQuery.value = '';
+  statusFilter.value = 'ALL';
+};
+
 const formatDate = (value: string) => {
   if (!value) return '—';
   const date = new Date(value);
@@ -234,72 +240,87 @@ const formatDate = (value: string) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Duyệt xác minh danh tính" :count="activeTab !== 'technicians' || loading || loadError ? null : total" />
+    <ConsolePageHeader class="animate-slide-up" title="Duyệt xác minh danh tính" :count="activeTab !== 'technicians' || loading || loadError ? null : total" />
 
-    <ConsoleTabs v-model="activeTab" :tabs="tabs" />
+    <ConsoleTabs v-model="activeTab" class="animate-slide-up-delay-1" :tabs="tabs" />
 
-    <CustomerVerificationsTab v-if="activeTab === 'customers'" />
+    <CustomerVerificationsTab v-if="activeTab === 'customers'" class="animate-slide-up-delay-2" />
 
     <template v-else>
-    <div class="flex flex-wrap items-center gap-2">
-      <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, email, số điện thoại" label="Tìm hồ sơ" />
-      <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái hồ sơ">
-        <option value="ALL">Tất cả trạng thái</option>
-        <option value="PENDING">Đang chờ duyệt</option>
-        <option value="VERIFIED">Đã xác nhận danh tính</option>
-        <option value="REJECTED">Đã từ chối</option>
-      </select>
-    </div>
-
-    <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
-    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
-
-    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadVerifications" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="filteredVerifications"
-      :loading="loading"
-      empty-text="Không có hồ sơ phù hợp."
-    >
-      <template #cell-technician="{ row }">
+      <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
+        <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, email, số điện thoại" label="Tìm hồ sơ" />
+        <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái hồ sơ">
+          <option value="ALL">Tất cả trạng thái</option>
+          <option value="PENDING">Đang chờ duyệt</option>
+          <option value="VERIFIED">Đã xác nhận danh tính</option>
+          <option value="REJECTED">Đã từ chối</option>
+        </select>
         <button
+          v-if="hasFilters"
           type="button"
-          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          @click="openDrawer(row)"
-        >{{ row.technician?.fullName || 'Kỹ thuật viên' }}</button>
-        <div class="truncate text-xs text-ink-500" :title="row.technician?.email || ''">
-          {{ row.technician?.email || 'Chưa có email' }} · <span class="whitespace-nowrap font-num">{{ row.technician?.phoneNumber || '—' }}</span>
-        </div>
-      </template>
+          class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+          @click="resetFilters"
+        >
+          <RotateCcw :size="14" aria-hidden="true" />
+          Đặt lại
+        </button>
+      </div>
 
-      <template #cell-submittedAt="{ row }">
-        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.submittedAt)) }}</span>
-      </template>
+      <Transition name="fh-fade-slide">
+        <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+      </Transition>
+      <Transition name="fh-fade-slide">
+        <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+      </Transition>
 
-      <template #cell-status="{ row }">
-        <FhStatusPill :status="String(row.status)" :label="statusLabel(row.status)" />
-      </template>
-
-      <template #cell-actions="{ row }">
-        <div class="flex items-center justify-end gap-2">
-          <template v-if="row.status === 'PENDING'">
-            <FhButton
-              variant="primary"
-              size="sm"
-              :loading="actionLoadingId === row.id"
-              :disabled="Boolean(actionLoadingId)"
-              @click="approveVerification(row)"
-            >Xác nhận</FhButton>
-            <ConsoleMoreMenu label="Thao tác khác với hồ sơ">
-              <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
-            </ConsoleMoreMenu>
+      <div class="animate-slide-up-delay-2 space-y-5">
+        <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadVerifications" />
+        <ConsoleTable
+          v-else
+          :columns="columns"
+          :rows="filteredVerifications"
+          :loading="loading"
+          empty-text="Không có hồ sơ phù hợp."
+        >
+          <template #cell-technician="{ row }">
+            <button
+              type="button"
+              class="cursor-pointer text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              @click="openDrawer(row)"
+            >{{ row.technician?.fullName || 'Kỹ thuật viên' }}</button>
+            <div class="truncate text-xs text-ink-500" :title="row.technician?.email || ''">
+              {{ row.technician?.email || 'Chưa có email' }} · <span class="whitespace-nowrap font-num">{{ row.technician?.phoneNumber || '—' }}</span>
+            </div>
           </template>
-        </div>
-      </template>
-    </ConsoleTable>
 
-    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+          <template #cell-submittedAt="{ row }">
+            <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.submittedAt)) }}</span>
+          </template>
+
+          <template #cell-status="{ row }">
+            <FhStatusPill :status="String(row.status)" :label="statusLabel(row.status)" />
+          </template>
+
+          <template #cell-actions="{ row }">
+            <div class="flex items-center justify-end gap-2">
+              <template v-if="row.status === 'PENDING'">
+                <FhButton
+                  variant="primary"
+                  size="sm"
+                  :loading="actionLoadingId === row.id"
+                  :disabled="Boolean(actionLoadingId)"
+                  @click="approveVerification(row)"
+                >Xác nhận</FhButton>
+                <ConsoleMoreMenu label="Thao tác khác với hồ sơ">
+                  <ConsoleMenuItem danger :disabled="Boolean(actionLoadingId)" @click="openReject(row)">Từ chối</ConsoleMenuItem>
+                </ConsoleMoreMenu>
+              </template>
+            </div>
+          </template>
+        </ConsoleTable>
+
+        <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      </div>
     </template>
 
     <!-- Reject -->
@@ -322,57 +343,63 @@ const formatDate = (value: string) => {
         :class="consoleTextarea"
         placeholder="Tài liệu hoặc thông tin cần bổ sung"
       ></textarea>
-      <p v-if="rejectReasonError" class="mt-1.5 text-sm text-danger-600" role="alert">{{ rejectReasonError }}</p>
+      <Transition name="fh-fade-slide">
+        <p v-if="rejectReasonError" class="mt-1.5 text-sm text-danger-600" role="alert">{{ rejectReasonError }}</p>
+      </Transition>
     </FhConfirmDialog>
 
     <!-- Document preview -->
-    <div
-      v-if="showPreviewModal"
-      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="doc-preview-title"
-      @click.self="showPreviewModal = false"
-      @keydown.esc="showPreviewModal = false"
-    >
-      <div class="bg-white rounded-2xl shadow-2xl max-w-5xl w-full flex flex-col max-h-[95vh] overflow-hidden">
-        <div class="flex items-center justify-between gap-3 border-b border-ink-100 px-6 py-4">
-          <h3 id="doc-preview-title" class="font-semibold text-ink-900">{{ previewTitle }}</h3>
-          <button
-            type="button"
-            class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900"
-            aria-label="Đóng"
-            @click="showPreviewModal = false"
-          >
-            <X :size="18" aria-hidden="true" />
-          </button>
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="showPreviewModal"
+          class="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/60 p-4 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="doc-preview-title"
+          @click.self="showPreviewModal = false"
+          @keydown.esc="showPreviewModal = false"
+        >
+          <div class="fh-modal-panel flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-[var(--radius-lg)] border border-ink-200 bg-white shadow-(--shadow-e3)">
+            <div class="flex items-center justify-between gap-3 border-b border-ink-200 bg-ink-25/60 px-6 py-4">
+              <h3 id="doc-preview-title" class="truncate text-base font-semibold text-ink-900">{{ previewTitle }}</h3>
+              <button
+                type="button"
+                class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
+                aria-label="Đóng"
+                @click="showPreviewModal = false"
+              >
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </div>
+            <div class="relative flex min-h-[360px] flex-1 items-center justify-center overflow-auto overscroll-contain bg-ink-100 p-4 sm:p-6">
+              <FhSkeleton v-if="previewLoading" width="320px" height="420px" rounded="md" />
+              <template v-else-if="previewUrl">
+                <video
+                  v-if="previewTitle.toLowerCase().includes('video')"
+                  :src="previewUrl"
+                  controls
+                  autoplay
+                  class="max-h-[min(72dvh,680px)] max-w-full rounded-[var(--radius-md)] bg-black shadow-(--shadow-e2)"
+                ></video>
+                <img
+                  v-else-if="previewTitle.toLowerCase().includes('ảnh') || previewTitle.toLowerCase().includes('cccd')"
+                  :src="previewUrl"
+                  class="max-h-[min(72dvh,680px)] max-w-full rounded-[var(--radius-md)] border border-ink-200 bg-white object-contain shadow-(--shadow-e2)"
+                  :alt="previewTitle"
+                />
+                <iframe
+                  v-else
+                  :src="previewUrl"
+                  :title="previewTitle"
+                  class="h-[min(72dvh,680px)] w-full rounded-[var(--radius-md)] border border-ink-200 bg-white shadow-(--shadow-e2)"
+                ></iframe>
+              </template>
+            </div>
+          </div>
         </div>
-        <div class="relative flex min-h-[500px] flex-1 items-center justify-center overflow-auto bg-ink-100 p-6">
-          <FhSkeleton v-if="previewLoading" width="320px" height="420px" rounded="md" />
-          <template v-else-if="previewUrl">
-            <video
-              v-if="previewTitle.toLowerCase().includes('video')"
-              :src="previewUrl"
-              controls
-              autoplay
-              class="max-w-full max-h-[700px] rounded-lg shadow-lg bg-black"
-            ></video>
-            <img
-              v-else-if="previewTitle.toLowerCase().includes('ảnh') || previewTitle.toLowerCase().includes('cccd')"
-              :src="previewUrl"
-              class="max-w-full max-h-[700px] object-contain rounded-lg shadow-lg border border-ink-200 bg-white"
-              :alt="previewTitle"
-            />
-            <iframe
-              v-else
-              :src="previewUrl"
-              :title="previewTitle"
-              class="w-full h-[700px] border-0 rounded-lg shadow-lg bg-white"
-            ></iframe>
-          </template>
-        </div>
-      </div>
-    </div>
+      </Transition>
+    </Teleport>
 
     <TechnicianVerificationDrawer
       v-model:open="showDrawer"

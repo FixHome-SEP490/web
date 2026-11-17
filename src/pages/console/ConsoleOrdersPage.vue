@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { RotateCcw } from 'lucide-vue-next';
 import { FhStatusPill, FhMoney } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -28,6 +30,11 @@ const statusOptions: { value: (typeof serviceOrderStates)[number]; label: string
 // (order code, customer, service; accents ignored) and pages.
 const statusFilter = useQueryChoice<StatusFilter>('status', ['ALL', ...serviceOrderStates], 'ALL');
 const { input: searchQuery, search } = useQuerySearch();
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || statusFilter.value !== 'ALL');
+const resetFilters = () => {
+  searchQuery.value = '';
+  statusFilter.value = 'ALL';
+};
 
 const {
   page,
@@ -59,71 +66,82 @@ const columns: ConsoleColumn[] = [
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Đơn sửa chữa" :count="loading || loadError ? null : total" />
-    <router-link to="/console/support" class="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline">Xem yêu cầu hỗ trợ và sự cố</router-link>
+    <ConsolePageHeader class="animate-slide-up" title="Đơn sửa chữa" :count="loading || loadError ? null : total" />
+    <router-link to="/console/support" class="animate-slide-up inline-flex min-h-11 items-center text-sm font-medium text-brand-700 underline">Xem yêu cầu hỗ trợ và sự cố</router-link>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm mã đơn, khách hàng, dịch vụ" label="Tìm đơn sửa chữa" :maxlength="SEARCH_MAX_LENGTH" />
       <select v-model="statusFilter" :class="consoleField" aria-label="Lọc theo trạng thái">
         <option value="ALL">Tất cả trạng thái</option>
         <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
       </select>
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
+        Đặt lại
+      </button>
     </div>
 
-    <ConsoleLoadError v-if="loadError" @retry="loadOrders" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="orders"
-      :loading="loading"
-      class="transition-opacity"
-      :class="{ 'opacity-60': changingPage }"
-      empty-text="Không có đơn nào phù hợp."
-    >
-      <template #cell-code="{ row }">
-        <router-link :to="`/console/orders/${row.id}`" class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline">
-          {{ row.code }}
-        </router-link>
-        <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateString(row.createdAt) }}</div>
-      </template>
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="loadError" @retry="loadOrders" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="orders"
+        :loading="loading"
+        class="transition-opacity"
+        :class="{ 'opacity-60': changingPage }"
+        empty-text="Không có đơn nào phù hợp."
+      >
+        <template #cell-code="{ row }">
+          <router-link :to="`/console/orders/${row.id}`" class="whitespace-nowrap font-num font-medium text-brand-700 hover:underline">
+            {{ row.code }}
+          </router-link>
+          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateString(row.createdAt) }}</div>
+        </template>
 
-      <template #cell-service="{ row }">
-        <div class="min-w-40 max-w-72">
-          <div class="font-medium text-ink-900">{{ row.serviceName }}</div>
-          <div class="line-clamp-1 text-xs text-ink-500" :title="row.addressSummary">{{ row.addressSummary }}</div>
-        </div>
-      </template>
+        <template #cell-service="{ row }">
+          <div class="min-w-40 max-w-72">
+            <div class="font-medium text-ink-900">{{ row.serviceName }}</div>
+            <div class="line-clamp-1 text-xs text-ink-500" :title="row.addressSummary">{{ row.addressSummary }}</div>
+          </div>
+        </template>
 
-      <template #cell-people="{ row }">
-        <div class="whitespace-nowrap text-ink-900">{{ row.customerName }} <span class="font-num text-xs text-ink-500">{{ row.customerPhone }}</span></div>
-        <div v-if="row.technician" class="whitespace-nowrap text-xs text-ink-600">
-          {{ row.technician.fullName }}
-          <span class="text-ink-500"><template v-if="hasRating(row.technician.averageRating)">★ {{ ratingLabel(row.technician.averageRating) }}</template><template v-else>· Chưa có đánh giá</template></span>
-        </div>
-        <div v-else class="whitespace-nowrap text-xs text-warning-700">Chưa gán thợ</div>
-      </template>
+        <template #cell-people="{ row }">
+          <div class="whitespace-nowrap text-ink-900">{{ row.customerName }} <span class="font-num text-xs text-ink-500">{{ row.customerPhone }}</span></div>
+          <div v-if="row.technician" class="whitespace-nowrap text-xs text-ink-600">
+            {{ row.technician.fullName }}
+            <span class="font-num text-ink-500"><template v-if="hasRating(row.technician.averageRating)">★ {{ ratingLabel(row.technician.averageRating) }}</template><template v-else>· Chưa có đánh giá</template></span>
+          </div>
+          <div v-else class="whitespace-nowrap text-xs text-warning-700">Chưa gán thợ</div>
+        </template>
 
-      <template #cell-total="{ row }">
-        <FhMoney :amount="row.grandTotal" />
-        <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Công <span class="font-num">{{ formatCurrencyVND(row.laborTotal) }}</span></div>
-        <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Linh kiện <span class="font-num">{{ formatCurrencyVND(row.partsTotal) }}</span></div>
-      </template>
+        <template #cell-total="{ row }">
+          <FhMoney :amount="row.grandTotal" />
+          <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Công <span class="font-num">{{ formatCurrencyVND(row.laborTotal) }}</span></div>
+          <div class="hidden whitespace-nowrap text-xs text-ink-500 xl:block">Linh kiện <span class="font-num">{{ formatCurrencyVND(row.partsTotal) }}</span></div>
+        </template>
 
-      <template #cell-status="{ row }">
-        <span v-if="row.workStopped === true && row.operationalDisposition === 'STOPPED'"
-          class="inline-block rounded-md bg-warning-50 px-2 py-1 text-sm font-medium text-warning-800"
-          data-testid="console-order-stopped">Đã dừng sửa · cần đối soát</span>
-        <FhStatusPill v-else :status="row.status" class="whitespace-nowrap" />
-        <router-link :to="{ path: '/console/support', query: { serviceOrderId: row.id } }" class="mt-1 block text-sm text-brand-700 underline">Yêu cầu hỗ trợ của đơn</router-link>
-      </template>
-    </ConsoleTable>
-    <ConsolePagination
-      v-if="!loadError"
-      v-model:page="page"
-      :total="total"
-      :page-size="PAGE_SIZE"
-      :disabled="loading"
-      @prefetch="prefetch"
-    />
+        <template #cell-status="{ row }">
+          <span v-if="row.workStopped === true && row.operationalDisposition === 'STOPPED'"
+            class="inline-flex items-center rounded-full border border-warning-200 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-800"
+            data-testid="console-order-stopped">Đã dừng sửa · cần đối soát</span>
+          <FhStatusPill v-else :status="row.status" class="whitespace-nowrap" />
+          <router-link :to="{ path: '/console/support', query: { serviceOrderId: row.id } }" class="mt-1 block text-xs font-medium text-brand-700 underline">Yêu cầu hỗ trợ của đơn</router-link>
+        </template>
+      </ConsoleTable>
+      <ConsolePagination
+        v-if="!loadError"
+        v-model:page="page"
+        :total="total"
+        :page-size="PAGE_SIZE"
+        :disabled="loading"
+        @prefetch="prefetch"
+      />
+    </div>
   </div>
 </template>

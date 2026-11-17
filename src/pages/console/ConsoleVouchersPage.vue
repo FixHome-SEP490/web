@@ -142,15 +142,17 @@ function setCampaignStatus(id: string, active: boolean) {
 
 <template>
   <div lang="vi" class="space-y-5" data-testid="console-vouchers-page">
-    <ConsolePageHeader title="Quản lý ưu đãi" />
-    <ConsoleVoucherWorkspace
-      :key="adminId ?? 'guest'"
-      :state="state" :campaigns="campaigns" :connected="true"
-      :can-manage="Boolean(adminId)" :busy="busy" :message="message"
-      :feedback="feedback" :feedback-error="feedbackError"
-      :categories="categories" :services="services" :criteria-error="criteriaError" :criteria-loading="criteriaLoading"
-      @retry="load" @retry-criteria="loadCriteria" @create-campaign="createCampaign" @set-campaign-status="setCampaignStatus"
-      @update-draft-campaign="updateDraftCampaign" @transition-campaign="transitionCampaign"
-    />
+    <ConsolePageHeader class="animate-slide-up" title="Quản lý ưu đãi" />
+    <div class="animate-slide-up-delay-1">
+      <ConsoleVoucherWorkspace
+        :key="adminId ?? 'guest'"
+        :state="state" :campaigns="campaigns" :connected="true"
+        :can-manage="Boolean(adminId)" :busy="busy" :message="message"
+        :feedback="feedback" :feedback-error="feedbackError"
+        :categories="categories" :services="services" :criteria-error="criteriaError" :criteria-loading="criteriaLoading"
+        @retry="load" @retry-criteria="loadCriteria" @create-campaign="createCampaign" @set-campaign-status="setCampaignStatus"
+        @update-draft-campaign="updateDraftCampaign" @transition-campaign="transitionCampaign"
+      />
+    </div>
   </div>
 </template>

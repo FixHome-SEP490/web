@@ -3,6 +3,7 @@
 // 08/10/2026). Lowest scores first, why a score moved, and adding or removing
 // points with a reason. Raising a score to 70 or more lifts a running ban.
 import { computed, onMounted, ref } from 'vue';
+import { RotateCcw, X } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -144,25 +145,32 @@ async function confirmAdjust() {
   }
 }
 
+const hasFilters = computed(() => Boolean(search.value.trim() || role.value));
+function resetFilters() {
+  search.value = '';
+  role.value = '';
+  applyFilters();
+}
+
 onMounted(load);
 </script>
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Điểm uy tín" :count="loading || loadError ? null : total">
+    <ConsolePageHeader class="animate-slide-up" title="Điểm uy tín" :count="loading || loadError ? null : total">
       <template #meta>
         <details class="mt-1 text-sm text-ink-600">
           <summary class="cursor-pointer whitespace-nowrap font-medium text-brand-700 hover:underline">Quy tắc điểm</summary>
           <ul class="mt-2 max-w-2xl list-disc space-y-1 pl-5 text-pretty">
-            <li>Bắt đầu 100 điểm, huỷ đơn đã có người nhận trừ 10 điểm.</li>
-            <li>Dưới 70 điểm tạm khoá 72 giờ, dưới 40 điểm 7 ngày, từ 20 điểm trở xuống 30 ngày, hết điểm khoá tài khoản.</li>
-            <li>Điểm làm mới về 100 mỗi 2 tháng.</li>
+            <li>Bắt đầu <span class="font-num">100</span> điểm, huỷ đơn đã có người nhận trừ <span class="font-num">10</span> điểm.</li>
+            <li>Dưới <span class="font-num">70</span> điểm tạm khoá <span class="font-num">72</span> giờ, dưới <span class="font-num">40</span> điểm <span class="font-num">7</span> ngày, từ <span class="font-num">20</span> điểm trở xuống <span class="font-num">30</span> ngày, hết điểm khoá tài khoản.</li>
+            <li>Điểm làm mới về <span class="font-num">100</span> mỗi <span class="font-num">2</span> tháng.</li>
           </ul>
         </details>
       </template>
     </ConsolePageHeader>
 
-    <form class="flex flex-wrap items-center gap-2" @submit.prevent="applyFilters">
+    <form class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)" @submit.prevent="applyFilters">
       <ConsoleSearch v-model="search" :maxlength="100" placeholder="Tìm tên, email, số điện thoại" label="Tìm kiếm" />
       <select v-model="role" :class="consoleField" aria-label="Vai trò" @change="applyFilters">
         <option value="">Tất cả vai trò</option>
@@ -170,68 +178,105 @@ onMounted(load);
         <option value="technician">Kỹ thuật viên</option>
       </select>
       <FhButton type="submit" variant="secondary" size="sm">Tìm</FhButton>
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
+        Đặt lại
+      </button>
     </form>
 
-    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="rows"
-      :loading="loading"
-      empty-text="Không có tài khoản nào khớp bộ lọc."
-    >
-      <template #cell-user="{ row }">
-        <div class="font-medium text-ink-900">{{ row.fullName }}</div>
-        <div class="truncate text-xs text-ink-500" :title="row.email">{{ row.email }}<template v-if="row.phoneNumber"> · <span class="whitespace-nowrap font-num">{{ row.phoneNumber }}</span></template></div>
-      </template>
-      <template #cell-role="{ row }">
-        <span class="whitespace-nowrap text-ink-700">{{ ROLE_LABELS[row.role] ?? 'Không rõ' }}</span>
-      </template>
-      <template #cell-points="{ row }">
-        <span class="font-num font-semibold" :class="row.reputationPoints < 70 ? 'text-danger-700' : 'text-ink-900'">{{ row.reputationPoints }}</span>
-      </template>
-      <template #cell-ban="{ row }">
-        <span v-if="row.status === 'locked'" class="whitespace-nowrap text-danger-700">Đã khoá tài khoản</span>
-        <span v-else-if="banUntil(row)" class="whitespace-nowrap text-danger-700">Tới {{ vnDateTimeString(banUntil(row)!) }}</span>
-        <span v-else class="text-ink-400">Không</span>
-      </template>
-      <template #cell-actions="{ row }">
-        <div class="flex items-center justify-end gap-2">
-          <FhButton variant="secondary" size="sm" @click="openHistory(row)">Lịch sử</FhButton>
-          <ConsoleMoreMenu label="Thao tác khác với tài khoản">
-            <ConsoleMenuItem @click="openAdjust(row)">Điều chỉnh</ConsoleMenuItem>
-          </ConsoleMoreMenu>
-        </div>
-      </template>
-    </ConsoleTable>
-    <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="goTo" />
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="rows"
+        :loading="loading"
+        empty-text="Không có tài khoản nào khớp bộ lọc."
+      >
+        <template #cell-user="{ row }">
+          <div class="font-medium text-ink-900">{{ row.fullName }}</div>
+          <div class="truncate text-xs text-ink-500" :title="row.email">{{ row.email }}<template v-if="row.phoneNumber"> · <span class="whitespace-nowrap font-num">{{ row.phoneNumber }}</span></template></div>
+        </template>
+        <template #cell-role="{ row }">
+          <span class="whitespace-nowrap text-ink-700">{{ ROLE_LABELS[row.role] ?? 'Không rõ' }}</span>
+        </template>
+        <template #cell-points="{ row }">
+          <span class="font-num font-semibold" :class="row.reputationPoints < 70 ? 'text-danger-700' : 'text-ink-900'">{{ row.reputationPoints }}</span>
+        </template>
+        <template #cell-ban="{ row }">
+          <span v-if="row.status === 'locked'" class="whitespace-nowrap font-medium text-danger-700">Đã khoá tài khoản</span>
+          <span v-else-if="banUntil(row)" class="whitespace-nowrap text-danger-700">Tới <span class="font-num">{{ vnDateTimeString(banUntil(row)!) }}</span></span>
+          <span v-else class="text-ink-400">Không</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <div class="flex items-center justify-end gap-2">
+            <FhButton variant="secondary" size="sm" @click="openHistory(row)">Lịch sử</FhButton>
+            <ConsoleMoreMenu label="Thao tác khác với tài khoản">
+              <ConsoleMenuItem @click="openAdjust(row)">Điều chỉnh</ConsoleMenuItem>
+            </ConsoleMoreMenu>
+          </div>
+        </template>
+      </ConsoleTable>
+      <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="goTo" />
+    </div>
 
-    <FhConfirmDialog
-      :open="!!historyFor"
-      :title="`Lịch sử điểm: ${historyFor?.fullName ?? ''}`"
-      consequence="Mới nhất trước."
-      confirm-text="Đóng"
-      cancel-text="Quay lại"
-      :danger="false"
-      @confirm="historyFor = null"
-      @cancel="historyFor = null"
-    >
-      <FhSkeleton v-if="historyLoading" height="36px" :count="3" />
-      <p v-else-if="historyError" class="text-sm text-danger-700">{{ historyError }}</p>
-      <p v-else-if="history.length === 0" class="text-sm text-ink-500">Chưa có thay đổi nào.</p>
-      <ul v-else class="max-h-72 overflow-y-auto divide-y divide-ink-100" data-testid="reputation-events">
-        <li v-for="event in history" :key="event.id" class="flex items-start justify-between gap-3 py-2 text-sm">
-          <div class="min-w-0">
-            <div class="font-medium text-ink-800">{{ KIND_LABELS[event.kind] ?? 'Thay đổi điểm' }} · <span class="whitespace-nowrap font-num">{{ vnDateTimeString(event.createdAt) }}</span></div>
-            <div class="text-ink-500 break-words">{{ [event.reason, event.penalty].filter(Boolean).join(' ') }}</div>
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="historyFor"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reputation-history-title"
+          @click.self="historyFor = null"
+          @keydown.esc="historyFor = null"
+        >
+          <div class="fh-modal-panel flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-[var(--radius-lg)] border border-ink-200 bg-white shadow-(--shadow-e3)">
+            <div class="flex items-start justify-between gap-3 border-b border-ink-200 bg-ink-25/60 px-6 py-4">
+              <div>
+                <h3 id="reputation-history-title" class="text-base font-semibold text-ink-900">Lịch sử điểm: {{ historyFor.fullName }}</h3>
+                <p class="mt-0.5 text-xs text-ink-500">Mới nhất trước.</p>
+              </div>
+              <button
+                type="button"
+                class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
+                aria-label="Đóng"
+                @click="historyFor = null"
+              >
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-4">
+              <FhSkeleton v-if="historyLoading" height="36px" :count="3" />
+              <p v-else-if="historyError" class="text-sm text-danger-700">{{ historyError }}</p>
+              <p v-else-if="history.length === 0" class="py-6 text-center text-sm text-ink-500">Chưa có thay đổi nào.</p>
+              <ul v-else class="divide-y divide-ink-100" data-testid="reputation-events">
+                <li v-for="event in history" :key="event.id" class="flex items-start justify-between gap-3 py-2.5 text-sm">
+                  <div class="min-w-0">
+                    <div class="font-medium text-ink-800">{{ KIND_LABELS[event.kind] ?? 'Thay đổi điểm' }} · <span class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateTimeString(event.createdAt) }}</span></div>
+                    <div class="mt-0.5 break-words text-xs text-ink-600">{{ [event.reason, event.penalty].filter(Boolean).join(' ') }}</div>
+                  </div>
+                  <div class="shrink-0 text-right">
+                    <div class="font-num font-semibold" :class="event.delta < 0 ? 'text-danger-700' : 'text-success-700'">{{ signed(event.delta) }}</div>
+                    <div class="whitespace-nowrap font-num text-xs text-ink-500">còn {{ event.pointsAfter }}</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="flex justify-end border-t border-ink-200 bg-ink-25/60 px-6 py-4">
+              <FhButton variant="secondary" size="sm" @click="historyFor = null">Đóng</FhButton>
+            </div>
           </div>
-          <div class="shrink-0 text-right">
-            <div class="font-num font-semibold" :class="event.delta < 0 ? 'text-danger-700' : 'text-ink-700'">{{ signed(event.delta) }}</div>
-            <div class="whitespace-nowrap font-num text-xs text-ink-500">còn {{ event.pointsAfter }}</div>
-          </div>
-        </li>
-      </ul>
-    </FhConfirmDialog>
+        </div>
+      </Transition>
+    </Teleport>
 
     <FhConfirmDialog
       :open="!!adjustFor"
@@ -246,19 +291,21 @@ onMounted(load);
     >
       <div class="space-y-3 text-sm">
         <div class="flex gap-4">
-          <label class="flex items-center gap-1.5"><input v-model="direction" type="radio" value="add" /> Cộng điểm</label>
-          <label class="flex items-center gap-1.5"><input v-model="direction" type="radio" value="remove" /> Trừ điểm</label>
+          <label class="flex cursor-pointer items-center gap-1.5"><input v-model="direction" type="radio" value="add" class="accent-brand-600" /> Cộng điểm</label>
+          <label class="flex cursor-pointer items-center gap-1.5"><input v-model="direction" type="radio" value="remove" class="accent-brand-600" /> Trừ điểm</label>
         </div>
         <label :class="consoleLabel">
           Số điểm
-          <input v-model="amount" type="number" min="1" max="100" step="1" inputmode="numeric" :class="consoleField" data-testid="adjust-amount" />
+          <input v-model="amount" type="number" min="1" max="100" step="1" inputmode="numeric" :class="consoleField" class="font-num" data-testid="adjust-amount" />
         </label>
         <label :class="consoleLabel">
           Lý do
           <textarea v-model="reason" rows="3" maxlength="500" :class="consoleTextarea" data-testid="adjust-reason" />
         </label>
         <p v-if="preview !== null" class="text-ink-600">Điểm sau khi điều chỉnh: <strong class="font-num">{{ adjustFor?.reputationPoints }} → {{ preview }}</strong></p>
-        <p v-if="adjustError" class="text-danger-700" role="alert">{{ adjustError }}</p>
+        <Transition name="fh-fade-slide">
+          <p v-if="adjustError" class="text-danger-700" role="alert">{{ adjustError }}</p>
+        </Transition>
       </div>
     </FhConfirmDialog>
   </div>
