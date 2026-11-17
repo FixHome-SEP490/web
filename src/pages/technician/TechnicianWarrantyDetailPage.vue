@@ -93,9 +93,16 @@ function onDone(updated: StaffWarrantyClaim) {
     type: 'success',
     text:
       mode === 'propose'
-        ? 'Đã gửi kết luận. Quản lý dịch vụ sẽ duyệt trước khi thông báo cho khách hàng.'
+        ? proposeNotice(updated.status)
         : 'Đã cập nhật yêu cầu bảo hành.',
   };
+}
+
+// BUG DETECTOR 157: a workmanship fault goes straight to re-service, the manager does not review it.
+function proposeNotice(status: string): string {
+  return status === 'in_progress'
+    ? 'Đã ghi nhận lỗi do tay nghề. Bạn tiến hành sửa lại cho khách, yêu cầu này không cần quản lý dịch vụ duyệt.'
+    : 'Đã gửi kết luận. Quản lý dịch vụ sẽ duyệt trước khi thông báo cho khách hàng.';
 }
 
 async function checkIn() {

@@ -262,6 +262,27 @@ describe('AI booking form', () => {
     expect(wrapper.get('[data-testid="ai-current-service"]').text()).toContain('Kiểm tra máy lạnh');
   }, 10000);
 
+  it('BUG 161: offers only services of the appliance being discussed until the customer asks for all', async () => {
+    getCategories.mockResolvedValue([
+      { id: 'cat-ac', name: 'Điện lạnh', services: [
+        { id: 'svc-check', name: 'Kiểm tra máy lạnh', pricingMode: 'inspection_required', basePrice: 100000 },
+        { id: 'svc-fix', name: 'Sửa máy lạnh không mát', pricingMode: 'inspection_required', basePrice: 200000 },
+      ] },
+      { id: 'cat-tv', name: 'Tivi', services: [
+        { id: 'svc-tv', name: 'Sửa tivi', pricingMode: 'inspection_required', basePrice: 250000 },
+      ] },
+    ]);
+    analyze.mockResolvedValueOnce(reply({ recommendedServices: [fix] }));
+    const wrapper = await openAiForm();
+    await describeAndAnalyze(wrapper);
+    const options = () => wrapper.get('[data-testid="ai-manual-service"]').findAll('option').map((o) => o.attributes('value')).filter(Boolean);
+    expect(options()).toEqual(['svc-check', 'svc-fix']);
+    expect(wrapper.get('[data-testid="ai-continue"]').attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="ai-show-all-services"]').trigger('click');
+    expect(options()).toEqual(['svc-check', 'svc-fix', 'svc-tv']);
+    expect(wrapper.find('[data-testid="ai-show-all-services"]').exists()).toBe(false);
+  }, 10000);
+
   it('still books when the assistant cannot be reached: the customer picks the service', async () => {
     analyze.mockResolvedValueOnce({ status: 'unavailable', aiAvailable: false, sessionId: null, messageVi: 'Trợ lý đang tạm thời không kết nối được.' });
     const wrapper = await openAiForm();

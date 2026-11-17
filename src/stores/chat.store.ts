@@ -224,14 +224,17 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function selectConversation(conversationId: string) {
-    if (activeConversationId.value && activeConversationId.value !== conversationId) {
+    const switching = activeConversationId.value !== conversationId;
+    if (activeConversationId.value && switching) {
       chatSocketService.forgetConversation(activeConversationId.value);
     }
 
     activeConversationId.value = conversationId;
     chatSocketService.joinConversation(conversationId);
 
-    await loadMessages(conversationId);
+    // BUG DETECTOR 156: while another conversation was open this one's room was
+    // left, so messages sent meanwhile never arrived. Reload it on every switch.
+    await loadMessages(conversationId, switching);
     await markAsRead(conversationId);
   }
 

@@ -18,7 +18,7 @@ vi.mock('../src/api/client', () => ({ default: { get: vi.fn(), post: vi.fn() }, 
 const walletClaim = {
   id: 'claim-1', campaignId: 'campaign-1', status: 'CLAIMED', redeemedAt: null,
   policySnapshot: { discount: 'FIXED', value: 50000, capVnd: null, minimumVnd: 100000, categoryIds: [], serviceIds: [], components: ['LABOR', 'PARTS'] },
-  campaign: { code: 'FIX50', name: 'Ưu đãi cá nhân', kind: 'PERSONAL', active: true, startsAt: '2026-01-01T00:00:00Z', endsAt: '2026-12-31T23:59:59Z' },
+  campaign: { code: 'FIX50', name: 'Ưu đãi cá nhân', kind: 'PERSONAL', active: true, startsAt: '2026-01-01T00:00:00Z', endsAt: '2099-12-31T23:59:59Z' },
 };
 const routeReplace = vi.fn();
 
@@ -191,6 +191,22 @@ describe('checkout voucher boundary', () => {
     expect(routeReplace).toHaveBeenCalledWith({ path: '/app/orders/order-1', query: {}, hash: '' });
     expect(apiClient.get).toHaveBeenCalledWith('/vouchers/checkout-preview/claim-1/order-1');
     expect(wrapper.get('[data-testid="checkout-voucher-preview"]').attributes('data-claim-id')).toBe('claim-1');
+    wrapper.unmount();
+  });
+
+  it('BUG 158: does not offer a claimed voucher whose campaign has ended or is paused', async () => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    const ended = { ...walletClaim, id: 'claim-ended', campaign: { ...walletClaim.campaign, endsAt: '2020-01-31T23:59:59Z' } };
+    const paused = { ...walletClaim, id: 'claim-paused', campaign: { ...walletClaim.campaign, active: false } };
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [ended, paused, walletClaim] : preview('claim-1', 'order-1') },
+    }) as never);
+    const wrapper = mountChooser(pinia, 'order-1', { voucherClaimId: 'claim-ended' });
+    await flushPromises();
+    expect(wrapper.find('[data-voucher-id="claim-ended"]').exists()).toBe(false);
+    expect(wrapper.find('[data-voucher-id="claim-paused"]').exists()).toBe(false);
+    expect(wrapper.find('[data-voucher-id="claim-1"]').exists()).toBe(true);
+    expect(apiClient.get).not.toHaveBeenCalledWith('/vouchers/checkout-preview/claim-ended/order-1');
     wrapper.unmount();
   });
 

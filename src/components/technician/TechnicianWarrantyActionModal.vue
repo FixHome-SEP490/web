@@ -277,7 +277,7 @@ async function submit() {
             class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
           ></textarea>
         </div>
-        <p class="text-xs text-ink-500">Kết luận chỉ là đề xuất. Quản lý dịch vụ sẽ duyệt trước khi thông báo cho khách hàng.</p>
+        <p class="text-xs text-ink-500">{{ result === 'covered_workmanship' ? 'Lỗi do tay nghề được ghi nhận ngay, bạn sửa lại cho khách mà không cần quản lý dịch vụ duyệt.' : 'Kết luận chỉ là đề xuất. Quản lý dịch vụ sẽ duyệt trước khi thông báo cho khách hàng.' }}</p>
       </template>
 
       <template v-else>
