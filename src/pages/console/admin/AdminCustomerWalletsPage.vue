@@ -112,20 +112,26 @@ async function adjust() {
   }
 }
 
+function resetFilters() {
+  search.value = '';
+  withBalance.value = false;
+  void load(1);
+}
+
 onMounted(() => load(1));
 </script>
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Ví khách hàng">
+    <ConsolePageHeader class="animate-slide-up" title="Ví khách hàng">
       <template #badges>
-        <span class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-sm text-ink-600" title="Tổng số dư khách đang có trong ví FixHome">
+        <span class="whitespace-nowrap rounded-full border border-ink-200 bg-white px-3 py-0.5 text-xs font-medium text-ink-600 shadow-2xs" title="Tổng số dư khách đang có trong ví FixHome">
           Đang giữ <strong class="text-ink-900" data-testid="wallets-total"><FhMoney :amount="totalBalance" /></strong>
         </span>
       </template>
     </ConsolePageHeader>
 
-    <form class="flex flex-wrap items-center gap-2" @submit.prevent="load(1)">
+    <form class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)" @submit.prevent="load(1)">
       <div class="relative w-full min-w-0 sm:w-72">
         <Search :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
         <input
@@ -138,15 +144,26 @@ onMounted(() => load(1));
           :class="consoleSearchField"
         />
       </div>
-      <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
-        <input v-model="withBalance" type="checkbox" class="h-4 w-4" data-testid="wallet-with-balance" @change="load(1)" /> Chỉ ví còn tiền
+      <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+        <input v-model="withBalance" type="checkbox" class="h-4 w-4 accent-brand-600" data-testid="wallet-with-balance" @change="load(1)" /> Chỉ ví còn tiền
       </label>
       <FhButton type="submit" variant="secondary" size="sm" :loading="loading">Tìm</FhButton>
+      <button
+        v-if="search.trim() || withBalance"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="resetFilters"
+      >
+        Đặt lại
+      </button>
     </form>
-    <p v-if="error" class="text-sm text-danger-700" role="alert">{{ error }}</p>
 
-    <div class="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white" aria-label="Danh sách ví khách">
+    <Transition name="fh-fade-slide">
+      <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm text-danger-800" role="alert">{{ error }}</p>
+    </Transition>
+
+    <div class="animate-slide-up-delay-2 grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white shadow-(--shadow-e1)" aria-label="Danh sách ví khách">
         <div v-if="loading" class="space-y-3 p-4"><FhSkeleton height="36px" :count="5" /></div>
         <p v-else-if="rows.length === 0" class="px-5 py-10 text-center text-sm text-ink-500">Không có khách nào khớp.</p>
         <template v-else>
@@ -158,8 +175,8 @@ onMounted(() => load(1));
             <li v-for="r in rows" :key="r.userId">
               <button
                 type="button"
-                class="flex w-full justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50 focus:outline-none focus-visible:bg-ink-50"
-                :class="detail?.customer.id === r.userId ? 'bg-brand-50' : ''"
+                class="flex w-full cursor-pointer justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-50 focus:outline-none focus-visible:bg-ink-50"
+                :class="detail?.customer.id === r.userId ? 'bg-brand-50/70' : ''"
                 :aria-current="detail?.customer.id === r.userId ? 'true' : undefined"
                 :data-testid="`wallet-row-${r.userId}`"
                 @click="open(r.userId)"
@@ -178,12 +195,12 @@ onMounted(() => load(1));
         </template>
       </section>
 
-      <section class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-5" aria-label="Chi tiết ví">
+      <section class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-5 shadow-(--shadow-e1)" aria-label="Chi tiết ví">
         <div v-if="detailLoading && !detail" class="space-y-3"><FhSkeleton height="28px" :count="6" /></div>
         <p v-else-if="detailError" class="text-sm text-danger-700">{{ detailError }}</p>
         <p v-else-if="!detail" class="py-10 text-center text-sm text-ink-500">Chọn một khách để xem số dư, lịch sử và điều chỉnh.</p>
         <div v-else class="space-y-6 text-sm" data-testid="wallet-detail">
-          <div>
+          <div class="rounded-[var(--radius-md)] border border-ink-100 bg-ink-25/50 p-4">
             <h2 class="text-lg font-semibold text-ink-900">{{ detail.customer.fullName }}</h2>
             <p class="truncate text-sm text-ink-500">{{ detail.customer.email }}<template v-if="detail.customer.phoneNumber"> · <span class="font-num">{{ detail.customer.phoneNumber }}</span></template></p>
             <p class="mt-2" data-testid="wallet-balance"><FhMoney :amount="detail.balance" emphasis /></p>
@@ -193,8 +210,8 @@ onMounted(() => load(1));
             <h3 class="font-semibold text-ink-900">Điều chỉnh số dư</h3>
             <form class="mt-3 space-y-3" data-testid="adjust-form" @submit.prevent="askAdjust">
               <div class="flex gap-4 text-sm text-ink-700">
-                <label class="flex items-center gap-1.5"><input v-model="adjustType" type="radio" value="CREDIT" data-testid="adjust-credit" /> Cộng tiền</label>
-                <label class="flex items-center gap-1.5"><input v-model="adjustType" type="radio" value="DEBIT" data-testid="adjust-debit" /> Trừ tiền</label>
+                <label class="flex cursor-pointer items-center gap-1.5"><input v-model="adjustType" type="radio" value="CREDIT" class="accent-brand-600" data-testid="adjust-credit" /> Cộng tiền</label>
+                <label class="flex cursor-pointer items-center gap-1.5"><input v-model="adjustType" type="radio" value="DEBIT" class="accent-brand-600" data-testid="adjust-debit" /> Trừ tiền</label>
               </div>
               <input
                 v-model="amountText"
@@ -218,8 +235,12 @@ onMounted(() => load(1));
                 data-testid="adjust-reason"
                 :class="consoleTextarea"
               />
-              <p v-if="formError" class="text-sm text-danger-700" role="alert">{{ formError }}</p>
-              <p v-if="saved" class="text-sm text-success-700" data-testid="adjust-saved">{{ saved }}</p>
+              <Transition name="fh-fade-slide">
+                <p v-if="formError" class="text-sm text-danger-700" role="alert">{{ formError }}</p>
+              </Transition>
+              <Transition name="fh-fade-slide">
+                <p v-if="saved" class="text-sm font-medium text-success-700" data-testid="adjust-saved">{{ saved }}</p>
+              </Transition>
               <FhButton type="submit" size="sm" data-testid="adjust-submit">Điều chỉnh</FhButton>
             </form>
           </div>
@@ -227,7 +248,7 @@ onMounted(() => load(1));
           <div class="border-t border-ink-100 pt-5">
             <h3 class="font-semibold text-ink-900">Lịch sử</h3>
             <p v-if="!detail.transactions.length" class="mt-1 text-sm text-ink-500">Chưa có giao dịch.</p>
-            <ul v-else class="mt-1 divide-y divide-ink-100" data-testid="wallet-history">
+            <ul v-else class="mt-2 max-h-96 divide-y divide-ink-100 overflow-y-auto overscroll-contain pr-1" data-testid="wallet-history">
               <li v-for="t in detail.transactions" :key="t.id" class="flex justify-between gap-3 py-2.5">
                 <span class="min-w-0">
                   <span class="block font-medium text-ink-800">{{ customerWalletTypeLabels[t.type] ?? 'Giao dịch ví' }}</span>
