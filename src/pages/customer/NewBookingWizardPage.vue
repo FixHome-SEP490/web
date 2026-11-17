@@ -617,6 +617,25 @@ const aiSuggestedServiceExists = computed(() =>
   allServices.value.some((service) => service.id === aiSuggested.value?.serviceId),
 );
 
+/**
+ * BUG DETECTOR 161: the "Đổi dịch vụ khác" list keeps to the appliance the
+ * assistant is talking about (its category), so a TV conversation offers TV
+ * services. "Xem tất cả dịch vụ" opens the whole catalog when the customer
+ * wants something else.
+ */
+const aiShowAllServices = ref(false);
+const aiFocusCategoryId = computed(() => {
+  const suggested = allServices.value.find((service) => service.id === aiSuggested.value?.serviceId);
+  return suggested?.categoryId || selectedService.value?.categoryId || null;
+});
+const aiServiceOptions = computed(() => {
+  const categoryId = aiFocusCategoryId.value;
+  if (aiShowAllServices.value || !categoryId) return allServices.value;
+  const related = allServices.value.filter((service) => service.categoryId === categoryId);
+  return related.length ? related : allServices.value;
+});
+const aiServiceListNarrowed = computed(() => aiServiceOptions.value.length < allServices.value.length);
+
 /** Open the conversation with what the customer already gave: description and photos. */
 async function startAiConversation() {
   if (aiConversation.turnCount.value > 0 || aiConversation.isThinking.value) return;
@@ -766,9 +785,11 @@ function restartAiConversation() {
  * but only when the customer has not chosen one. A later or late suggestion is
  * a proposal and never overwrites an explicit customer choice.
  */
+// BUG DETECTOR 161: also re-run when the catalog arrives after the suggestion,
+// otherwise the pick was lost and "Đặt thợ ngay" stayed locked.
 watch(
-  () => aiConversation.pinnedService.value,
-  (suggested) => {
+  [() => aiConversation.pinnedService.value, aiSuggestedServiceExists],
+  ([suggested]) => {
     if (!isAiFlow || !suggested?.serviceId || selectedServiceId.value || explicitServiceIntent || deepLinkLoading.value || deepLinkError.value) return;
     if (aiSuggestedServiceExists.value) selectServiceById(suggested.serviceId, { syncCategoryFilter: true });
   },
@@ -3366,9 +3387,18 @@ async function createAndFindTech() {
                       @change="chooseService(($event.target as HTMLSelectElement).value)"
                     >
                       <option value="" disabled>Chọn dịch vụ</option>
-                      <option v-for="srv in allServices" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
+                      <option v-for="srv in aiServiceOptions" :key="srv.id" :value="srv.id">{{ srv.categoryName }} · {{ srv.name }}</option>
                     </select>
                   </label>
+                  <button
+                    v-if="aiServiceListNarrowed && aiConversation.turnCount.value > 0 && !aiConversation.isThinking.value"
+                    type="button"
+                    class="min-h-11 text-sm text-ink-600 underline underline-offset-2 hover:text-ink-700"
+                    data-testid="ai-show-all-services"
+                    @click="aiShowAllServices = true"
+                  >
+                    Xem tất cả dịch vụ
+                  </button>
                   <button
                     v-if="aiBookOneOnly && aiChosenDevices.length >= 2"
                     type="button"
