@@ -131,6 +131,13 @@ async function loadPreview(
     loadState.value = 'ready';
     emit('update:preview', result);
     announceVariantCode(result.status === 'FIXED_PRICE' && result.selectedVariant ? result.selectedVariant.variantCode : null);
+    // PO 19/11/2026: when the only open question is which scope and there is just one,
+    // pick it so the server confirms its firm price; the customer can still change it.
+    const [only, ...others] = result.possibleVariants ?? [];
+    if (!variantCode && only && others.length === 0 && result.status === 'INSPECTION_REQUIRED'
+      && result.missingAttributes.length === 1 && result.missingAttributes[0] === 'service-specific-scope-confirmation') {
+      chooseScope(only.variantCode);
+    }
   } catch (error: unknown) {
     if (token !== requestToken) return;
     if (isCatalogV2PricingUnavailableError(error)) {
