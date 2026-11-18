@@ -174,6 +174,15 @@ describe('TechnicianWarrantyActionModal', () => {
     wrapper.unmount();
   });
 
+  it('BUG 157: tells the technician a workmanship fault needs no manager review', async () => {
+    const wrapper = mountModal('propose');
+    expect(wrapper.text()).toContain('Quản lý dịch vụ sẽ duyệt');
+    await wrapper.findAll('input[type="radio"]')[0].setValue();
+    expect(wrapper.text()).toContain('không cần quản lý dịch vụ duyệt');
+    expect(wrapper.text()).not.toContain('Quản lý dịch vụ sẽ duyệt');
+    wrapper.unmount();
+  });
+
   it('sends a workmanship proposal without a reason code or a photo', async () => {
     apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'inspected' }) } });
     const wrapper = mountModal('propose');

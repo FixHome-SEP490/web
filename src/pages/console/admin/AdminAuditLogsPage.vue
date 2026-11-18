@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Search, X } from 'lucide-vue-next';
+import { ChevronRight, RotateCcw, Search, X } from 'lucide-vue-next';
 import { FhSkeleton } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
@@ -153,11 +153,31 @@ const formatSnapshot = (value: unknown) => {
     return String(value);
   }
 };
+
+const hasActiveFilters = computed(
+  () => actionFilter.value !== '' || resourceTypeFilter.value !== '' || actorUserIdFilter.value.trim() !== '',
+);
+const resetFilters = () => {
+  actionFilter.value = '';
+  resourceTypeFilter.value = '';
+  actorUserIdFilter.value = '';
+};
+
+const actionPillClass = (action: string) => {
+  const upper = action.toUpperCase();
+  if (upper.includes('LOCK') || upper.includes('REJECT') || upper.includes('CANCEL') || upper.includes('DELETE') || upper.includes('RETIRE')) {
+    return 'bg-danger-50 text-danger-700 border-danger-200/70';
+  }
+  if (upper.includes('APPROVE') || upper.includes('CREATE') || upper.includes('ACTIVATE') || upper.includes('UNLOCK') || upper.includes('VERIFY')) {
+    return 'bg-success-50 text-success-700 border-success-200/70';
+  }
+  return 'bg-brand-50 text-brand-700 border-brand-200/70';
+};
 </script>
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Nhật ký thao tác" :count="loading || error ? null : total">
+    <ConsolePageHeader class="animate-slide-up" title="Nhật ký thao tác" :count="loading || error ? null : total">
       <template #badges>
         <span class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600" title="Nhật ký chỉ ghi thêm, không sửa hay xoá được.">Chỉ đọc</span>
       </template>
@@ -168,7 +188,7 @@ const formatSnapshot = (value: unknown) => {
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
       <select id="audit-action" v-model="actionFilter" :class="consoleField" aria-label="Lọc theo thao tác">
         <option value="">Mọi thao tác</option>
         <option v-for="opt in actionOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
@@ -190,83 +210,105 @@ const formatSnapshot = (value: unknown) => {
           :aria-describedby="actorIncomplete ? 'audit-actor-hint' : undefined"
         />
       </div>
+      <button
+        v-if="hasActiveFilters"
+        type="button"
+        class="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="13" aria-hidden="true" />
+        Đặt lại
+      </button>
       <p v-if="actorIncomplete" id="audit-actor-hint" class="w-full text-xs text-ink-500">
         Nhập đủ mã 36 ký tự để lọc.
       </p>
     </div>
 
-    <ConsoleLoadError v-if="error" :message="error" @retry="loadLogs" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="logs"
-      :loading="loading"
-      empty-text="Không có bản ghi phù hợp."
-    >
-      <template #cell-action="{ row }">
-        <button
-          type="button"
-          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          @click="openDetail(row)"
-        >{{ auditActionLabel(row.action) }}</button>
-        <div class="text-xs text-ink-500">{{ auditResourceLabel(row.resourceType) }}</div>
-      </template>
-      <template #cell-actor="{ row }">
-        <span class="whitespace-nowrap text-ink-700">{{ row.actorUserId ? roleLabel(row.actorRole) : 'Hệ thống' }}</span>
-      </template>
-      <template #cell-createdAt="{ row }">
-        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTime(String(row.createdAt)) }}</span>
-      </template>
-    </ConsoleTable>
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="error" :message="error" @retry="loadLogs" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="logs"
+        :loading="loading"
+        empty-text="Không có bản ghi phù hợp."
+      >
+        <template #cell-action="{ row }">
+          <button
+            type="button"
+            class="group inline-flex max-w-full items-center gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded cursor-pointer"
+            @click="openDetail(row)"
+          >
+            <span class="min-w-0 space-y-0.5">
+              <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors" :class="actionPillClass(row.action)">
+                {{ auditActionLabel(row.action) }}
+              </span>
+              <span class="block text-xs text-ink-500">{{ auditResourceLabel(row.resourceType) }}</span>
+            </span>
+            <ChevronRight :size="14" class="shrink-0 text-ink-300 transition-[color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-brand-600" aria-hidden="true" />
+          </button>
+        </template>
+        <template #cell-actor="{ row }">
+          <span class="inline-flex items-center whitespace-nowrap rounded-full border border-ink-200/80 bg-ink-50 px-2.5 py-0.5 text-xs font-medium text-ink-700">
+            {{ row.actorUserId ? roleLabel(row.actorRole) : 'Hệ thống' }}
+          </span>
+        </template>
+        <template #cell-createdAt="{ row }">
+          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTime(String(row.createdAt)) }}</span>
+        </template>
+      </ConsoleTable>
 
-    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+    </div>
 
     <!-- Detail (read only; snapshots are escaped text) -->
-    <div
-      v-if="selected"
-      class="fixed inset-0 z-50 flex justify-end bg-ink-950/40"
-      @click.self="closeDetail"
-      @keydown.esc="closeDetail"
-    >
-      <aside
-        class="flex h-full w-full max-w-xl flex-col bg-white shadow-[var(--shadow-e3)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="audit-detail-title"
+    <Transition name="fh-drawer">
+      <div
+        v-if="selected"
+        class="fixed inset-0 z-50 flex justify-end bg-ink-950/50"
+        @click.self="closeDetail"
+        @keydown.esc="closeDetail"
       >
-        <div class="flex items-start justify-between gap-3 border-b border-ink-100 px-5 py-4">
-          <div class="min-w-0">
-            <h3 id="audit-detail-title" class="text-lg font-semibold text-ink-900">{{ auditActionLabel(selected.action) }}</h3>
-            <p class="whitespace-nowrap font-num text-sm text-ink-500">{{ formatDateTime(selected.createdAt) }}</p>
+        <aside
+          class="fh-drawer-panel flex h-full w-full max-w-xl flex-col border-l border-ink-200/80 bg-white shadow-[var(--shadow-e3)]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="audit-detail-title"
+        >
+          <div class="flex items-start justify-between gap-3 border-b border-ink-100 bg-ink-50/70 px-5 py-4">
+            <div class="min-w-0 space-y-0.5">
+              <h3 id="audit-detail-title" class="text-lg font-semibold text-ink-900">{{ auditActionLabel(selected.action) }}</h3>
+              <p class="whitespace-nowrap font-num text-xs text-ink-500">{{ formatDateTime(selected.createdAt) }}</p>
+            </div>
+            <button class="rounded-lg p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" type="button" aria-label="Đóng chi tiết" @click="closeDetail">
+              <X :size="18" aria-hidden="true" />
+            </button>
           </div>
-          <button class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" type="button" aria-label="Đóng chi tiết" @click="closeDetail">
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </div>
 
-        <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-sm">
-          <FhSkeleton v-if="detailLoading" height="20px" :count="6" />
-          <template v-else>
-            <p v-if="detailError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-danger-800" role="alert">{{ detailError }}</p>
-            <dl class="space-y-2.5">
-              <div class="flex justify-between gap-3"><dt class="text-ink-500">Đối tượng</dt><dd class="text-right text-ink-900">{{ auditResourceLabel(selected.resourceType) }}</dd></div>
-              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Mã đối tượng</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.resourceId || '—' }}</dd></div>
-              <div class="flex justify-between gap-3"><dt class="text-ink-500">Vai trò</dt><dd class="text-right text-ink-900">{{ selected.actorUserId ? roleLabel(selected.actorRole) : 'Hệ thống' }}</dd></div>
-              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Mã người thực hiện</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.actorUserId || '—' }}</dd></div>
-              <div class="flex justify-between gap-3"><dt class="text-ink-500">Địa chỉ IP</dt><dd class="text-right font-num text-ink-900">{{ selected.ip || '—' }}</dd></div>
-              <div class="flex justify-between gap-3"><dt class="shrink-0 text-ink-500">Trình duyệt</dt><dd class="break-all text-right text-ink-900">{{ selected.userAgent || '—' }}</dd></div>
-            </dl>
-            <div>
-              <div class="mb-1 font-medium text-ink-700">Dữ liệu trước</div>
-              <pre class="whitespace-pre-wrap break-all rounded border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.before) }}</pre>
-            </div>
-            <div>
-              <div class="mb-1 font-medium text-ink-700">Dữ liệu sau</div>
-              <pre class="whitespace-pre-wrap break-all rounded border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.after) }}</pre>
-            </div>
-          </template>
-        </div>
-      </aside>
-    </div>
+          <div class="flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4 text-sm">
+            <FhSkeleton v-if="detailLoading" height="20px" :count="6" />
+            <template v-else>
+              <p v-if="detailError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-danger-800" role="alert">{{ detailError }}</p>
+              <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/70 px-4">
+                <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Đối tượng</dt><dd class="text-right font-medium text-ink-900">{{ auditResourceLabel(selected.resourceType) }}</dd></div>
+                <div class="flex justify-between gap-3 py-2.5"><dt class="shrink-0 text-ink-500">Mã đối tượng</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.resourceId || '—' }}</dd></div>
+                <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Vai trò</dt><dd class="text-right font-medium text-ink-900">{{ selected.actorUserId ? roleLabel(selected.actorRole) : 'Hệ thống' }}</dd></div>
+                <div class="flex justify-between gap-3 py-2.5"><dt class="shrink-0 text-ink-500">Mã người thực hiện</dt><dd class="break-all text-right font-num text-ink-900">{{ selected.actorUserId || '—' }}</dd></div>
+                <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Địa chỉ IP</dt><dd class="text-right font-num text-ink-900">{{ selected.ip || '—' }}</dd></div>
+                <div class="flex justify-between gap-3 py-2.5"><dt class="shrink-0 text-ink-500">Trình duyệt</dt><dd class="break-all text-right text-ink-900">{{ selected.userAgent || '—' }}</dd></div>
+              </dl>
+              <div>
+                <div class="mb-1.5 text-xs font-semibold text-ink-600">Dữ liệu trước</div>
+                <pre class="whitespace-pre-wrap break-all rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.before) }}</pre>
+              </div>
+              <div>
+                <div class="mb-1.5 text-xs font-semibold text-ink-600">Dữ liệu sau</div>
+                <pre class="whitespace-pre-wrap break-all rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3 font-num text-xs text-ink-800">{{ formatSnapshot(selected.after) }}</pre>
+              </div>
+            </template>
+          </div>
+        </aside>
+      </div>
+    </Transition>
   </div>
 </template>

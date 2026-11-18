@@ -137,7 +137,7 @@ const handleModalToggleSelect = (id: string) => {
   toggleSelect(id);
 };
 
-const MIN_RADAR_SCAN_MS = 1400;
+const MIN_RADAR_SCAN_MS = 3600;
 let pageUnmounted = false;
 
 const shouldUseMinScanDelay = () => {
@@ -291,22 +291,37 @@ const selectedTechs = computed(() => {
       <!-- The request already exists: back opens it, never the emptied form (PO 21/10/2026). -->
       <FhBackLink :label="isVisit ? 'Lượt sửa của bạn' : 'Yêu cầu của bạn'" @click="router.push(backTarget)" />
 
-      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-        <div>
-          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
-          <p class="text-sm text-ink-500 mt-1">
-            Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong khung giờ bạn chọn
-          </p>
-        </div>
+      <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-4 sm:px-6 sm:py-5">
         <div
-          v-if="showsReadyBadge"
-          data-testid="candidates-ready-badge"
-          class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-500 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+          class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+          aria-hidden="true"
         >
-          <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
-          Đang có thợ sẵn sàng nhận đơn
+          <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+          <img
+            :src="'/images/ui/booking-technician-match.png'"
+            alt=""
+            data-testid="candidates-header-artwork"
+            class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
+            loading="lazy"
+          />
         </div>
-      </div>
+        <div class="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pr-20 sm:pr-36">
+          <div class="min-w-0 space-y-1">
+            <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Kỹ thuật viên gần bạn</h1>
+            <p class="text-sm text-ink-600 text-pretty">
+              Được FixHome xác thực tay nghề, lý lịch và đang trống lịch trong khung giờ bạn chọn
+            </p>
+          </div>
+          <div
+            v-if="showsReadyBadge"
+            data-testid="candidates-ready-badge"
+            class="hidden sm:flex items-center gap-2 text-xs font-medium text-ink-600 bg-ink-50 px-3 py-1.5 rounded-full border border-ink-200/60 shrink-0"
+          >
+            <span class="w-2 h-2 rounded-full bg-success-500 animate-pulse"></span>
+            Đang có thợ sẵn sàng nhận đơn
+          </div>
+        </div>
+      </header>
     </div>
 
     <!-- Customer-ranked invitations policy callout -->
@@ -379,7 +394,7 @@ const selectedTechs = computed(() => {
             v-for="sort in sortOptions"
             :key="sort.key"
             type="button"
-            class="h-8 px-3 rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap active:scale-95 cursor-pointer"
+            class="h-8 px-3 rounded-lg text-xs font-medium transition-[background-color,color,border-color,transform] duration-150 motion-reduce:transition-none whitespace-nowrap active:scale-95 cursor-pointer"
             :class="sortBy === sort.key ? 'bg-ink-900 text-white shadow-2xs font-semibold' : 'bg-white border border-ink-200 text-ink-600 hover:bg-ink-50 hover:border-ink-300'"
             @click="sortBy = sort.key"
           >
@@ -395,7 +410,7 @@ const selectedTechs = computed(() => {
         role="button"
         tabindex="0"
         :aria-pressed="selectedIds.includes(tech.id)"
-        class="group relative p-3.5 sm:p-4 rounded-2xl border bg-white flex flex-col gap-2.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.99]"
+        class="group relative p-3.5 sm:p-4 rounded-2xl border bg-white flex flex-col gap-2.5 transition-[border-color,background-color,box-shadow,transform] duration-150 motion-reduce:transition-none cursor-pointer select-none active:scale-[0.99]"
         :class="selectedIds.includes(tech.id)
           ? 'border-brand-600 bg-brand-50/20 ring-2 ring-brand-500/20 shadow-xs'
           : 'border-ink-200/90 hover:border-brand-300 hover:shadow-2xs'"
@@ -422,13 +437,13 @@ const selectedTechs = computed(() => {
             <button
               type="button"
               data-testid="view-profile-btn"
-              class="group/profile text-left flex items-center gap-3 min-w-0 cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl transition-all"
+              class="group/profile text-left flex items-center gap-3 min-w-0 cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 rounded-xl"
               title="Nhấn để xem hồ sơ kỹ thuật viên"
               :aria-label="`Xem hồ sơ kỹ thuật viên ${tech.fullName}`"
               @click.stop="openProfileModal(tech)"
             >
               <!-- Avatar with Online Dot and Selection Priority Badge -->
-              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-brand-100/70 to-brand-50 text-brand-700 border border-brand-200/70 flex items-center justify-center font-bold text-base shrink-0 relative shadow-2xs group-hover/profile:border-brand-400 group-hover/profile:scale-105 transition-all">
+              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-brand-100/70 to-brand-50 text-brand-700 border border-brand-200/70 flex items-center justify-center font-bold text-base shrink-0 relative shadow-2xs group-hover/profile:border-brand-400 group-hover/profile:scale-105 motion-reduce:group-hover/profile:scale-100 transition-[border-color,transform] duration-150">
                 <img
                   v-if="tech.avatarUrl"
                   :src="tech.avatarUrl"
@@ -490,7 +505,7 @@ const selectedTechs = computed(() => {
           <div class="shrink-0 pointer-events-none">
             <span
               v-if="selectedIds.includes(tech.id)"
-              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-num shadow-2xs transition-all duration-200"
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-num shadow-2xs transition-[background-color,color] duration-150"
               :class="selectedIds.indexOf(tech.id) === 0 ? 'bg-brand-600 text-white' : 'bg-brand-100 text-brand-800 border border-brand-200'"
             >
               <Check :size="13" class="stroke-[3]" />
@@ -541,7 +556,7 @@ const selectedTechs = computed(() => {
     <Transition name="fh-modal">
       <div
         v-if="inviteSent"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/60 backdrop-blur-xs p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/55 p-4"
       >
         <div class="fh-modal-panel bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
           <div class="mx-auto max-w-[130px] flex items-center justify-center">
@@ -582,11 +597,11 @@ const selectedTechs = computed(() => {
           <div class="flex items-center gap-3 min-w-0">
             <div class="flex items-center gap-1.5 shrink-0">
               <span
-                class="w-3 h-3 rounded-full transition-all duration-200"
+                class="w-3 h-3 rounded-full transition-[background-color,transform] duration-150 motion-reduce:transition-none"
                 :class="selectedCount >= 1 ? 'bg-brand-600 ring-2 ring-brand-200 scale-110' : 'bg-ink-200'"
               ></span>
               <span
-                class="w-3 h-3 rounded-full transition-all duration-200"
+                class="w-3 h-3 rounded-full transition-[background-color,transform] duration-150 motion-reduce:transition-none"
                 :class="selectedCount >= 2 ? 'bg-brand-600 ring-2 ring-brand-200 scale-110' : 'bg-ink-200'"
               ></span>
             </div>

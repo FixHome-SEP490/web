@@ -52,16 +52,16 @@ const valueOf = (row: TRow, key: string) => (row as Record<string, unknown>)[key
 
 <template>
   <ConsoleTableSkeleton v-if="loading" :columns="Math.min(columns.length, 5)" />
-  <div v-else class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white">
-    <div class="overflow-x-auto">
+  <div v-else class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)">
+    <div class="overflow-x-auto overscroll-x-contain">
       <table class="w-full text-left text-sm">
         <thead>
-          <tr class="border-b border-ink-100 bg-ink-25">
+          <tr class="border-b border-ink-200/80 bg-ink-50/90">
             <th
               v-for="col in columns"
               :key="col.key"
               scope="col"
-              class="whitespace-nowrap px-3 py-2.5 text-xs font-medium text-ink-500 first:pl-5 last:pr-5 xl:px-4"
+              class="whitespace-nowrap px-3 py-3 text-xs font-semibold text-ink-600 first:pl-5 last:pr-5 xl:px-4"
               :class="cellClass(col)"
               :style="col.width ? { width: col.width } : undefined"
             >
@@ -79,7 +79,7 @@ const valueOf = (row: TRow, key: string) => (row as Record<string, unknown>)[key
             v-for="(row, index) in rows"
             v-else
             :key="keyOf(row, index)"
-            class="align-top transition-colors hover:bg-ink-25"
+            class="align-top transition-[background-color] duration-150 motion-reduce:transition-none hover:bg-brand-50/35"
             :data-testid="rowTestId ? rowTestId(row) : undefined"
           >
             <td

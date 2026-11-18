@@ -428,7 +428,13 @@ async function load() {
   try {
     const result = await vouchersApi.wallet();
     if (request !== sequence) return;
-    offers.value = result.filter((claim) => claim.status === 'CLAIMED').map((claim) => claimOffer(claim, owner));
+    // BUG DETECTOR 158: a claim stays CLAIMED after its campaign ends, so only offer
+    // the ones still running and active; an ended voucher can only fail at checkout.
+    const nowMs = Date.now();
+    offers.value = result
+      .filter((claim) => claim.status === 'CLAIMED' && claim.campaign.active
+        && Date.parse(claim.campaign.startsAt) <= nowMs && nowMs < Date.parse(claim.campaign.endsAt))
+      .map((claim) => claimOffer(claim, owner));
     state.value = 'ready';
     selectReturnedClaim(route.query.voucherClaimId);
   } catch (e) {

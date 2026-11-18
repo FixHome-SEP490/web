@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { History, ShieldCheck, SlidersHorizontal } from 'lucide-vue-next';
 import FhButton from '../../../components/FhButton.vue';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import { consoleField, consoleLabel } from '../../../components/console/console-ui';
@@ -56,6 +57,11 @@ const blockerLabels: Record<typeof W3_BLOCKERS[number], string> = {
   LEGAL_UNVERIFIED: 'Pháp lý chưa xác minh', ACCOUNTING_UNVERIFIED: 'Kế toán chưa xác minh',
   WAREHOUSE_UNVERIFIED: 'Kho chưa xác minh', COURIER_UNVERIFIED: 'Đơn vị giao hàng chưa xác minh',
   SHIPPING_APPROVAL_SOURCE_UNVERIFIED: 'Nguồn duyệt phí giao chưa xác minh', FINANCE_CUTOVER_CLOSED: 'Cổng tài chính đang đóng',
+};
+const versionBadgeClass = (status: string) => {
+  if (status === 'ACTIVE') return 'border-success-200/80 bg-success-50 text-success-700';
+  if (status === 'DRAFT') return 'border-brand-200/80 bg-brand-50 text-brand-700';
+  return 'border-ink-200 bg-ink-100 text-ink-600';
 };
 const busy = computed(() => loading.value || saving.value || previewing.value);
 const lifecycleBusy = computed(() => lifecycleLoading.value || lifecycleSaving.value || lifecyclePreviewing.value || lifecycleTransitioning.value);
@@ -345,184 +351,254 @@ onMounted(() => { load(); loadLifecycle(); });
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Chính sách giao linh kiện (Bản nháp)">
+    <ConsolePageHeader class="animate-slide-up" title="Chính sách giao linh kiện (Bản nháp)">
       <template #actions><FhButton data-testid="reload" variant="secondary" :disabled="busy" @click="load">Tải lại</FhButton></template>
     </ConsolePageHeader>
-    <section class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800" aria-label="Trạng thái tài chính">
-      <p class="font-semibold">Chỉ bản nháp và xem trước giả định · Trang này không thu tiền</p>
-      <p>Chưa có chính sách có hiệu lực. Ngưỡng phí chỉ dùng để xem xét, không phải phí giao thực tế được duyệt. Không thay đổi hóa đơn hoặc yêu cầu đặt lịch.</p>
+
+    <section class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) flex items-start gap-3 text-sm" aria-label="Trạng thái tài chính">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+        <ShieldCheck :size="18" aria-hidden="true" />
+      </div>
+      <div class="min-w-0 space-y-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="font-semibold text-ink-900">Chỉ bản nháp và xem trước giả định · Trang này không thu tiền</p>
+          <span class="inline-flex items-center rounded-full border border-ink-200 bg-ink-50 px-2 py-0.5 text-[11px] font-semibold text-ink-600">Tài chính BLOCKED</span>
+        </div>
+        <p class="text-ink-600">Chưa có chính sách có hiệu lực. Ngưỡng phí chỉ dùng để xem xét, không phải phí giao thực tế được duyệt. Không thay đổi hóa đơn hoặc yêu cầu đặt lịch.</p>
+      </div>
     </section>
-    <p v-if="loading" role="status">Đang tải…</p>
-    <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] bg-danger-50 p-4 text-sm text-danger-800">{{ error }}</p>
-    <p v-if="success" role="status" class="text-sm text-success-800">{{ success }}</p>
-    <section v-if="lifecycleLoading" role="status" class="text-sm text-ink-600">Đang tải vòng đời cấu hình…</section>
-    <section v-if="lifecycleError" role="alert" class="rounded-[var(--radius-sm)] bg-danger-50 p-4 text-sm text-danger-800">{{ lifecycleError }}</section>
-    <p v-if="lifecycleSuccess" role="status" class="text-sm text-success-800">{{ lifecycleSuccess }}</p>
-    <section v-if="lifecycleCurrent && !lifecycleUnavailable && canReadPage" data-testid="lifecycle-section" class="space-y-5 border-t border-ink-200 pt-5" aria-labelledby="lifecycle-title">
-      <div class="max-w-4xl space-y-2">
-        <h2 id="lifecycle-title" class="text-xl font-semibold text-ink-900">Vòng đời cấu hình vận hành giao linh kiện</h2>
-        <div class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
-          <p class="font-semibold">ACTIVE chỉ là cấu hình vận hành · Phí giao 70/30 thu trên hóa đơn khi phiếu đủ thỏa thuận hai bên và chứng từ.</p>
-          <p>Không có legal hoặc ledger approval trong luồng này. Cấu hình không tạo payout, không thay đổi phí giao thực tế và không đặt giao hàng.</p>
+
+    <Transition name="fh-fade-slide">
+      <p v-if="loading" role="status" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-4 py-3 text-sm text-ink-600 shadow-2xs">Đang tải…</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">{{ error }}</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="success" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">{{ success }}</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <section v-if="lifecycleLoading" role="status" class="rounded-[var(--radius-sm)] border border-ink-200 bg-white px-4 py-3 text-sm text-ink-600 shadow-2xs">Đang tải vòng đời cấu hình…</section>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <section v-if="lifecycleError" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800">{{ lifecycleError }}</section>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="lifecycleSuccess" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">{{ lifecycleSuccess }}</p>
+    </Transition>
+
+    <section v-if="lifecycleCurrent && !lifecycleUnavailable && canReadPage" data-testid="lifecycle-section" class="animate-slide-up-delay-2 space-y-5 border-t border-ink-200 pt-5" aria-labelledby="lifecycle-title">
+      <div class="max-w-4xl space-y-3">
+        <div class="flex items-center gap-2.5">
+          <SlidersHorizontal :size="18" class="text-brand-600 shrink-0" aria-hidden="true" />
+          <h2 id="lifecycle-title" class="text-xl font-semibold text-ink-900">Vòng đời cấu hình vận hành giao linh kiện</h2>
+        </div>
+        <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-ink-50/80 p-4 text-sm text-ink-700">
+          <p class="font-semibold text-ink-900">ACTIVE chỉ là cấu hình vận hành · Phí giao 70/30 thu trên hóa đơn khi phiếu đủ thỏa thuận hai bên và chứng từ.</p>
+          <p class="mt-0.5">Không có legal hoặc ledger approval trong luồng này. Cấu hình không tạo payout, không thay đổi phí giao thực tế và không đặt giao hàng.</p>
         </div>
       </div>
-      <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
-        <section class="space-y-4 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-4" aria-labelledby="lifecycle-current-title">
-          <div>
-            <h3 id="lifecycle-current-title" class="text-lg font-semibold text-ink-900">Phiên bản hiện tại</h3>
-            <p v-if="lifecycleVersion" class="mt-1 text-sm text-ink-700">{{ lifecycleVersion.state.status }} · revision {{ lifecycleVersion.state.revision }} · nội dung v{{ lifecycleVersion.state.policy.version }}</p>
-            <p v-else class="mt-1 text-sm text-ink-600">Chưa có phiên bản lifecycle.</p>
-          </div>
-          <dl v-if="lifecycleVersion" class="grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt class="font-medium text-ink-700">Trạng thái tài chính</dt><dd>BLOCKED</dd></div>
-            <div><dt class="font-medium text-ink-700">Chính sách có hiệu lực</dt><dd>Không có (null)</dd></div>
-            <div v-for="(label, key) in parameterLabels" :key="key" class="min-w-0"><dt class="font-medium text-ink-700">{{ label }}</dt><dd class="break-words">{{ key === 'feeCeilingVnd' ? formatCurrency(lifecycleVersion.state.policy.parameters[key]) : `${lifecycleVersion.state.policy.parameters[key]} phút` }}</dd></div>
-          </dl>
-          <form v-if="lifecycleVersion?.state.status !== 'ACTIVE'" data-testid="lifecycle-parameters-form" class="space-y-3 border-t border-ink-200 pt-4" novalidate @submit.prevent="saveLifecycle">
-            <fieldset :disabled="!canUpdateLifecycle || lifecycleBusy" class="space-y-3">
-              <legend class="text-base font-semibold text-ink-900">{{ lifecycleVersion?.state.status === 'DRAFT' ? 'Cập nhật DRAFT' : 'Tạo DRAFT lifecycle' }}</legend>
-              <p class="text-sm text-ink-600">Lưu tạo snapshot mới theo revision CAS. Không tự kích hoạt cấu hình.</p>
-              <div v-for="(label, key) in parameterLabels" :key="key">
-                <label :for="`lifecycle-${key}`" :class="consoleLabel">{{ label }}</label>
-                <input :id="`lifecycle-${key}`" v-model="lifecycleFields[key]" type="text" inputmode="numeric" required :class="[consoleField, 'mt-1 w-full']" />
-              </div>
-              <FhButton type="submit" :disabled="!canUpdateLifecycle" :loading="lifecycleSaving">{{ lifecycleSaving ? 'Đang lưu…' : lifecycleVersion ? 'Lưu revision mới' : 'Tạo DRAFT' }}</FhButton>
-            </fieldset>
-            <p v-if="!auth.hasPermission('config:update')" class="text-sm text-ink-600">Bạn chỉ có quyền xem cấu hình lifecycle.</p>
-          </form>
-          <div v-if="lifecycleVersion?.state.status === 'ACTIVE'" class="border-t border-ink-200 pt-4">
-            <FhButton data-testid="retire-lifecycle" variant="secondary" :disabled="!canUpdateLifecycle || lifecycleBusy" :loading="lifecycleTransitioning" @click="retireLifecycle">Ngừng cấu hình ACTIVE</FhButton>
-          </div>
-          <p v-if="lifecycleVersion?.state.status === 'RETIRED'" class="border-t border-ink-200 pt-4 text-sm text-ink-700">RETIRED là trạng thái cuối, không thể kích hoạt lại. Tạo DRAFT mới để bắt đầu phiên bản tiếp theo.</p>
-        </section>
-        <section class="space-y-4 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-4" aria-labelledby="lifecycle-history-title">
-          <div>
-            <h3 id="lifecycle-history-title" class="text-lg font-semibold text-ink-900">Lịch sử lifecycle</h3>
-            <p class="text-sm text-ink-600">Lịch sử gồm DRAFT, ACTIVE và RETIRED theo revision mới nhất.</p>
-          </div>
-          <p v-if="!lifecycleHistory?.versions.length" class="text-sm text-ink-600">Chưa có phiên bản lifecycle trong lịch sử.</p>
-          <ol v-else data-testid="lifecycle-history" class="space-y-3">
-            <li v-for="version in lifecycleHistory.versions" :key="version.id" class="rounded-[var(--radius-sm)] bg-ink-50 p-3 text-sm">
-              <p class="font-semibold">{{ version.state.status }} · revision {{ version.state.revision }} · nội dung v{{ version.state.policy.version }}</p>
-              <p class="break-all text-ink-600">{{ version.id }} · Tài chính {{ version.state.financialExecution }}</p>
-              <p v-if="version.activationPreviewId" class="break-all text-ink-600">Receipt kích hoạt: {{ version.activationPreviewId }}</p>
-              <p class="text-ink-600">{{ new Date(version.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) }}</p>
-            </li>
-          </ol>
-        </section>
-      </div>
-      <section v-if="lifecycleVersion?.state.status === 'DRAFT'" class="max-w-4xl space-y-4 rounded-[var(--radius-sm)] border border-ink-200 p-4" aria-labelledby="lifecycle-preview-title">
-        <div>
-          <h3 id="lifecycle-preview-title" class="text-lg font-semibold text-ink-900">Preview giả định có receipt máy chủ</h3>
-          <p class="text-sm text-ink-600">Các mẫu nhập tay chỉ dùng mô phỏng. Preview được lưu phía máy chủ và chỉ có thể kích hoạt đúng Admin, version, revision và snapshot đã xem trước.</p>
-        </div>
-        <p v-if="lifecycleDirty" class="text-sm text-warning-800">Tham số đã thay đổi. Lưu revision mới trước khi preview.</p>
-        <form data-testid="lifecycle-preview-form" class="grid gap-3 sm:grid-cols-2" novalidate @submit.prevent="previewLifecycle">
-          <fieldset :disabled="!canUpdateLifecycle || lifecycleBusy || lifecycleDirty" class="contents">
-            <div v-for="(label, key) in sampleLabels" :key="key">
-              <label :for="`lifecycle-${key}`" :class="consoleLabel">{{ label }}</label>
-              <input :id="`lifecycle-${key}`" v-model="lifecycleSample[key]" type="text" :inputmode="key === 'proposalId' ? 'text' : 'numeric'" :required="key !== 'courierEvidenceAgeMinutes'" :class="[consoleField, 'mt-1 w-full']" />
+
+      <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)] items-start">
+        <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" aria-labelledby="lifecycle-current-title">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 bg-ink-50/80 px-5 py-3.5">
+            <div>
+              <h3 id="lifecycle-current-title" class="text-base font-semibold text-ink-900">Phiên bản hiện tại</h3>
+              <p v-if="lifecycleVersion" class="mt-0.5 font-num text-xs text-ink-600">{{ lifecycleVersion.state.status }} · revision {{ lifecycleVersion.state.revision }} · nội dung v{{ lifecycleVersion.state.policy.version }}</p>
+              <p v-else class="mt-0.5 text-xs text-ink-500">Chưa có phiên bản lifecycle.</p>
             </div>
-            <div class="sm:col-span-2"><FhButton type="submit" variant="secondary" :disabled="!canUpdateLifecycle || lifecycleDirty" :loading="lifecyclePreviewing">{{ lifecyclePreviewing ? 'Đang tạo preview…' : 'Tạo preview và lưu receipt' }}</FhButton></div>
-          </fieldset>
-        </form>
-        <div v-if="lifecycleResult && lifecycleReceiptMatches" data-testid="lifecycle-preview-receipt" role="status" class="space-y-2 rounded-[var(--radius-sm)] bg-ink-50 p-4 text-sm">
-          <p class="font-semibold">Preview giả định · receipt {{ lifecycleResult.preview.id }} · revision {{ lifecycleResult.preview.impact.policyRevision }} · Finance BLOCKED</p>
-          <dl v-for="proposal in lifecycleResult.preview.impact.proposals" :key="proposal.proposalId" class="grid gap-1 sm:grid-cols-2">
-            <div><dt>Mã mẫu giả định</dt><dd>{{ proposal.proposalId }}</dd></div><div><dt>Phí giả định</dt><dd>{{ formatCurrency(proposal.shippingFeeVnd) }}</dd></div>
-            <div><dt>Chia giả định cho khách</dt><dd>{{ formatCurrency(proposal.customerShippingShare) }}</dd></div><div><dt>Chia giả định cho kỹ thuật viên</dt><dd>{{ formatCurrency(proposal.technicianShippingShare) }}</dd></div>
-            <div><dt>Vượt ngưỡng</dt><dd>{{ proposal.aboveFeeCeiling ? 'Có' : 'Không' }}</dd></div><div><dt>Đề xuất đến hạn xem xét</dt><dd>{{ proposal.proposalReviewDue ? 'Có' : 'Không' }}</dd></div>
-          </dl>
-          <label class="flex items-start gap-3 pt-2 text-warning-800"><input v-model="lifecycleConfirmation" data-testid="lifecycle-activate-confirm" type="checkbox" class="mt-1 size-4" /><span>Tôi xác nhận chỉ kích hoạt cấu hình vận hành này. Legal/ledger approval chưa có; payout theo Finance 70/30 vẫn bị chặn.</span></label>
-          <FhButton data-testid="activate-lifecycle" :disabled="!canUpdateLifecycle || !lifecycleReceiptMatches || !lifecycleConfirmation || lifecycleBusy" :loading="lifecycleTransitioning" @click="activateLifecycle">Kích hoạt cấu hình vận hành</FhButton>
+            <span v-if="lifecycleVersion" class="inline-flex items-center rounded-full border px-2.5 py-0.5 font-num text-xs font-semibold" :class="versionBadgeClass(lifecycleVersion.state.status)">
+              {{ lifecycleVersion.state.status }}
+            </span>
+          </div>
+          <div class="space-y-4 p-5">
+            <dl v-if="lifecycleVersion" class="grid gap-2.5 text-sm sm:grid-cols-2">
+              <div class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 px-3 py-2">
+                <dt class="text-xs font-medium text-ink-500">Trạng thái tài chính</dt>
+                <dd class="mt-0.5 font-num font-semibold text-ink-900">BLOCKED</dd>
+              </div>
+              <div class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 px-3 py-2">
+                <dt class="text-xs font-medium text-ink-500">Chính sách có hiệu lực</dt>
+                <dd class="mt-0.5 font-medium text-ink-900">Không có (null)</dd>
+              </div>
+              <div v-for="(label, key) in parameterLabels" :key="key" class="min-w-0 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 px-3 py-2">
+                <dt class="text-xs font-medium text-ink-500">{{ label }}</dt>
+                <dd class="mt-0.5 break-words font-num font-semibold text-ink-900">{{ key === 'feeCeilingVnd' ? formatCurrency(lifecycleVersion.state.policy.parameters[key]) : `${lifecycleVersion.state.policy.parameters[key]} phút` }}</dd>
+              </div>
+            </dl>
+            <form v-if="lifecycleVersion?.state.status !== 'ACTIVE'" data-testid="lifecycle-parameters-form" class="space-y-3 border-t border-ink-100 pt-4" novalidate @submit.prevent="saveLifecycle">
+              <fieldset :disabled="!canUpdateLifecycle || lifecycleBusy" class="space-y-3">
+                <legend class="text-base font-semibold text-ink-900">{{ lifecycleVersion?.state.status === 'DRAFT' ? 'Cập nhật DRAFT' : 'Tạo DRAFT lifecycle' }}</legend>
+                <p class="text-sm text-ink-600">Lưu tạo snapshot mới theo revision CAS. Không tự kích hoạt cấu hình.</p>
+                <div v-for="(label, key) in parameterLabels" :key="key">
+                  <label :for="`lifecycle-${key}`" :class="consoleLabel">{{ label }}</label>
+                  <input :id="`lifecycle-${key}`" v-model="lifecycleFields[key]" type="text" inputmode="numeric" required :class="[consoleField, 'mt-1 w-full font-num']" />
+                </div>
+                <FhButton type="submit" :disabled="!canUpdateLifecycle" :loading="lifecycleSaving">{{ lifecycleSaving ? 'Đang lưu…' : lifecycleVersion ? 'Lưu revision mới' : 'Tạo DRAFT' }}</FhButton>
+              </fieldset>
+              <p v-if="!auth.hasPermission('config:update')" class="text-sm text-ink-600">Bạn chỉ có quyền xem cấu hình lifecycle.</p>
+            </form>
+            <div v-if="lifecycleVersion?.state.status === 'ACTIVE'" class="border-t border-ink-100 pt-4">
+              <FhButton data-testid="retire-lifecycle" variant="secondary" :disabled="!canUpdateLifecycle || lifecycleBusy" :loading="lifecycleTransitioning" @click="retireLifecycle">Ngừng cấu hình ACTIVE</FhButton>
+            </div>
+            <p v-if="lifecycleVersion?.state.status === 'RETIRED'" class="border-t border-ink-100 pt-4 text-sm text-ink-700">RETIRED là trạng thái cuối, không thể kích hoạt lại. Tạo DRAFT mới để bắt đầu phiên bản tiếp theo.</p>
+          </div>
+        </section>
+
+        <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" aria-labelledby="lifecycle-history-title">
+          <div class="flex items-center gap-2 border-b border-ink-100 bg-ink-50/80 px-5 py-3.5">
+            <History :size="16" class="text-ink-500 shrink-0" aria-hidden="true" />
+            <div>
+              <h3 id="lifecycle-history-title" class="text-base font-semibold text-ink-900">Lịch sử lifecycle</h3>
+              <p class="text-xs text-ink-500">Lịch sử gồm DRAFT, ACTIVE và RETIRED theo revision mới nhất.</p>
+            </div>
+          </div>
+          <div class="p-5">
+            <p v-if="!lifecycleHistory?.versions.length" class="text-sm text-ink-500">Chưa có phiên bản lifecycle trong lịch sử.</p>
+            <ol v-else data-testid="lifecycle-history" class="space-y-2.5">
+              <li v-for="version in lifecycleHistory.versions" :key="version.id" class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/70 p-3 text-sm transition-colors hover:border-ink-200 hover:bg-ink-50">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <p class="font-num font-semibold text-ink-900">{{ version.state.status }} · revision {{ version.state.revision }} · nội dung v{{ version.state.policy.version }}</p>
+                  <span class="inline-flex items-center rounded-full border px-2 py-0.5 font-num text-[11px] font-semibold" :class="versionBadgeClass(version.state.status)">{{ version.state.status }}</span>
+                </div>
+                <p class="mt-1 break-all font-num text-xs text-ink-600">{{ version.id }} · Tài chính {{ version.state.financialExecution }}</p>
+                <p v-if="version.activationPreviewId" class="mt-0.5 break-all font-num text-xs text-ink-600">Receipt kích hoạt: {{ version.activationPreviewId }}</p>
+                <p class="mt-1 font-num text-xs text-ink-500">{{ new Date(version.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) }}</p>
+              </li>
+            </ol>
+          </div>
+        </section>
+      </div>
+
+      <section v-if="lifecycleVersion?.state.status === 'DRAFT'" class="animate-slide-up-delay-3 max-w-4xl overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" aria-labelledby="lifecycle-preview-title">
+        <div class="border-b border-ink-100 bg-ink-50/80 px-5 py-3.5">
+          <h3 id="lifecycle-preview-title" class="text-base font-semibold text-ink-900">Preview giả định có receipt máy chủ</h3>
+          <p class="mt-0.5 text-xs text-ink-600">Các mẫu nhập tay chỉ dùng mô phỏng. Preview được lưu phía máy chủ và chỉ có thể kích hoạt đúng Admin, version, revision và snapshot đã xem trước.</p>
+        </div>
+        <div class="space-y-4 p-5">
+          <p v-if="lifecycleDirty" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Tham số đã thay đổi. Lưu revision mới trước khi preview.</p>
+          <form data-testid="lifecycle-preview-form" class="grid gap-3 sm:grid-cols-2" novalidate @submit.prevent="previewLifecycle">
+            <fieldset :disabled="!canUpdateLifecycle || lifecycleBusy || lifecycleDirty" class="contents">
+              <div v-for="(label, key) in sampleLabels" :key="key">
+                <label :for="`lifecycle-${key}`" :class="consoleLabel">{{ label }}</label>
+                <input :id="`lifecycle-${key}`" v-model="lifecycleSample[key]" type="text" :inputmode="key === 'proposalId' ? 'text' : 'numeric'" :required="key !== 'courierEvidenceAgeMinutes'" :class="[consoleField, 'mt-1 w-full font-num']" />
+              </div>
+              <div class="sm:col-span-2 pt-1"><FhButton type="submit" variant="secondary" :disabled="!canUpdateLifecycle || lifecycleDirty" :loading="lifecyclePreviewing">{{ lifecyclePreviewing ? 'Đang tạo preview…' : 'Tạo preview và lưu receipt' }}</FhButton></div>
+            </fieldset>
+          </form>
+          <Transition name="fh-fade-slide">
+            <div v-if="lifecycleResult && lifecycleReceiptMatches" data-testid="lifecycle-preview-receipt" role="status" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/80 p-4 text-sm">
+              <p class="font-semibold text-ink-900">Preview giả định · receipt <span class="font-num">{{ lifecycleResult.preview.id }}</span> · revision <span class="font-num">{{ lifecycleResult.preview.impact.policyRevision }}</span> · Finance BLOCKED</p>
+              <dl v-for="proposal in lifecycleResult.preview.impact.proposals" :key="proposal.proposalId" class="grid gap-2 sm:grid-cols-2">
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Mã mẫu giả định</dt><dd class="font-num font-medium text-ink-900">{{ proposal.proposalId }}</dd></div>
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Phí giả định</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.shippingFeeVnd) }}</dd></div>
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Chia giả định cho khách</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.customerShippingShare) }}</dd></div>
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Chia giả định cho kỹ thuật viên</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.technicianShippingShare) }}</dd></div>
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Vượt ngưỡng</dt><dd class="font-medium text-ink-900">{{ proposal.aboveFeeCeiling ? 'Có' : 'Không' }}</dd></div>
+                <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Đề xuất đến hạn xem xét</dt><dd class="font-medium text-ink-900">{{ proposal.proposalReviewDue ? 'Có' : 'Không' }}</dd></div>
+              </dl>
+              <label class="flex items-start gap-3 rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-3 text-warning-800 cursor-pointer"><input v-model="lifecycleConfirmation" data-testid="lifecycle-activate-confirm" type="checkbox" class="mt-0.5 size-4" /><span>Tôi xác nhận chỉ kích hoạt cấu hình vận hành này. Legal/ledger approval chưa có; payout theo Finance 70/30 vẫn bị chặn.</span></label>
+              <FhButton data-testid="activate-lifecycle" :disabled="!canUpdateLifecycle || !lifecycleReceiptMatches || !lifecycleConfirmation || lifecycleBusy" :loading="lifecycleTransitioning" @click="activateLifecycle">Kích hoạt cấu hình vận hành</FhButton>
+            </div>
+          </Transition>
         </div>
       </section>
     </section>
+
     <template v-if="current && !unavailable && canReadPage">
-      <section class="space-y-3 text-sm text-ink-700" aria-labelledby="current-title">
-        <h2 id="current-title" class="text-xl font-semibold text-ink-900">Bản nháp hiện tại</h2>
-        <p v-if="current.draft">Bản nháp · Phiên bản nội dung {{ current.draft.state.policy.version }} · Lần sửa {{ current.draft.state.revision }}</p>
+      <section class="animate-slide-up-delay-2 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) space-y-3 text-sm text-ink-700" aria-labelledby="current-title">
+        <h2 id="current-title" class="text-lg font-semibold text-ink-900">Bản nháp hiện tại</h2>
+        <p v-if="current.draft" class="font-num text-ink-800">Bản nháp · Phiên bản nội dung {{ current.draft.state.policy.version }} · Lần sửa {{ current.draft.state.revision }}</p>
         <p v-else>Chưa có bản nháp. Nhập đủ các tham số để tạo bản nháp đầu tiên.</p>
-        <details><summary class="cursor-pointer focus-visible:outline-brand-600">Điều kiện đang chặn tài chính</summary>
-          <ul class="list-disc pl-5"><li v-for="blocker in current.blockers" :key="blocker">{{ blockerLabels[blocker] }}</li></ul>
+        <details class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/70 px-3.5 py-2.5">
+          <summary class="cursor-pointer font-medium text-ink-800 focus-visible:outline-brand-600">Điều kiện đang chặn tài chính ({{ current.blockers.length }})</summary>
+          <ul class="mt-2 list-disc space-y-1 pl-5 text-ink-600"><li v-for="blocker in current.blockers" :key="blocker">{{ blockerLabels[blocker] }}</li></ul>
         </details>
       </section>
-      <section data-testid="history-section" class="max-w-[720px] space-y-3 border-t border-ink-200 pt-5" aria-labelledby="history-title">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+
+      <section data-testid="history-section" class="animate-slide-up-delay-3 max-w-[720px] overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" aria-labelledby="history-title">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 bg-ink-50/80 px-5 py-3.5">
           <div>
-            <h2 id="history-title" class="text-xl font-semibold text-ink-900">Lịch sử bản nháp</h2>
-            <p class="text-sm text-ink-600">Chỉ đọc các phiên bản DRAFT theo thứ tự mới nhất trước.</p>
+            <h2 id="history-title" class="text-lg font-semibold text-ink-900">Lịch sử bản nháp</h2>
+            <p class="text-xs text-ink-500">Chỉ đọc các phiên bản DRAFT theo thứ tự mới nhất trước.</p>
           </div>
-          <FhButton data-testid="reload-history" variant="secondary" :disabled="historyLoading || busy" @click="loadHistory()">Tải lại lịch sử</FhButton>
+          <FhButton data-testid="reload-history" variant="secondary" size="sm" :disabled="historyLoading || busy" @click="loadHistory()">Tải lại lịch sử</FhButton>
         </div>
-        <p v-if="historyError" role="alert" class="rounded-[var(--radius-sm)] bg-danger-50 p-3 text-sm text-danger-800">{{ historyError }}</p>
-        <p v-else-if="historyLoading && !history" role="status" class="text-sm text-ink-600">Đang tải lịch sử…</p>
-        <p v-else-if="history && !history.drafts.length" class="text-sm text-ink-600">Chưa có phiên bản bản nháp trong lịch sử.</p>
-        <template v-if="history && history.drafts.length && selectedHistoryDraft">
-          <label for="history-revision" :class="consoleLabel">Phiên bản bản nháp</label>
-          <select id="history-revision" v-model="selectedHistoryId" aria-label="Chọn phiên bản bản nháp" class="w-full rounded-md border border-ink-300 bg-white px-3 py-2 text-sm text-ink-800 focus-visible:outline-brand-600">
-            <option v-for="snapshot in history.drafts" :key="snapshot.id" :value="snapshot.id">DRAFT · Lần sửa {{ snapshot.state.revision }} · phiên bản {{ snapshot.state.policy.version }}</option>
-          </select>
-          <dl data-testid="history-detail" class="space-y-3 rounded-[var(--radius-sm)] bg-ink-50 p-4 text-sm text-ink-800">
-            <div><dt class="font-semibold">Trạng thái</dt><dd>{{ selectedHistoryDraft.state.status }} · Tài chính bị khóa ({{ selectedHistoryDraft.state.financialExecution }})</dd></div>
-            <div><dt class="font-semibold">Phiên bản nội dung</dt><dd>{{ selectedHistoryDraft.state.policy.version }} · Lần sửa {{ selectedHistoryDraft.state.revision }}</dd></div>
-            <div><dt class="font-semibold">Thời điểm tạo</dt><dd>{{ new Date(selectedHistoryDraft.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) }}</dd></div>
-            <div><dt class="font-semibold">{{ parameterLabels.feeCeilingVnd }}</dt><dd>{{ formatCurrency(selectedHistoryDraft.state.policy.parameters.feeCeilingVnd) }}</dd></div>
-            <div><dt class="font-semibold">{{ parameterLabels.proposalReviewAfterMinutes }}</dt><dd>{{ selectedHistoryDraft.state.policy.parameters.proposalReviewAfterMinutes }} phút</dd></div>
-            <div><dt class="font-semibold">{{ parameterLabels.courierEvidenceReviewAfterMinutes }}</dt><dd>{{ selectedHistoryDraft.state.policy.parameters.courierEvidenceReviewAfterMinutes }} phút</dd></div>
-            <div>
-              <dt class="font-semibold">Điều kiện đang chặn tài chính</dt>
-              <dd><ul class="mt-1 list-disc space-y-1 pl-5"><li v-for="blocker in history.blockers" :key="blocker">{{ blockerLabels[blocker] }}</li></ul></dd>
-            </div>
-          </dl>
-          <p v-if="historyLoading" role="status" class="text-sm text-ink-600">Đang tải các phiên bản cũ hơn…</p>
-          <FhButton v-if="historyCanLoadMore" data-testid="load-older-history" variant="secondary" :disabled="historyLoading || busy" @click="loadHistory(true)">Tải bản nháp cũ hơn</FhButton>
-        </template>
+        <div class="space-y-3 p-5">
+          <p v-if="historyError" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 p-3 text-sm text-danger-800">{{ historyError }}</p>
+          <p v-else-if="historyLoading && !history" role="status" class="text-sm text-ink-600">Đang tải lịch sử…</p>
+          <p v-else-if="history && !history.drafts.length" class="text-sm text-ink-600">Chưa có phiên bản bản nháp trong lịch sử.</p>
+          <template v-if="history && history.drafts.length && selectedHistoryDraft">
+            <label for="history-revision" :class="consoleLabel">Phiên bản bản nháp</label>
+            <select id="history-revision" v-model="selectedHistoryId" aria-label="Chọn phiên bản bản nháp" :class="[consoleField, 'w-full']">
+              <option v-for="snapshot in history.drafts" :key="snapshot.id" :value="snapshot.id">DRAFT · Lần sửa {{ snapshot.state.revision }} · phiên bản {{ snapshot.state.policy.version }}</option>
+            </select>
+            <dl data-testid="history-detail" class="grid gap-2.5 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 p-4 text-sm text-ink-800 sm:grid-cols-2">
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2 sm:col-span-2"><dt class="text-xs font-medium text-ink-500">Trạng thái</dt><dd class="font-medium text-ink-900">{{ selectedHistoryDraft.state.status }} · Tài chính bị khóa ({{ selectedHistoryDraft.state.financialExecution }})</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs font-medium text-ink-500">Phiên bản nội dung</dt><dd class="font-num font-medium text-ink-900">{{ selectedHistoryDraft.state.policy.version }} · Lần sửa {{ selectedHistoryDraft.state.revision }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs font-medium text-ink-500">Thời điểm tạo</dt><dd class="font-num font-medium text-ink-900">{{ new Date(selectedHistoryDraft.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs font-medium text-ink-500">{{ parameterLabels.feeCeilingVnd }}</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(selectedHistoryDraft.state.policy.parameters.feeCeilingVnd) }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs font-medium text-ink-500">{{ parameterLabels.proposalReviewAfterMinutes }}</dt><dd class="font-num font-semibold text-ink-900">{{ selectedHistoryDraft.state.policy.parameters.proposalReviewAfterMinutes }} phút</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2 sm:col-span-2"><dt class="text-xs font-medium text-ink-500">{{ parameterLabels.courierEvidenceReviewAfterMinutes }}</dt><dd class="font-num font-semibold text-ink-900">{{ selectedHistoryDraft.state.policy.parameters.courierEvidenceReviewAfterMinutes }} phút</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2 sm:col-span-2">
+                <dt class="text-xs font-medium text-ink-500">Điều kiện đang chặn tài chính</dt>
+                <dd><ul class="mt-1 list-disc space-y-1 pl-5 text-ink-700"><li v-for="blocker in history.blockers" :key="blocker">{{ blockerLabels[blocker] }}</li></ul></dd>
+              </div>
+            </dl>
+            <p v-if="historyLoading" role="status" class="text-sm text-ink-600">Đang tải các phiên bản cũ hơn…</p>
+            <FhButton v-if="historyCanLoadMore" data-testid="load-older-history" variant="secondary" :disabled="historyLoading || busy" @click="loadHistory(true)">Tải bản nháp cũ hơn</FhButton>
+          </template>
+        </div>
       </section>
-      <section v-if="lifecycleVersion && lifecycleVersion.state.status !== 'DRAFT'" data-testid="legacy-lifecycle-locked" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 p-4 text-sm text-warning-800">
-        <p class="font-semibold">Luồng bản nháp legacy đang ở chế độ chỉ đọc.</p>
-        <p>Đã có phiên bản lifecycle {{ lifecycleVersion.state.status }} · revision {{ lifecycleVersion.state.revision }}. Tạo, sửa và chuyển trạng thái dùng riêng API versions; cấu hình vận hành không mở tài chính.</p>
+
+      <section v-if="lifecycleVersion && lifecycleVersion.state.status !== 'DRAFT'" data-testid="legacy-lifecycle-locked" class="animate-slide-up-delay-3 rounded-[var(--radius-md)] border border-ink-200/90 bg-ink-50/80 p-4 text-sm text-ink-700">
+        <p class="font-semibold text-ink-900">Luồng bản nháp legacy đang ở chế độ chỉ đọc.</p>
+        <p class="mt-0.5">Đã có phiên bản lifecycle {{ lifecycleVersion.state.status }} · revision {{ lifecycleVersion.state.revision }}. Tạo, sửa và chuyển trạng thái dùng riêng API versions; cấu hình vận hành không mở tài chính.</p>
       </section>
-      <form v-if="legacyEditingAllowed" data-testid="draft-form" class="max-w-[720px] space-y-4" novalidate @submit.prevent="save">
+
+      <form v-if="legacyEditingAllowed" data-testid="draft-form" class="animate-slide-up-delay-3 max-w-[720px] rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) space-y-4" novalidate @submit.prevent="save">
         <fieldset :disabled="busy || reloadRequired || !canReadPage || !auth.hasPermission('config:update')" class="space-y-4">
-          <legend class="mb-3 text-xl font-semibold text-ink-900">Tham số bản nháp</legend>
+          <legend class="mb-2 text-lg font-semibold text-ink-900">Tham số bản nháp</legend>
           <p id="parameter-help" class="text-sm text-ink-600">Số nguyên không âm; không tự điền mức phí. Lưu chỉ tạo phiên bản nháp, không áp dụng chính sách.</p>
           <div v-for="(label, key) in parameterLabels" :key="key">
             <label :for="key" :class="consoleLabel">{{ label }}</label>
-            <input :id="key" v-model="fields[key]" type="text" inputmode="numeric" required :class="[consoleField, 'w-full mt-1']" :aria-invalid="!!fieldErrors[key]" :aria-describedby="`parameter-help ${key}-error`" />
+            <input :id="key" v-model="fields[key]" type="text" inputmode="numeric" required :class="[consoleField, 'w-full mt-1 font-num']" :aria-invalid="!!fieldErrors[key]" :aria-describedby="`parameter-help ${key}-error`" />
             <p :id="`${key}-error`" class="text-sm text-danger-700">{{ fieldErrors[key] }}</p>
           </div>
           <FhButton type="submit" :disabled="!canSave" :loading="saving">{{ saving ? 'Đang lưu…' : 'Lưu bản nháp' }}</FhButton>
         </fieldset>
         <p v-if="!auth.hasPermission('config:update')" class="text-sm text-ink-600">Bạn chỉ có quyền xem bản nháp.</p>
       </form>
-      <section v-if="current.draft && legacyEditingAllowed" class="max-w-[720px] space-y-4 border-t border-ink-200 pt-5" aria-labelledby="preview-title">
-        <h2 id="preview-title" class="text-xl font-semibold text-ink-900">Xem trước tác động giả định</h2>
+
+      <section v-if="current.draft && legacyEditingAllowed" class="animate-slide-up-delay-3 max-w-[720px] rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) space-y-4" aria-labelledby="preview-title">
+        <h2 id="preview-title" class="text-lg font-semibold text-ink-900">Xem trước tác động giả định</h2>
         <p id="preview-help" class="text-sm text-ink-600">Nhập thủ công một mẫu giả định cho bản nháp đã lưu. Không tra cứu đề xuất, hóa đơn hoặc yêu cầu đặt lịch thật. Kết quả không phải số tiền được duyệt.</p>
-        <p v-if="dirty" class="text-sm text-warning-800">Tham số đang sửa chưa được lưu. Lưu bản nháp hoặc tải lại trước khi xem trước.</p>
+        <p v-if="dirty" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Tham số đang sửa chưa được lưu. Lưu bản nháp hoặc tải lại trước khi xem trước.</p>
         <form data-testid="preview-form" novalidate @submit.prevent="preview">
           <fieldset :disabled="!canPreview" class="space-y-4">
             <legend class="sr-only">Mẫu đề xuất giả định</legend>
             <div v-for="(label, key) in sampleLabels" :key="key">
               <label :for="key" :class="consoleLabel">{{ label }}</label>
-              <input :id="key" v-model="sample[key]" type="text" :inputmode="key === 'proposalId' ? 'text' : 'numeric'" :required="key !== 'courierEvidenceAgeMinutes'" :class="[consoleField, 'w-full mt-1']" :aria-invalid="!!previewErrors[key]" :aria-describedby="`preview-help ${key}-error`" />
+              <input :id="key" v-model="sample[key]" type="text" :inputmode="key === 'proposalId' ? 'text' : 'numeric'" :required="key !== 'courierEvidenceAgeMinutes'" :class="[consoleField, 'w-full mt-1 font-num']" :aria-invalid="!!previewErrors[key]" :aria-describedby="`preview-help ${key}-error`" />
               <p :id="`${key}-error`" class="text-sm text-danger-700">{{ previewErrors[key] }}</p>
             </div>
             <FhButton type="submit" variant="secondary" :disabled="!canPreview" :loading="previewing">{{ previewing ? 'Đang xem trước…' : 'Xem trước giả định' }}</FhButton>
           </fieldset>
         </form>
-        <div v-if="result" data-testid="preview-result" role="status" class="space-y-2 rounded-[var(--radius-sm)] bg-ink-50 p-4 text-sm text-ink-800">
-          <p class="font-semibold">Kết quả giả định từ máy chủ · Lần sửa {{ result.policyRevision }} · Tài chính bị khóa</p>
-          <dl v-for="proposal in result.proposals" :key="proposal.proposalId" class="space-y-2">
-            <div><dt>Mã đề xuất giả định</dt><dd>{{ proposal.proposalId }}</dd></div>
-            <div><dt>Phí giao giả định</dt><dd class="font-num">{{ formatCurrency(proposal.shippingFeeVnd) }}</dd></div>
-            <div><dt>Phần khách hàng giả định</dt><dd class="font-num">{{ formatCurrency(proposal.customerShippingShare) }}</dd></div>
-            <div><dt>Phần kỹ thuật viên giả định</dt><dd class="font-num">{{ formatCurrency(proposal.technicianShippingShare) }}</dd></div>
-            <div><dt>Vượt ngưỡng xem xét phí</dt><dd>{{ proposal.aboveFeeCeiling ? 'Có' : 'Không' }}</dd></div>
-            <div><dt>Đề xuất đến hạn xem xét</dt><dd>{{ proposal.proposalReviewDue ? 'Có' : 'Không' }}</dd></div>
-            <div><dt>Bằng chứng đến hạn xem xét</dt><dd>{{ proposal.courierEvidenceReviewDue === null ? 'Chưa xác định' : proposal.courierEvidenceReviewDue ? 'Có' : 'Không' }}</dd></div>
-          </dl>
-        </div>
+        <Transition name="fh-fade-slide">
+          <div v-if="result" data-testid="preview-result" role="status" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/70 p-4 text-sm text-ink-800">
+            <p class="font-semibold text-ink-900">Kết quả giả định từ máy chủ · Lần sửa {{ result.policyRevision }} · Tài chính bị khóa</p>
+            <dl v-for="proposal in result.proposals" :key="proposal.proposalId" class="grid gap-2 sm:grid-cols-2">
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Mã đề xuất giả định</dt><dd class="font-num font-medium text-ink-900">{{ proposal.proposalId }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Phí giao giả định</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.shippingFeeVnd) }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Phần khách hàng giả định</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.customerShippingShare) }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Phần kỹ thuật viên giả định</dt><dd class="font-num font-semibold text-ink-900">{{ formatCurrency(proposal.technicianShippingShare) }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Vượt ngưỡng xem xét phí</dt><dd class="font-medium text-ink-900">{{ proposal.aboveFeeCeiling ? 'Có' : 'Không' }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2"><dt class="text-xs text-ink-500">Đề xuất đến hạn xem xét</dt><dd class="font-medium text-ink-900">{{ proposal.proposalReviewDue ? 'Có' : 'Không' }}</dd></div>
+              <div class="rounded-lg bg-white border border-ink-100 px-3 py-2 sm:col-span-2"><dt class="text-xs text-ink-500">Bằng chứng đến hạn xem xét</dt><dd class="font-medium text-ink-900">{{ proposal.courierEvidenceReviewDue === null ? 'Chưa xác định' : proposal.courierEvidenceReviewDue ? 'Có' : 'Không' }}</dd></div>
+            </dl>
+          </div>
+        </Transition>
       </section>
     </template>
   </div>

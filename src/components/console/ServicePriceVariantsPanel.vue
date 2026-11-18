@@ -61,18 +61,20 @@ onMounted(load);
     <p v-if="loading" class="text-sm text-ink-500" role="status">Đang tải…</p>
     <p v-else-if="loadError" class="text-sm text-danger-600" role="alert">{{ loadError }}</p>
     <p v-else-if="!rows.length" class="text-sm text-ink-500">Dịch vụ này không có mức giá theo thiết bị.</p>
-    <ul v-else class="max-h-72 space-y-2 overflow-y-auto pr-1">
-      <li v-for="row in rows" :key="row.id" class="space-y-1 rounded-lg border border-ink-200 p-2 text-sm" :data-testid="`price-variant-${row.variantCode}`">
+    <ul v-else class="max-h-72 space-y-2 overflow-y-auto overscroll-contain pr-1">
+      <li v-for="row in rows" :key="row.id" class="space-y-1.5 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 p-2.5 text-sm" :data-testid="`price-variant-${row.variantCode}`">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <span class="min-w-0 font-medium text-ink-900">{{ attributes(row) }}</span>
           <span class="text-xs text-ink-500">Hiện tại <FhMoney :amount="row.fixedLaborPriceVnd" /></span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <input v-model="drafts[row.id].price" inputmode="numeric" :class="consoleField" class="w-36 font-num" :aria-label="`Giá công ${attributes(row)}`" />
-          <label class="flex items-center gap-1 text-ink-700"><input v-model="drafts[row.id].active" type="checkbox" /> Đang mở</label>
+          <label class="flex items-center gap-1.5 text-ink-700 cursor-pointer"><input v-model="drafts[row.id].active" type="checkbox" class="accent-brand-600" /> Đang mở</label>
           <FhButton variant="secondary" size="sm" :loading="saving === row.id" :disabled="!!saving" @click="save(row)">Lưu mức này</FhButton>
         </div>
-        <p v-if="rowMessage[row.id]" :class="rowMessage[row.id].ok ? 'text-success-700' : 'text-danger-600'" class="text-xs" :role="rowMessage[row.id].ok ? 'status' : 'alert'">{{ rowMessage[row.id].text }}</p>
+        <Transition name="fh-fade-slide">
+          <p v-if="rowMessage[row.id]" :class="rowMessage[row.id].ok ? 'text-success-700' : 'text-danger-600'" class="text-xs" :role="rowMessage[row.id].ok ? 'status' : 'alert'">{{ rowMessage[row.id].text }}</p>
+        </Transition>
       </li>
     </ul>
   </section>

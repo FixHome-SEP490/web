@@ -13,6 +13,7 @@ import { bookingsApi, type BookingItem, type BookingMedia } from '../../api/book
 import { ordersApi } from '../../api/orders.api';
 import { onBookingChange, whileOffline } from '../../services/live-updates';
 import { userFacingError } from '../../utils/user-facing-error';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { vnDateTimeString, vnDayKey } from '../../utils/vn-time';
 import { SLOT_SHORT, sessionDayLabel, sessionLabel, type BookingSlot, type SessionOption } from '../../utils/booking-session';
 
@@ -562,7 +563,10 @@ const confirmMatchingExtension = async () => {
 <template>
   <div class="w-full mx-auto space-y-6 pb-16">
     <!-- Top Bar: Back & Actions menu -->
-    <div class="flex items-center justify-between gap-3 animate-slide-up">
+    <div
+      class="flex items-center justify-between gap-3 relative"
+      :class="moreOpen ? 'z-40' : 'z-10'"
+    >
       <FhBackLink label="Đơn của tôi" @click="router.push('/app/orders')" />
 
       <div v-if="booking && canCancelBooking" class="relative">
@@ -633,24 +637,52 @@ const confirmMatchingExtension = async () => {
 
     <!-- Authoritative Booking Detail Card -->
     <template v-else-if="booking">
-      <section class="bg-white rounded-2xl border border-ink-200/85 shadow-2xs p-5 sm:p-6 space-y-5 animate-slide-up-delay-1">
-        <!-- Service Title and Status Header -->
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance min-w-0">
-            {{ booking.serviceName }}
-          </h1>
-          <span
-            class="inline-flex items-center h-7 px-3 rounded-full text-xs font-semibold whitespace-nowrap"
-            :class="booking.status === 'CANCELLED'
-              ? 'bg-ink-100 text-ink-600'
-              : booking.status === 'MATCHED'
-                ? 'bg-success-50 text-success-700'
-                : 'bg-warning-50 text-warning-800'"
+      <section class="overflow-hidden bg-white rounded-2xl border border-ink-200/85 shadow-2xs animate-slide-up-delay-1">
+        <!-- Bounded Top Header Strip: Service Artwork + Title + Ambient Illustration -->
+        <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4 sm:px-6 sm:py-5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-32 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+            aria-hidden="true"
           >
-            {{ statusLabel(booking.status) }}
-          </span>
+            <img
+              :src="'/images/ui/booking-single-schedule.png'"
+              alt=""
+              data-testid="booking-detail-ambient-artwork"
+              class="h-20 w-20 sm:h-24 sm:w-24 object-contain object-center p-1.5"
+              loading="lazy"
+            />
+          </div>
+          <div class="relative z-10 flex flex-wrap items-start justify-between gap-3 pr-20 sm:pr-32">
+            <div class="flex items-start gap-3.5 min-w-0 flex-1">
+              <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+                <img
+                  :src="getServiceArtworkUrl({ name: booking.serviceName })"
+                  :alt="booking.serviceName || 'Dịch vụ sửa chữa'"
+                  data-testid="booking-detail-service-artwork"
+                  class="w-full h-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="min-w-0 flex-1 space-y-1.5">
+                <h1 class="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight text-balance min-w-0">
+                  {{ booking.serviceName }}
+                </h1>
+                <span
+                  class="inline-flex items-center h-7 px-3 rounded-full text-xs font-semibold whitespace-nowrap"
+                  :class="booking.status === 'CANCELLED'
+                    ? 'bg-ink-100 text-ink-600'
+                    : booking.status === 'MATCHED'
+                      ? 'bg-success-50 text-success-700'
+                      : 'bg-warning-50 text-warning-800'"
+                >
+                  {{ statusLabel(booking.status) }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
+        <div class="p-5 sm:p-6 space-y-5 bg-white">
         <!-- Unified Booking Key Info & Request Summary -->
         <div class="rounded-xl bg-ink-50/80 p-4 space-y-3 text-sm">
           <div class="flex items-start gap-2.5">
@@ -819,6 +851,7 @@ const confirmMatchingExtension = async () => {
         <!-- Case 5: Cancelled Rebook action -->
         <div v-if="booking.status === 'CANCELLED' && booking.serviceOrderId" class="pt-3 border-t border-ink-100">
           <CustomerCancelledRebookAction :booking-id="booking.id" :order-id="booking.serviceOrderId" :status="booking.status" @legacy="showRebook = true" />
+        </div>
         </div>
       </section>
 

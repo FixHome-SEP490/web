@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   Video,
 } from 'lucide-vue-next';
+import FhButton from '../FhButton.vue';
 import type { TechnicianVerification } from '../../api/admin-verifications.api';
 import { adminVerificationsApi } from '../../api/admin-verifications.api';
 
@@ -114,246 +115,198 @@ const statusText = computed(() => STATUS_TEXT[String(props.verification?.status 
 </script>
 
 <template>
-  <Transition name="drawer">
-    <div v-if="open" class="fixed inset-0 z-50 flex justify-end">
-      <!-- Backdrop -->
-      <div 
-        class="absolute inset-0 bg-black/50 backdrop-blur-sm drawer-backdrop" 
-        @click="close"
-      ></div>
-      
-      <!-- Panel -->
+  <Transition name="fh-drawer">
+    <div v-if="open" class="fixed inset-0 z-50 flex justify-end bg-ink-950/50" @click.self="close" @keydown.esc="close">
       <div
-        class="relative w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col drawer-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tech-verif-drawer-title"
+        class="fh-drawer-panel relative flex h-full w-full max-w-2xl flex-col border-l border-ink-200/80 bg-white shadow-(--shadow-e3)"
       >
-      <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white shrink-0">
-        <div class="flex flex-col">
-          <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
-            Xác minh danh tính
-          </h2>
-          <p class="flex flex-wrap items-center gap-2 text-sm text-gray-500 font-medium">
-            {{ technician?.fullName || 'Kỹ thuật viên' }}
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
-                  :class="{
-                    'bg-amber-100 text-amber-700': verification?.status === 'PENDING',
-                    'bg-green-100 text-green-700': verification?.status === 'VERIFIED',
-                    'bg-red-100 text-red-700': verification?.status === 'REJECTED'
-                  }">
-              {{ statusText }}
-            </span>
-          </p>
-        </div>
-        <button
-          type="button"
-          class="p-2 text-gray-400 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          aria-label="Đóng"
-          @click="close"
-        >
-          <X :size="24" />
-        </button>
-      </div>
-
-      <!-- Body -->
-      <div v-if="verification" class="flex-1 overflow-y-auto p-6 space-y-8 bg-gray-50/50">
-        
-        <!-- 1. Thông tin cá nhân & Pháp lý -->
-        <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-            <User class="text-brand-600" :size="20" />
-            Thông tin cá nhân
-          </h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Họ và tên đầy đủ</p>
-              <p class="text-sm font-semibold text-gray-900">{{ technician?.fullName || '—' }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Số CCCD / Định danh</p>
-              <p class="text-sm font-mono font-semibold text-gray-900">{{ profileInfo?.cccd || '—' }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Ngày sinh</p>
-              <p class="text-sm font-semibold text-gray-900">{{ formatDate(profileInfo?.dob || '') }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Giới tính</p>
-              <p class="text-sm font-semibold text-gray-900">{{ profileInfo?.gender || '—' }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Số điện thoại</p>
-              <p class="text-sm font-mono font-semibold text-gray-900">{{ technician?.phoneNumber || '—' }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 font-medium mb-1">Email</p>
-              <p class="text-sm font-semibold text-gray-900">{{ technician?.email || '—' }}</p>
-            </div>
+        <header class="flex items-start justify-between gap-3 border-b border-ink-100 bg-ink-50/70 px-6 py-4 shrink-0">
+          <div class="min-w-0">
+            <h2 id="tech-verif-drawer-title" class="text-lg font-bold text-ink-900">
+              Xác minh danh tính
+            </h2>
+            <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-ink-600 font-medium">
+              <span class="truncate">{{ technician?.fullName || 'Kỹ thuật viên' }}</span>
+              <span
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                :class="{
+                  'border-warning-200/80 bg-warning-50 text-warning-700': verification?.status === 'PENDING',
+                  'border-success-200/80 bg-success-50 text-success-700': verification?.status === 'VERIFIED',
+                  'border-danger-200/80 bg-danger-50 text-danger-700': verification?.status === 'REJECTED'
+                }"
+              >
+                {{ statusText }}
+              </span>
+            </p>
           </div>
-        </section>
+          <button
+            type="button"
+            class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
+            aria-label="Đóng"
+            @click="close"
+          >
+            <X :size="20" />
+          </button>
+        </header>
 
-        <!-- 2. Hồ sơ định danh eKYC -->
-        <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 class="text-base font-bold text-gray-900 mb-4 flex items-center gap-2 border-b border-gray-50 pb-3">
-            <FileBadge class="text-brand-600" :size="20" />
-            Giấy tờ xác minh
-          </h3>
-          
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
-            <!-- Mặt trước -->
-            <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">CCCD mặt trước</p>
-              <button 
-                class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
-                @click="frontIdDoc?.id ? handlePreview('CCCD mặt trước', frontIdDoc.id) : null"
-                :disabled="!frontIdDoc?.id"
-                title="Nhấn để xem lớn"
-              >
-                <template v-if="frontIdDoc?.id">
-                  <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                    <Loader2 class="animate-spin text-brand-500" :size="24" />
-                  </div>
-                  <img v-else-if="documentUrls[frontIdDoc.id]" :src="documentUrls[frontIdDoc.id]" class="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform" />
-                  <div v-else class="flex flex-col items-center gap-2">
-                    <ImageIcon class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
-                    <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
-                  </div>
-                </template>
-                <span v-else class="text-xs font-medium text-gray-400">Chưa tải lên</span>
-              </button>
-            </div>
-            
-            <!-- Mặt sau -->
-            <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">CCCD mặt sau</p>
-              <button 
-                class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
-                @click="backIdDoc?.id ? handlePreview('CCCD mặt sau', backIdDoc.id) : null"
-                :disabled="!backIdDoc?.id"
-                title="Nhấn để xem lớn"
-              >
-                <template v-if="backIdDoc?.id">
-                  <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                    <Loader2 class="animate-spin text-brand-500" :size="24" />
-                  </div>
-                  <img v-else-if="documentUrls[backIdDoc.id]" :src="documentUrls[backIdDoc.id]" class="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform" />
-                  <div v-else class="flex flex-col items-center gap-2">
-                    <ImageIcon class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
-                    <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
-                  </div>
-                </template>
-                <span v-else class="text-xs font-medium text-gray-400">Chưa tải lên</span>
-              </button>
-            </div>
-            
-            <!-- Chân dung / Video -->
-            <div class="space-y-2">
-              <p class="text-xs font-semibold text-gray-600 text-center">Khuôn mặt</p>
-              <button 
-                class="w-full aspect-[1.6/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-300 hover:bg-brand-50 flex flex-col items-center justify-center gap-2 transition-colors relative overflow-hidden group p-1"
-                @click="(facePhotoDoc?.id || faceVideoDoc?.id) ? handlePreview('Xác minh khuôn mặt', (facePhotoDoc?.id || faceVideoDoc?.id) as string) : null"
-                :disabled="!facePhotoDoc?.id && !faceVideoDoc?.id"
-                title="Nhấn để xem lớn"
-              >
-                <template v-if="facePhotoDoc?.id || faceVideoDoc?.id">
-                  <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                    <Loader2 class="animate-spin text-brand-500" :size="24" />
-                  </div>
-                  <template v-else-if="facePhotoDoc?.id && documentUrls[facePhotoDoc.id]">
-                    <img :src="documentUrls[facePhotoDoc.id]" class="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform" />
-                  </template>
-                  <template v-else-if="faceVideoDoc?.id && documentUrls[faceVideoDoc.id]">
-                    <div class="w-full h-full relative rounded-lg overflow-hidden bg-black flex items-center justify-center group-hover:scale-105 transition-transform">
-                      <Video class="text-white opacity-70 absolute z-10" :size="32" />
-                      <video :src="documentUrls[faceVideoDoc.id]" class="w-full h-full object-cover opacity-50"></video>
+        <div v-if="verification" class="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6 text-sm">
+          <!-- 1. Thông tin cá nhân & Pháp lý -->
+          <section class="space-y-2.5">
+            <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+              <User class="text-brand-600" :size="17" />
+              Thông tin cá nhân
+            </h3>
+            <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40">
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Họ và tên đầy đủ</dt>
+                <dd class="text-right font-semibold text-ink-900">{{ technician?.fullName || '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Số CCCD / Định danh</dt>
+                <dd class="font-num font-semibold text-ink-900">{{ profileInfo?.cccd || '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Ngày sinh</dt>
+                <dd class="font-num font-medium text-ink-900">{{ formatDate(profileInfo?.dob || '') }}</dd>
+              </div>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Giới tính</dt>
+                <dd class="font-medium text-ink-900">{{ profileInfo?.gender || '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Số điện thoại</dt>
+                <dd class="font-num font-semibold text-ink-900">{{ technician?.phoneNumber || '—' }}</dd>
+              </div>
+              <div class="flex justify-between gap-3 px-4 py-2.5">
+                <dt class="text-ink-500">Email</dt>
+                <dd class="break-all text-right font-medium text-ink-900">{{ technician?.email || '—' }}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <!-- 2. Hồ sơ định danh eKYC -->
+          <section class="space-y-2.5">
+            <h3 class="flex items-center gap-2 text-sm font-semibold text-ink-900">
+              <FileBadge class="text-brand-600" :size="17" />
+              Giấy tờ xác minh
+            </h3>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <!-- Mặt trước -->
+              <div class="space-y-1.5">
+                <p class="text-xs font-medium text-ink-600 text-center">CCCD mặt trước</p>
+                <button
+                  type="button"
+                  class="group relative flex aspect-[1.6/1] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-1 transition-colors hover:border-brand-300 hover:bg-brand-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:cursor-default"
+                  :disabled="!frontIdDoc?.id"
+                  title="Nhấn để xem lớn"
+                  @click="frontIdDoc?.id ? handlePreview('CCCD mặt trước', frontIdDoc.id) : null"
+                >
+                  <template v-if="frontIdDoc?.id">
+                    <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
+                      <Loader2 class="animate-spin text-brand-500" :size="22" />
+                    </div>
+                    <img v-else-if="documentUrls[frontIdDoc.id]" :src="documentUrls[frontIdDoc.id]" alt="CCCD mặt trước" class="h-full w-full rounded-[calc(var(--radius-sm)-2px)] object-cover transition-transform duration-200 group-hover:scale-105" />
+                    <div v-else class="flex flex-col items-center gap-1.5">
+                      <ImageIcon class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
+                      <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
                     </div>
                   </template>
-                  <div v-else class="flex flex-col items-center gap-2">
-                    <Video v-if="faceVideoDoc" class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
-                    <ImageIcon v-else-if="facePhotoDoc" class="text-brand-500 group-hover:scale-110 transition-transform" :size="32" />
-                    <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
-                  </div>
-                </template>
-                <span v-else class="text-xs font-medium text-gray-400">Chưa tải lên</span>
-              </button>
+                  <span v-else class="text-xs font-medium text-ink-400">Chưa tải lên</span>
+                </button>
+              </div>
+
+              <!-- Mặt sau -->
+              <div class="space-y-1.5">
+                <p class="text-xs font-medium text-ink-600 text-center">CCCD mặt sau</p>
+                <button
+                  type="button"
+                  class="group relative flex aspect-[1.6/1] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-1 transition-colors hover:border-brand-300 hover:bg-brand-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:cursor-default"
+                  :disabled="!backIdDoc?.id"
+                  title="Nhấn để xem lớn"
+                  @click="backIdDoc?.id ? handlePreview('CCCD mặt sau', backIdDoc.id) : null"
+                >
+                  <template v-if="backIdDoc?.id">
+                    <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
+                      <Loader2 class="animate-spin text-brand-500" :size="22" />
+                    </div>
+                    <img v-else-if="documentUrls[backIdDoc.id]" :src="documentUrls[backIdDoc.id]" alt="CCCD mặt sau" class="h-full w-full rounded-[calc(var(--radius-sm)-2px)] object-cover transition-transform duration-200 group-hover:scale-105" />
+                    <div v-else class="flex flex-col items-center gap-1.5">
+                      <ImageIcon class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
+                      <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
+                    </div>
+                  </template>
+                  <span v-else class="text-xs font-medium text-ink-400">Chưa tải lên</span>
+                </button>
+              </div>
+
+              <!-- Chân dung / Video -->
+              <div class="space-y-1.5">
+                <p class="text-xs font-medium text-ink-600 text-center">Khuôn mặt</p>
+                <button
+                  type="button"
+                  class="group relative flex aspect-[1.6/1] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-1 transition-colors hover:border-brand-300 hover:bg-brand-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:cursor-default"
+                  :disabled="!facePhotoDoc?.id && !faceVideoDoc?.id"
+                  title="Nhấn để xem lớn"
+                  @click="(facePhotoDoc?.id || faceVideoDoc?.id) ? handlePreview('Xác minh khuôn mặt', (facePhotoDoc?.id || faceVideoDoc?.id) as string) : null"
+                >
+                  <template v-if="facePhotoDoc?.id || faceVideoDoc?.id">
+                    <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
+                      <Loader2 class="animate-spin text-brand-500" :size="22" />
+                    </div>
+                    <template v-else-if="facePhotoDoc?.id && documentUrls[facePhotoDoc.id]">
+                      <img :src="documentUrls[facePhotoDoc.id]" alt="Xác minh khuôn mặt" class="h-full w-full rounded-[calc(var(--radius-sm)-2px)] object-cover transition-transform duration-200 group-hover:scale-105" />
+                    </template>
+                    <template v-else-if="faceVideoDoc?.id && documentUrls[faceVideoDoc.id]">
+                      <div class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] bg-ink-950 transition-transform duration-200 group-hover:scale-105">
+                        <Video class="text-white opacity-80 absolute z-10" :size="28" />
+                        <video :src="documentUrls[faceVideoDoc.id]" class="h-full w-full object-cover opacity-50"></video>
+                      </div>
+                    </template>
+                    <div v-else class="flex flex-col items-center gap-1.5">
+                      <Video v-if="faceVideoDoc" class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
+                      <ImageIcon v-else-if="facePhotoDoc" class="text-brand-600 transition-transform duration-150 group-hover:scale-105" :size="28" />
+                      <span class="text-xs font-medium text-brand-700">Xem chi tiết</span>
+                    </div>
+                  </template>
+                  <span v-else class="text-xs font-medium text-ink-400">Chưa tải lên</span>
+                </button>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <!-- Khớp khuôn mặt: ảnh CCCD với ảnh chân dung, backend so khi thợ nộp hồ sơ -->
-        <section class="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-          <h3 class="text-base font-bold text-gray-900 mb-2 border-b border-gray-50 pb-3">Khớp khuôn mặt</h3>
-          <p v-if="verification?.faceMatchScore != null" class="text-sm text-gray-700">
-            Độ tương thích giữa ảnh CCCD và ảnh chân dung: <strong class="font-num">{{ verification.faceMatchScore }}%</strong>.
-            Điểm chỉ để tham khảo, bạn vẫn đối chiếu bằng mắt.
-          </p>
-          <p v-else class="text-sm text-gray-500">Chưa có điểm khớp khuôn mặt (hệ thống tắt tính năng hoặc không so sánh được). Hãy đối chiếu bằng mắt.</p>
-          <p class="mt-3 text-xs text-gray-500">
-            Xác nhận danh tính chỉ để mời thợ lên trụ sở gặp trực tiếp. Kỹ năng, cấp độ và bằng cấp được duyệt riêng ở mục "Duyệt hồ sơ".
-          </p>
-        </section>
-
-      </div>
-
-      <!-- Footer Actions -->
-      <div v-if="verification?.status === 'PENDING'" class="p-6 bg-white border-t border-gray-100 shrink-0 flex items-center justify-between">
-        <button 
-          @click="close"
-          class="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
-        >
-          Đóng
-        </button>
-        <div class="flex gap-3">
-          <button 
-            @click="handleReject"
-            class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors focus:ring-4 focus:ring-red-50"
-            :disabled="loadingApprove"
-          >
-            <XCircle :size="18" />
-            Từ chối
-          </button>
-          <button 
-            @click="handleApprove"
-            class="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 transition-colors focus:ring-4 focus:ring-green-100 shadow-sm disabled:opacity-70"
-            :disabled="loadingApprove"
-          >
-            <Loader2 v-if="loadingApprove" class="animate-spin" :size="18" />
-            <CheckCircle2 v-else :size="18" />
-            Xác nhận danh tính
-          </button>
+          <!-- Khớp khuôn mặt -->
+          <section class="rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 p-4 space-y-2">
+            <h3 class="text-sm font-semibold text-ink-900">Khớp khuôn mặt</h3>
+            <p v-if="verification?.faceMatchScore != null" class="text-sm text-ink-700">
+              Độ tương thích giữa ảnh CCCD và ảnh chân dung: <strong class="font-num text-ink-900">{{ verification.faceMatchScore }}%</strong>.
+              Điểm chỉ để tham khảo, bạn vẫn đối chiếu bằng mắt.
+            </p>
+            <p v-else class="text-sm text-ink-600">Chưa có điểm khớp khuôn mặt (hệ thống tắt tính năng hoặc không so sánh được). Hãy đối chiếu bằng mắt.</p>
+            <p class="text-xs text-ink-500">
+              Xác nhận danh tính chỉ để mời thợ lên trụ sở gặp trực tiếp. Kỹ năng, cấp độ và bằng cấp được duyệt riêng ở mục "Duyệt hồ sơ".
+            </p>
+          </section>
         </div>
+
+        <footer v-if="verification?.status === 'PENDING'" class="flex items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/50 px-6 py-4 shrink-0">
+          <FhButton variant="secondary" size="md" @click="close">Đóng</FhButton>
+          <div class="flex items-center gap-2.5">
+            <FhButton variant="danger" size="md" :disabled="loadingApprove" @click="handleReject">
+              <XCircle :size="16" /> Từ chối
+            </FhButton>
+            <FhButton variant="primary" size="md" :loading="loadingApprove" :disabled="loadingApprove" @click="handleApprove">
+              <CheckCircle2 v-if="!loadingApprove" :size="16" /> Xác nhận danh tính
+            </FhButton>
+          </div>
+        </footer>
+        <footer v-else class="flex items-center justify-end border-t border-ink-100 bg-ink-50/50 px-6 py-4 shrink-0">
+          <FhButton variant="secondary" size="md" @click="close">Đóng</FhButton>
+        </footer>
       </div>
-      <div v-else class="p-6 bg-white border-t border-gray-100 shrink-0 flex items-center justify-end">
-         <button 
-          @click="close"
-          class="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors focus:ring-4 focus:ring-gray-100"
-        >
-          Đóng
-        </button>
-      </div>
-    </div>
     </div>
   </Transition>
 </template>
-
-<style scoped>
-.drawer-enter-active,
-.drawer-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.drawer-enter-from,
-.drawer-leave-to {
-  opacity: 0;
-}
-
-/* Animate the panel sliding in/out */
-.drawer-enter-active .drawer-panel,
-.drawer-leave-active .drawer-panel {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.drawer-enter-from .drawer-panel,
-.drawer-leave-to .drawer-panel {
-  transform: translateX(100%);
-}
-</style>

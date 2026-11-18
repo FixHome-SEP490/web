@@ -368,7 +368,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Chi hộ và rút tiền">
+    <ConsolePageHeader class="animate-slide-up" title="Chi hộ và rút tiền">
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem @click="refreshActiveTab">Làm mới</ConsoleMenuItem>
@@ -376,11 +376,11 @@ onMounted(() => {
       </template>
     </ConsolePageHeader>
 
-    <ConsoleTabs v-model="activeTab" :tabs="tabs" />
+    <ConsoleTabs v-model="activeTab" class="animate-slide-up-delay-1" :tabs="tabs" />
 
     <!-- Wallets -->
-    <div v-if="activeTab === 'wallets'" class="space-y-4">
-      <div class="flex flex-wrap items-center gap-2">
+    <div v-if="activeTab === 'wallets'" class="animate-slide-up-delay-2 space-y-4">
+      <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
         <ConsoleSearch
           v-model="walletSearch"
           placeholder="Tìm tên, số điện thoại, email"
@@ -409,18 +409,18 @@ onMounted(() => {
           </div>
         </template>
         <template #cell-balance="{ row }">
-          <span class="whitespace-nowrap font-num font-semibold" :class="row.balance < 0 ? 'text-rose-600' : 'text-ink-900'">
+          <span class="whitespace-nowrap font-num font-semibold" :class="row.balance < 0 ? 'text-danger-600' : 'text-ink-900'">
             {{ formatCurrencyVND(row.balance) }}
           </span>
         </template>
         <template #cell-eligibleForJobs="{ row }">
           <span
             v-if="row.eligibleForJobs"
-            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-200/80 bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-700"
           >Đủ điều kiện</span>
           <span
             v-else
-            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700"
+            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-danger-200/80 bg-danger-50 px-2.5 py-0.5 text-xs font-medium text-danger-700"
           >Dưới mức ký quỹ</span>
         </template>
         <template #cell-updatedAt="{ row }">
@@ -439,26 +439,28 @@ onMounted(() => {
     </div>
 
     <!-- Withdrawals: technicians and customers apart, one shared payout source -->
-    <div v-else-if="activeTab === 'withdrawals'" class="space-y-4">
+    <div v-else-if="activeTab === 'withdrawals'" class="animate-slide-up-delay-2 space-y-4">
       <template v-if="sourceOverview">
-        <p
-          v-if="sourceOverview.provider === 'disabled'"
-          class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700"
-          role="alert"
-        >
-          <AlertCircle :size="16" class="shrink-0" aria-hidden="true" />
-          Chưa cấu hình payOS nên chưa thể chi tiền rút cho {{ payoutTab === 'customers' ? 'khách hàng' : 'kỹ thuật viên' }}.
-        </p>
+        <Transition name="fh-fade-slide">
+          <p
+            v-if="sourceOverview.provider === 'disabled'"
+            class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700"
+            role="alert"
+          >
+            <AlertCircle :size="16" class="shrink-0" aria-hidden="true" />
+            Chưa cấu hình payOS nên chưa thể chi tiền rút cho {{ payoutTab === 'customers' ? 'khách hàng' : 'kỹ thuật viên' }}.
+          </p>
+        </Transition>
         <section
-          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4"
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)"
           aria-label="Ví nguồn chi hộ"
           data-testid="payout-source"
         >
           <div class="min-w-0">
-            <div class="whitespace-nowrap text-sm text-ink-500">Ví nguồn chi hộ</div>
+            <div class="whitespace-nowrap text-sm font-medium text-ink-700">Ví nguồn chi hộ</div>
             <div class="mt-0.5 text-xs text-ink-500">{{ sourceOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ, chung cho kỹ thuật viên và khách hàng' }}</div>
           </div>
-          <div class="whitespace-nowrap font-num text-xl font-semibold text-ink-900">
+          <div class="whitespace-nowrap font-num text-xl font-bold text-ink-900">
             {{ sourceOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(sourceOverview.sourceBalance) }}
           </div>
         </section>
@@ -474,24 +476,24 @@ onMounted(() => {
       />
       <template v-else>
         <section v-if="payoutOverview" class="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Tổng quan chi tiền">
-          <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
-            <div class="whitespace-nowrap text-sm text-ink-500">Đã chuyển cho kỹ thuật viên</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-success-600">{{ formatCurrencyVND(payoutOverview.paidOut.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.paidOut.count }} lệnh thành công</div>
+          <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
+            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Đã chuyển cho kỹ thuật viên</div>
+            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-success-600">{{ formatCurrencyVND(payoutOverview.paidOut.amount) }}</div>
+            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.paidOut.count }}</span> lệnh thành công</div>
           </div>
-          <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
-            <div class="whitespace-nowrap text-sm text-ink-500">Đang chuyển</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-info-600">{{ formatCurrencyVND(payoutOverview.processing.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.processing.count }} lệnh chờ payOS xác nhận</div>
+          <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
+            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Đang chuyển</div>
+            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-info-600">{{ formatCurrencyVND(payoutOverview.processing.amount) }}</div>
+            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.processing.count }}</span> lệnh chờ payOS xác nhận</div>
           </div>
-          <div class="col-span-2 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4 sm:col-span-1">
-            <div class="whitespace-nowrap text-sm text-ink-500">Chuyển thất bại</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-danger-600">{{ formatCurrencyVND(payoutOverview.failed.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500">{{ payoutOverview.failed.count }} lệnh, tiền đã hoàn về ví kỹ thuật viên</div>
+          <div class="col-span-2 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) sm:col-span-1">
+            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Chuyển thất bại</div>
+            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-danger-600">{{ formatCurrencyVND(payoutOverview.failed.amount) }}</div>
+            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.failed.count }}</span> lệnh, tiền đã hoàn về ví kỹ thuật viên</div>
           </div>
         </section>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
           <select v-model="wdStatusFilter" :class="consoleField" aria-label="Trạng thái rút tiền">
             <option value="ALL">Tất cả trạng thái</option>
             <option value="PENDING">Chờ duyệt</option>
@@ -526,8 +528,8 @@ onMounted(() => {
           </template>
           <template #cell-status="{ row }">
             <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
-            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-xs text-rose-600">Lý do: {{ row.rejectReason }}</div>
-            <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-xs text-rose-600">{{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví</div>
+            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-xs text-danger-600">Lý do: {{ row.rejectReason }}</div>
+            <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-xs text-danger-600">{{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví</div>
             <div v-if="row.status === 'PROCESSING' && row.failureReason" class="mt-1 max-w-56 text-xs text-info-600">{{ row.failureReason }}</div>
             <div v-if="row.status === 'SUCCESS'" class="mt-1 whitespace-nowrap text-xs text-ink-500">
               <template v-if="row.payoutBankReference">Mã giao dịch <span class="font-num font-medium text-ink-700">{{ row.payoutBankReference }}</span></template>
@@ -549,16 +551,18 @@ onMounted(() => {
     </div>
 
     <!-- Wallet settings (admin) -->
-    <section v-else-if="activeTab === 'config' && isAdmin" class="max-w-2xl rounded-[var(--radius-md)] border border-ink-200 bg-white p-6">
+    <section v-else-if="activeTab === 'config' && isAdmin" class="animate-slide-up-delay-2 max-w-2xl rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-6 shadow-(--shadow-e1)">
       <h2 class="text-base font-semibold text-ink-900">Thông số ví kỹ thuật viên</h2>
       <p class="mt-1 text-sm text-ink-500">Áp dụng ngay cho lời mời nhận việc và phí trừ khi hoàn thành đơn.</p>
 
       <div v-if="configLoading" class="mt-5 space-y-3"><FhSkeleton height="40px" :count="2" /></div>
       <ConsoleLoadError v-else-if="configError" class="mt-5" @retry="loadConfig" />
       <form v-else class="mt-5 space-y-5" @submit.prevent="saveConfig">
-        <p v-if="configSuccessMsg" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
-          <CheckCircle2 :size="16" aria-hidden="true" /> {{ configSuccessMsg }}
-        </p>
+        <Transition name="fh-fade-slide">
+          <p v-if="configSuccessMsg" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-800" role="status">
+            <CheckCircle2 :size="16" aria-hidden="true" /> {{ configSuccessMsg }}
+          </p>
+        </Transition>
         <label :class="consoleLabel">
           Ký quỹ tối thiểu (₫)
           <input v-model.number="editMinBalance" type="number" min="0" step="50000" inputmode="numeric" :class="consoleField" class="h-10 max-w-xs font-num" />
@@ -572,7 +576,9 @@ onMounted(() => {
           </span>
           <span class="text-xs font-normal text-ink-500">1500 = 15%, trừ khi đơn hoàn thành.</span>
         </label>
-        <p v-if="configSaveError" class="text-sm text-danger-600" role="alert">{{ configSaveError }}</p>
+        <Transition name="fh-fade-slide">
+          <p v-if="configSaveError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ configSaveError }}</p>
+        </Transition>
         <div class="flex justify-end">
           <FhButton type="submit" variant="primary" size="sm" :loading="configSaving">Lưu thay đổi</FhButton>
         </div>
@@ -580,109 +586,117 @@ onMounted(() => {
     </section>
 
     <!-- Adjust balance (admin) -->
-    <div
-      v-if="showAdjustModal && selectedWalletForAdjust"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="adjust-title"
-      @keydown.esc="showAdjustModal = false"
-    >
-      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
-        <div class="flex items-center justify-between">
-          <h3 id="adjust-title" class="text-base font-semibold text-ink-900">Điều chỉnh số dư</h3>
-          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="showAdjustModal = false">
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </div>
-
-        <dl class="space-y-1.5 text-sm">
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Kỹ thuật viên</dt><dd class="font-medium text-ink-900">{{ selectedWalletForAdjust.technician.fullName }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Số dư hiện tại</dt><dd class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedWalletForAdjust.balance) }}</dd></div>
-        </dl>
-
-        <div class="space-y-4">
-          <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Loại điều chỉnh">
-            <button
-              type="button"
-              role="radio"
-              :aria-checked="adjustType === 'CREDIT'"
-              class="whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors"
-              :class="adjustType === 'CREDIT' ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
-              @click="adjustType = 'CREDIT'"
-            >Cộng tiền</button>
-            <button
-              type="button"
-              role="radio"
-              :aria-checked="adjustType === 'DEBIT'"
-              class="whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors"
-              :class="adjustType === 'DEBIT' ? 'border-rose-600 bg-rose-50 text-rose-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
-              @click="adjustType = 'DEBIT'"
-            >Trừ tiền</button>
+    <Transition name="fh-modal">
+      <div
+        v-if="showAdjustModal && selectedWalletForAdjust"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/50"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adjust-title"
+        @click.self="showAdjustModal = false"
+        @keydown.esc="showAdjustModal = false"
+      >
+        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-md w-full p-6 shadow-(--shadow-e3) space-y-5">
+          <div class="flex items-center justify-between border-b border-ink-100 pb-3">
+            <h3 id="adjust-title" class="text-base font-semibold text-ink-900">Điều chỉnh số dư</h3>
+            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showAdjustModal = false">
+              <X :size="18" aria-hidden="true" />
+            </button>
           </div>
-          <label :class="consoleLabel">
-            Số tiền (₫)
-            <input v-model.number="adjustAmount" type="number" min="1000" step="10000" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
-          </label>
-          <label :class="consoleLabel">
-            Lý do
-            <textarea v-model="adjustReason" rows="3" placeholder="Tối thiểu 10 ký tự" :class="consoleTextarea" />
-          </label>
-          <p v-if="adjustError" class="text-sm text-danger-600" role="alert">{{ adjustError }}</p>
-          <div class="flex items-center justify-end gap-2">
-            <FhButton variant="secondary" size="sm" @click="showAdjustModal = false">Huỷ</FhButton>
-            <FhButton variant="primary" size="sm" :loading="adjustSubmitting" @click="handleAdjust">Điều chỉnh</FhButton>
+
+          <dl class="space-y-1.5 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/70 p-3 text-sm">
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Kỹ thuật viên</dt><dd class="font-medium text-ink-900">{{ selectedWalletForAdjust.technician.fullName }}</dd></div>
+            <div class="flex justify-between gap-3"><dt class="text-ink-500">Số dư hiện tại</dt><dd class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedWalletForAdjust.balance) }}</dd></div>
+          </dl>
+
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Loại điều chỉnh">
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="adjustType === 'CREDIT'"
+                class="whitespace-nowrap rounded-[var(--radius-sm)] border px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+                :class="adjustType === 'CREDIT' ? 'border-success-600 bg-success-50 text-success-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
+                @click="adjustType = 'CREDIT'"
+              >Cộng tiền</button>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="adjustType === 'DEBIT'"
+                class="whitespace-nowrap rounded-[var(--radius-sm)] border px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+                :class="adjustType === 'DEBIT' ? 'border-danger-600 bg-danger-50 text-danger-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
+                @click="adjustType = 'DEBIT'"
+              >Trừ tiền</button>
+            </div>
+            <label :class="consoleLabel">
+              Số tiền (₫)
+              <input v-model.number="adjustAmount" type="number" min="1000" step="10000" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
+            </label>
+            <label :class="consoleLabel">
+              Lý do
+              <textarea v-model="adjustReason" rows="3" placeholder="Tối thiểu 10 ký tự" :class="consoleTextarea" />
+            </label>
+            <Transition name="fh-fade-slide">
+              <p v-if="adjustError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ adjustError }}</p>
+            </Transition>
+            <div class="flex items-center justify-end gap-2">
+              <FhButton variant="secondary" size="sm" @click="showAdjustModal = false">Huỷ</FhButton>
+              <FhButton variant="primary" size="sm" :loading="adjustSubmitting" @click="handleAdjust">Điều chỉnh</FhButton>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Wallet history -->
-    <div
-      v-if="showTxModal && selectedTech"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="tx-title"
-      @keydown.esc="showTxModal = false"
-    >
-      <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 id="tx-title" class="text-base font-semibold text-ink-900">Lịch sử ví: {{ selectedTech.name }}</h3>
-            <p class="text-sm text-ink-500">Số dư <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedTech.balance) }}</span></p>
+    <Transition name="fh-modal">
+      <div
+        v-if="showTxModal && selectedTech"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/50"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tx-title"
+        @click.self="showTxModal = false"
+        @keydown.esc="showTxModal = false"
+      >
+        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-2xl w-full p-6 shadow-(--shadow-e3) space-y-4 max-h-[85dvh] flex flex-col">
+          <div class="flex items-start justify-between gap-3 border-b border-ink-100 pb-3">
+            <div>
+              <h3 id="tx-title" class="text-base font-semibold text-ink-900">Lịch sử ví: {{ selectedTech.name }}</h3>
+              <p class="text-sm text-ink-500">Số dư <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedTech.balance) }}</span></p>
+            </div>
+            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showTxModal = false">
+              <X :size="18" aria-hidden="true" />
+            </button>
           </div>
-          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="showTxModal = false">
-            <X :size="18" aria-hidden="true" />
-          </button>
-        </div>
 
-        <FhSkeleton v-if="techTxLoading" height="44px" :count="5" />
-        <p v-else-if="techTxError" class="py-8 text-center text-sm text-ink-700">{{ CONSOLE_LOAD_ERROR }}</p>
-        <p v-else-if="techTransactions.length === 0" class="py-8 text-center text-sm text-ink-500">Chưa có giao dịch nào.</p>
-        <ul v-else class="flex-1 overflow-y-auto divide-y divide-ink-100 pr-1">
-          <li v-for="tx in techTransactions" :key="tx.id" class="flex items-center justify-between gap-4 py-3 text-sm">
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-x-2">
-                <span class="font-medium text-ink-900">{{ formatWalletTxType(tx.type, tx).label }}</span>
-                <span class="whitespace-nowrap font-num text-xs text-ink-500">{{ formatDateTimeVN(tx.createdAt) }}</span>
+          <FhSkeleton v-if="techTxLoading" height="44px" :count="5" />
+          <p v-else-if="techTxError" class="py-8 text-center text-sm text-ink-700">{{ CONSOLE_LOAD_ERROR }}</p>
+          <p v-else-if="techTransactions.length === 0" class="py-8 text-center text-sm text-ink-500">Chưa có giao dịch nào.</p>
+          <ul v-else class="flex-1 overflow-y-auto overscroll-contain divide-y divide-ink-100 pr-1">
+            <li v-for="tx in techTransactions" :key="tx.id" class="flex items-center justify-between gap-4 py-3 text-sm">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-x-2">
+                  <span class="font-medium text-ink-900">{{ formatWalletTxType(tx.type, tx).label }}</span>
+                  <span class="whitespace-nowrap font-num text-xs text-ink-500">{{ formatDateTimeVN(tx.createdAt) }}</span>
+                </div>
+                <p class="text-xs text-ink-500">{{ tx.description || 'Giao dịch ví' }}</p>
+                <div class="text-xs text-ink-500">Số dư sau <span class="whitespace-nowrap font-num font-medium">{{ formatCurrencyVND(tx.balanceAfter) }}</span></div>
               </div>
-              <p class="text-xs text-ink-500">{{ tx.description || 'Giao dịch ví' }}</p>
-              <div class="text-xs text-ink-500">Số dư sau <span class="whitespace-nowrap font-num font-medium">{{ formatCurrencyVND(tx.balanceAfter) }}</span></div>
-            </div>
-            <div
-              class="shrink-0 whitespace-nowrap text-right font-num font-semibold"
-              :class="formatWalletTxType(tx.type, tx).isCredit ? 'text-emerald-600' : 'text-rose-600'"
-            >
-              {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
-            </div>
-          </li>
-        </ul>
+              <div
+                class="shrink-0 whitespace-nowrap text-right font-num font-semibold"
+                :class="formatWalletTxType(tx.type, tx).isCredit ? 'text-success-600' : 'text-danger-600'"
+              >
+                {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
+              </div>
+            </li>
+          </ul>
 
-        <div class="flex justify-end">
-          <FhButton variant="secondary" size="sm" @click="showTxModal = false">Đóng</FhButton>
+          <div class="flex justify-end border-t border-ink-100 pt-3">
+            <FhButton variant="secondary" size="sm" @click="showTxModal = false">Đóng</FhButton>
+          </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>

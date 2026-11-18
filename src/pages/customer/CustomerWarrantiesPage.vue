@@ -15,7 +15,7 @@ import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../.
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
-import { isOpenClaim } from '../../utils/warranty-claim';
+import { claimDisplayMeta, isOpenClaim, warrantyClaimToneClasses } from '../../utils/warranty-claim';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { vnDateString } from '../../utils/vn-time';
 
@@ -94,6 +94,56 @@ const visibleCoverages = (order: OrderWarrantyGroup) =>
   expandedOrders.value[order.orderId] ? order.coverages : order.coverages.slice(0, 3);
 
 const hasOpenClaim = (order: OrderWarrantyGroup) => order.claims.some((claim) => isOpenClaim(claim.status));
+
+// History modal state: keeps multi-column cards uniform when orders accumulate multiple claims
+const selectedHistoryOrderId = ref<string | null>(null);
+const selectedOrderForHistory = computed(
+  () => warrantyOrders.value.find((order) => order.orderId === selectedHistoryOrderId.value) ?? null,
+);
+const openHistoryModal = (order: OrderWarrantyGroup) => {
+  selectedHistoryOrderId.value = order.orderId;
+};
+const closeHistoryModal = () => {
+  selectedHistoryOrderId.value = null;
+};
+
+const claimNeedsCustomerResponse = (claim: WarrantyClaimView) =>
+  claim.status === 'awaiting_customer' && !claim.customerResponse;
+
+const claimPriorityRank = (claim: WarrantyClaimView) => {
+  if (claimNeedsCustomerResponse(claim)) return 0;
+  if (isOpenClaim(claim.status)) return 1;
+  return 2;
+};
+
+const sortedClaims = (claims: WarrantyClaimView[]) =>
+  [...claims].sort((a, b) => {
+    const rankDiff = claimPriorityRank(a) - claimPriorityRank(b);
+    if (rankDiff !== 0) return rankDiff;
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+  });
+
+const claimSummary = (order: OrderWarrantyGroup) => {
+  const ordered = sortedClaims(order.claims);
+  const primary = ordered[0];
+  const meta = claimDisplayMeta(primary);
+  const waitingCount = order.claims.filter(claimNeedsCustomerResponse).length;
+  const openCount = order.claims.filter((claim) => isOpenClaim(claim.status)).length;
+  return {
+    total: order.claims.length,
+    waitingCount,
+    openCount,
+    primaryLabel: meta.label,
+    primaryToneClass: warrantyClaimToneClasses[meta.tone],
+    needsAction: waitingCount > 0,
+  };
+};
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && selectedHistoryOrderId.value !== null) {
+    closeHistoryModal();
+  }
+};
 const busyCoverageIds = (order: OrderWarrantyGroup) =>
   order.claims.filter((claim) => isOpenClaim(claim.status)).map((claim) => claim.warrantyCoverageId);
 const allCoveragesBusy = (order: OrderWarrantyGroup) =>
@@ -184,6 +234,7 @@ onMounted(() => {
     updateTabIndicator();
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', updateTabIndicator);
+      window.addEventListener('keydown', handleKeydown);
     }
   });
 });
@@ -191,6 +242,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateTabIndicator);
+    window.removeEventListener('keydown', handleKeydown);
   }
 });
 </script>
@@ -198,9 +250,9 @@ onUnmounted(() => {
 <template>
   <div class="w-full space-y-6 pb-12">
     <!-- Header -->
-    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center animate-slide-up">
       <div
-        class="pointer-events-none select-none absolute inset-y-0 right-0 w-28 sm:w-[30%] max-w-[14rem] flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
+        class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
         aria-hidden="true"
       >
         <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
@@ -208,13 +260,13 @@ onUnmounted(() => {
           :src="'/images/ui/warranty-shield.png'"
           alt=""
           data-testid="warranties-header-artwork"
-          class="relative h-24 w-24 sm:h-28 sm:w-28 object-contain object-center p-2"
+          class="relative h-20 w-20 sm:h-28 sm:w-28 object-contain object-center p-2"
           loading="lazy"
         />
       </div>
-      <div class="relative z-10 pr-24 sm:pr-[32%] space-y-1">
-        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
-        <p class="text-sm text-ink-500">
+      <div class="relative z-10 pr-20 sm:pr-36 space-y-1">
+        <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">Bảo hành</h1>
+        <p class="text-sm text-ink-600 text-pretty">
           Theo dõi quyền lợi bảo hành các dịch vụ đã hoàn thành và gửi yêu cầu bảo hành trực tiếp.
         </p>
       </div>
@@ -472,15 +524,41 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <!-- Active Claims (if any) -->
-          <div v-if="order.claims.length" class="space-y-2 pt-1">
-            <WarrantyClaimCard
-              v-for="claim in order.claims"
-              :key="claim.id"
-              :claim="claim"
-              :coverage-label="coverageLabel(order, claim)"
-              @updated="onClaimUpdated(order, $event)"
-            />
+          <!-- Compact Claims Summary (full history opens in dialog to keep cards uniform) -->
+          <div v-if="order.claims.length" class="pt-1">
+            <button
+              type="button"
+              data-testid="warranty-claims-summary"
+              :data-order-id="order.orderId"
+              class="w-full text-left rounded-xl border px-3 py-2.5 flex items-center justify-between gap-2.5 transition-[background-color,border-color] duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              :class="claimSummary(order).needsAction
+                ? 'border-warning-200 bg-warning-50/75 hover:bg-warning-50'
+                : claimSummary(order).openCount > 0
+                  ? 'border-brand-200/80 bg-brand-50/45 hover:bg-brand-50/75'
+                  : 'border-ink-200/80 bg-ink-50/60 hover:bg-ink-100/70'"
+              @click="openHistoryModal(order)"
+            >
+              <div class="min-w-0 flex-1 space-y-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-xs font-semibold text-ink-800 whitespace-nowrap">
+                    {{ claimSummary(order).total }} yêu cầu bảo hành
+                  </span>
+                  <span
+                    class="inline-flex items-center h-5 px-2 rounded-full text-[11px] font-medium whitespace-nowrap"
+                    :class="claimSummary(order).primaryToneClass"
+                  >
+                    {{ claimSummary(order).primaryLabel }}
+                  </span>
+                </div>
+                <p class="text-[11px] text-ink-500 truncate">
+                  {{ claimSummary(order).needsAction ? 'Cần bạn xác nhận kết quả xử lý' : 'Nhấn để xem chi tiết & phản hồi kỹ thuật viên' }}
+                </p>
+              </div>
+              <span class="shrink-0 inline-flex items-center gap-0.5 text-xs font-semibold text-brand-700 whitespace-nowrap">
+                {{ claimSummary(order).needsAction ? 'Phản hồi' : 'Xem lịch sử' }}
+                <ChevronRight :size="14" aria-hidden="true" />
+              </span>
+            </button>
           </div>
         </div>
 
@@ -542,5 +620,51 @@ onUnmounted(() => {
       @close="showClaimModal = false"
       @submitted="onClaimSubmitted"
     />
+
+    <!-- Warranty Claims History Modal -->
+    <Transition name="fh-modal">
+      <div
+        v-if="selectedOrderForHistory"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs sm:p-4"
+        data-testid="warranty-history-modal"
+        @click.self="closeHistoryModal"
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="warranty-history-title"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[88dvh] flex flex-col shadow-(--shadow-e3) border border-ink-200/90 overflow-hidden"
+        >
+          <div class="px-5 py-4 border-b border-ink-100 flex items-start justify-between gap-3 shrink-0 bg-white">
+            <div class="min-w-0 space-y-0.5">
+              <h2 id="warranty-history-title" class="text-base sm:text-lg font-bold text-ink-900 truncate">
+                Lịch sử yêu cầu bảo hành ({{ selectedOrderForHistory.claims.length }})
+              </h2>
+              <p class="text-xs text-ink-500 font-num truncate">
+                #{{ selectedOrderForHistory.orderCode }} · {{ selectedOrderForHistory.serviceName }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="w-8 h-8 rounded-full bg-ink-100 hover:bg-ink-200 text-ink-500 hover:text-ink-800 flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+              aria-label="Đóng"
+              @click="closeHistoryModal"
+            >
+              <X :size="16" />
+            </button>
+          </div>
+
+          <div class="p-5 space-y-3 overflow-y-auto overscroll-contain bg-ink-50/40">
+            <WarrantyClaimCard
+              v-for="claim in sortedClaims(selectedOrderForHistory.claims)"
+              :key="claim.id"
+              :claim="claim"
+              :coverage-label="coverageLabel(selectedOrderForHistory, claim)"
+              @updated="onClaimUpdated(selectedOrderForHistory, $event)"
+            />
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>

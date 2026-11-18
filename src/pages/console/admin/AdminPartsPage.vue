@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Plus, X } from 'lucide-vue-next';
+import { Plus, RotateCcw, X } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhStatusPill, FhConfirmDialog } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
@@ -48,6 +48,12 @@ const router = useRouter();
 const detailPart = ref<FixHomePart | null>(null);
 const openDetail = (part: FixHomePart) => {
   detailPart.value = part;
+};
+
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || activeFilter.value !== 'ALL');
+const resetFilters = () => {
+  searchQuery.value = '';
+  activeFilter.value = 'ALL';
 };
 
 // Plain Vietnamese reasons from the server are kept; codes and English never show.
@@ -262,7 +268,7 @@ async function submitForm() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Danh mục linh kiện" :count="loading || loadError ? null : total">
+    <ConsolePageHeader class="animate-slide-up" title="Danh mục linh kiện" :count="loading || loadError ? null : total">
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openCreate">
           <Plus :size="16" aria-hidden="true" /> Thêm linh kiện
@@ -274,60 +280,75 @@ async function submitForm() {
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, mã SKU, mô tả" label="Tìm linh kiện" />
       <select v-model="activeFilter" :class="consoleField" aria-label="Trạng thái">
         <option value="ALL">Tất cả trạng thái</option>
         <option value="true">Đang dùng</option>
         <option value="false">Ngừng dùng</option>
       </select>
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
+        Đặt lại
+      </button>
     </div>
 
-    <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
-    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+    </Transition>
 
-    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadParts" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="parts"
-      :loading="loading"
-      empty-text="Không có linh kiện phù hợp."
-    >
-      <template #cell-name="{ row }">
-        <button
-          type="button"
-          class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          @click="openDetail(row)"
-        >{{ row.name }}</button>
-        <div v-if="row.description" class="max-w-72 truncate text-xs text-ink-500" :title="row.description">{{ row.description }}</div>
-      </template>
-      <template #cell-sku="{ row }">
-        <span class="whitespace-nowrap font-num text-ink-600">{{ row.sku ?? '—' }}</span>
-      </template>
-      <template #cell-sellingPrice="{ row }">
-        <FhMoney :amount="Number(row.sellingPrice)" />
-      </template>
-      <template #cell-warranty="{ row }">
-        <span v-if="row.warrantyDays != null" class="whitespace-nowrap text-ink-700">{{ row.warrantyDays }}&nbsp;ngày</span>
-        <span v-else class="whitespace-nowrap text-ink-400">Không bảo hành</span>
-      </template>
-      <template #cell-status="{ row }">
-        <FhStatusPill :status="row.isActive ? 'active' : 'inactive'" :label="row.isActive ? 'Đang dùng' : 'Ngừng dùng'" />
-      </template>
-      <template #cell-actions="{ row }">
-        <div class="flex items-center justify-end gap-2">
-          <FhButton variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
-          <ConsoleMoreMenu label="Thao tác khác với linh kiện">
-            <ConsoleMenuItem :danger="row.isActive" @click="triggerToggle(row)">
-              {{ row.isActive ? 'Ngừng dùng' : 'Dùng lại' }}
-            </ConsoleMenuItem>
-          </ConsoleMoreMenu>
-        </div>
-      </template>
-    </ConsoleTable>
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadParts" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="parts"
+        :loading="loading"
+        empty-text="Không có linh kiện phù hợp."
+      >
+        <template #cell-name="{ row }">
+          <button
+            type="button"
+            class="cursor-pointer text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            @click="openDetail(row)"
+          >{{ row.name }}</button>
+          <div v-if="row.description" class="max-w-72 truncate text-xs text-ink-500" :title="row.description">{{ row.description }}</div>
+        </template>
+        <template #cell-sku="{ row }">
+          <span class="whitespace-nowrap font-num text-ink-600">{{ row.sku ?? '—' }}</span>
+        </template>
+        <template #cell-sellingPrice="{ row }">
+          <FhMoney :amount="Number(row.sellingPrice)" />
+        </template>
+        <template #cell-warranty="{ row }">
+          <span v-if="row.warrantyDays != null" class="whitespace-nowrap font-num text-ink-700">{{ row.warrantyDays }}&nbsp;ngày</span>
+          <span v-else class="whitespace-nowrap text-ink-400">Không bảo hành</span>
+        </template>
+        <template #cell-status="{ row }">
+          <FhStatusPill :status="row.isActive ? 'active' : 'inactive'" :label="row.isActive ? 'Đang dùng' : 'Ngừng dùng'" />
+        </template>
+        <template #cell-actions="{ row }">
+          <div class="flex items-center justify-end gap-2">
+            <FhButton variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
+            <ConsoleMoreMenu label="Thao tác khác với linh kiện">
+              <ConsoleMenuItem :danger="row.isActive" @click="triggerToggle(row)">
+                {{ row.isActive ? 'Ngừng dùng' : 'Dùng lại' }}
+              </ConsoleMenuItem>
+            </ConsoleMoreMenu>
+          </div>
+        </template>
+      </ConsoleTable>
 
-    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+    </div>
 
     <FhConfirmDialog
       :open="showStatusModal"
@@ -343,106 +364,114 @@ async function submitForm() {
 
     <!-- Create / edit side panel -->
     <Teleport to="body">
-      <div
-        v-if="showForm"
-        class="fixed inset-0 z-50 flex items-start justify-end bg-ink-900/40"
-        @click.self="closeForm"
-        @keydown.esc="closeForm"
-      >
+      <Transition name="fh-drawer">
         <div
-          class="relative flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="part-form-title"
+          v-if="showForm"
+          class="fixed inset-0 z-50 flex items-start justify-end bg-ink-950/45"
+          @click.self="closeForm"
+          @keydown.esc="closeForm"
         >
-          <div class="flex items-center justify-between border-b border-ink-200 px-6 py-4">
-            <h2 id="part-form-title" class="text-base font-semibold text-ink-900">{{ formTitle }}</h2>
-            <button class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" type="button" aria-label="Đóng" @click="closeForm">
-              <X :size="18" aria-hidden="true" />
-            </button>
-          </div>
+          <div
+            class="fh-drawer-panel relative flex h-full w-full max-w-lg flex-col overflow-hidden border-l border-ink-200 bg-white shadow-(--shadow-e3)"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="part-form-title"
+          >
+            <div class="flex items-center justify-between border-b border-ink-200 bg-ink-25/60 px-6 py-4">
+              <h2 id="part-form-title" class="text-base font-semibold text-ink-900">{{ formTitle }}</h2>
+              <button class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900" type="button" aria-label="Đóng" @click="closeForm">
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </div>
 
-          <form id="part-form" class="flex-1 space-y-5 px-6 py-5" @submit.prevent="submitForm">
-            <p v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ formError }}</p>
-            <label :class="consoleLabel" for="part-name">
-              Tên linh kiện
-              <input id="part-name" v-model="formData.name" type="text" required maxlength="200" placeholder="Ví dụ: Quạt tản nhiệt 5V" :class="consoleField" class="h-10" />
-            </label>
-            <label :class="consoleLabel" for="part-sku">
-              Mã SKU (không bắt buộc)
-              <input id="part-sku" v-model="formData.sku" type="text" maxlength="100" placeholder="Ví dụ: FH-FAN-5V-001" :class="consoleField" class="h-10 font-num" />
-            </label>
-            <label :class="consoleLabel" for="part-description">
-              Mô tả (không bắt buộc)
-              <textarea id="part-description" v-model="formData.description" rows="3" maxlength="5000" :class="consoleTextarea" class="resize-none" />
-            </label>
-            <label :class="consoleLabel" for="part-price">
-              Giá bán (₫)
-              <input id="part-price" v-model="formData.sellingPrice" type="number" min="0" step="0.01" max="9999999999.99" required inputmode="decimal" placeholder="0" :class="consoleField" class="h-10 font-num" />
-            </label>
-            <label :class="consoleLabel" for="part-warranty-days">
-              Số ngày bảo hành (để trống nếu không bảo hành)
-              <input id="part-warranty-days" v-model="formData.warrantyDays" type="number" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ví dụ: 365" :class="consoleField" class="h-10 font-num" />
-            </label>
-            <label :class="consoleLabel" for="part-warranty-policy">
-              Chính sách bảo hành (không bắt buộc)
-              <textarea id="part-warranty-policy" v-model="formData.warrantyPolicy" rows="3" maxlength="5000" placeholder="Điều kiện, phạm vi và ngoại lệ bảo hành" :class="consoleTextarea" class="resize-none" />
-            </label>
-          </form>
+            <form id="part-form" class="flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-5" @submit.prevent="submitForm">
+              <Transition name="fh-fade-slide">
+                <p v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ formError }}</p>
+              </Transition>
+              <label :class="consoleLabel" for="part-name">
+                Tên linh kiện
+                <input id="part-name" v-model="formData.name" type="text" required maxlength="200" placeholder="Ví dụ: Quạt tản nhiệt 5V" :class="consoleField" class="h-10" />
+              </label>
+              <label :class="consoleLabel" for="part-sku">
+                Mã SKU (không bắt buộc)
+                <input id="part-sku" v-model="formData.sku" type="text" maxlength="100" placeholder="Ví dụ: FH-FAN-5V-001" :class="consoleField" class="h-10 font-num" />
+              </label>
+              <label :class="consoleLabel" for="part-description">
+                Mô tả (không bắt buộc)
+                <textarea id="part-description" v-model="formData.description" rows="3" maxlength="5000" :class="consoleTextarea" class="resize-none" />
+              </label>
+              <label :class="consoleLabel" for="part-price">
+                Giá bán (₫)
+                <input id="part-price" v-model="formData.sellingPrice" type="number" min="0" step="0.01" max="9999999999.99" required inputmode="decimal" placeholder="0" :class="consoleField" class="h-10 font-num" />
+              </label>
+              <label :class="consoleLabel" for="part-warranty-days">
+                Số ngày bảo hành (để trống nếu không bảo hành)
+                <input id="part-warranty-days" v-model="formData.warrantyDays" type="number" min="0" max="3650" step="1" inputmode="numeric" placeholder="Ví dụ: 365" :class="consoleField" class="h-10 font-num" />
+              </label>
+              <label :class="consoleLabel" for="part-warranty-policy">
+                Chính sách bảo hành (không bắt buộc)
+                <textarea id="part-warranty-policy" v-model="formData.warrantyPolicy" rows="3" maxlength="5000" placeholder="Điều kiện, phạm vi và ngoại lệ bảo hành" :class="consoleTextarea" class="resize-none" />
+              </label>
+            </form>
 
-          <div class="flex items-center justify-end gap-2 border-t border-ink-200 px-6 py-4">
-            <FhButton variant="secondary" size="sm" :disabled="formLoading" @click="closeForm">Huỷ</FhButton>
-            <FhButton variant="primary" size="sm" :loading="formLoading" @click="submitForm">
-              {{ formMode === 'create' ? 'Thêm linh kiện' : 'Lưu thay đổi' }}
-            </FhButton>
+            <div class="flex items-center justify-end gap-2 border-t border-ink-200 bg-ink-25/60 px-6 py-4">
+              <FhButton variant="secondary" size="sm" :disabled="formLoading" @click="closeForm">Huỷ</FhButton>
+              <FhButton variant="primary" size="sm" :loading="formLoading" @click="submitForm">
+                {{ formMode === 'create' ? 'Thêm linh kiện' : 'Lưu thay đổi' }}
+              </FhButton>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
 
     <!-- Part detail -->
-    <div
-      v-if="detailPart"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="part-detail-title"
-      @click.self="detailPart = null"
-      @keydown.esc="detailPart = null"
-    >
-      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <h3 id="part-detail-title" class="text-base font-semibold text-ink-900">{{ detailPart.name }}</h3>
-            <p class="font-num text-sm text-ink-500">{{ detailPart.sku || 'Chưa đặt mã SKU' }}</p>
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="detailPart"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="part-detail-title"
+          @click.self="detailPart = null"
+          @keydown.esc="detailPart = null"
+        >
+          <div class="fh-modal-panel max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-ink-200 bg-white p-6 shadow-(--shadow-e3)">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 id="part-detail-title" class="text-base font-semibold text-ink-900">{{ detailPart.name }}</h3>
+                <p class="font-num text-sm text-ink-500">{{ detailPart.sku || 'Chưa đặt mã SKU' }}</p>
+              </div>
+              <button type="button" class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailPart = null">
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </div>
+
+            <dl class="divide-y divide-ink-100 rounded-[var(--radius-md)] border border-ink-200 bg-ink-25/50 px-4 text-sm">
+              <div class="flex items-center justify-between gap-3 py-2.5"><dt class="text-ink-500">Trạng thái</dt><dd><FhStatusPill :status="detailPart.isActive ? 'active' : 'inactive'" :label="detailPart.isActive ? 'Đang dùng' : 'Ngừng dùng'" /></dd></div>
+              <div class="flex items-center justify-between gap-3 py-2.5"><dt class="text-ink-500">Giá bán</dt><dd><FhMoney :amount="Number(detailPart.sellingPrice)" /></dd></div>
+              <div class="flex items-center justify-between gap-3 py-2.5"><dt class="text-ink-500">Bảo hành</dt><dd class="font-num text-ink-900">{{ detailPart.warrantyDays != null ? `${detailPart.warrantyDays} ngày` : 'Không bảo hành' }}</dd></div>
+              <div class="flex items-center justify-between gap-3 py-2.5"><dt class="text-ink-500">Ngày tạo</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.createdAt) }}</dd></div>
+              <div class="flex items-center justify-between gap-3 py-2.5"><dt class="text-ink-500">Cập nhật</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.updatedAt) }}</dd></div>
+            </dl>
+
+            <div v-if="detailPart.description" class="border-t border-ink-100 pt-3 text-sm">
+              <div class="mb-1 text-xs font-medium text-ink-500">Mô tả</div>
+              <p class="whitespace-pre-line text-ink-800">{{ detailPart.description }}</p>
+            </div>
+            <div v-if="detailPart.warrantyPolicy" class="border-t border-ink-100 pt-3 text-sm">
+              <div class="mb-1 text-xs font-medium text-ink-500">Chính sách bảo hành</div>
+              <p class="whitespace-pre-line text-ink-800">{{ detailPart.warrantyPolicy }}</p>
+            </div>
+
+            <div class="flex justify-end gap-2 border-t border-ink-100 pt-3">
+              <FhButton variant="secondary" size="sm" @click="detailPart = null">Đóng</FhButton>
+              <FhButton variant="primary" size="sm" @click="const p = detailPart; detailPart = null; if (p) openEdit(p)">Sửa</FhButton>
+            </div>
           </div>
-          <button type="button" class="rounded p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="detailPart = null">
-            <X :size="18" aria-hidden="true" />
-          </button>
         </div>
-
-        <dl class="space-y-2.5 text-sm">
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd><FhStatusPill :status="detailPart.isActive ? 'active' : 'inactive'" :label="detailPart.isActive ? 'Đang dùng' : 'Ngừng dùng'" /></dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Giá bán</dt><dd><FhMoney :amount="Number(detailPart.sellingPrice)" /></dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Bảo hành</dt><dd class="text-ink-900">{{ detailPart.warrantyDays != null ? `${detailPart.warrantyDays} ngày` : 'Không bảo hành' }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Ngày tạo</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.createdAt) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateString(detailPart.updatedAt) }}</dd></div>
-        </dl>
-
-        <div v-if="detailPart.description" class="border-t border-ink-100 pt-3 text-sm">
-          <div class="mb-1 text-ink-500">Mô tả</div>
-          <p class="whitespace-pre-line text-ink-800">{{ detailPart.description }}</p>
-        </div>
-        <div v-if="detailPart.warrantyPolicy" class="border-t border-ink-100 pt-3 text-sm">
-          <div class="mb-1 text-ink-500">Chính sách bảo hành</div>
-          <p class="whitespace-pre-line text-ink-800">{{ detailPart.warrantyPolicy }}</p>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-1">
-          <FhButton variant="secondary" size="sm" @click="detailPart = null">Đóng</FhButton>
-          <FhButton variant="primary" size="sm" @click="const p = detailPart; detailPart = null; if (p) openEdit(p)">Sửa</FhButton>
-        </div>
-      </div>
-    </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

@@ -4,11 +4,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  History,
   ChevronRight,
   Search,
   AlertCircle,
-  Sparkles,
 } from 'lucide-vue-next';
 import { FhButton, FhMoney, FhPagination, FhSkeleton, FhStatusPill } from '../../components';
 import { ordersApi, type RepairHistoryItem } from '../../api/orders.api';
@@ -183,7 +181,7 @@ onUnmounted(() => {
 <template>
   <div class="w-full space-y-6 pb-16">
     <!-- Header banner -->
-    <header class="relative overflow-hidden rounded-2xl border border-ink-200/75 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center shadow-2xs animate-slide-up">
+    <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center animate-slide-up">
       <div
         class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
         aria-hidden="true"
@@ -198,18 +196,16 @@ onUnmounted(() => {
         />
       </div>
       <div class="relative z-10 flex w-full flex-col sm:flex-row sm:items-center justify-between gap-3 pr-20 sm:pr-36">
-        <div class="min-w-0">
-          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight flex items-center gap-2.5">
-            <History :size="28" class="text-brand-600 shrink-0" />
-            <span>Lịch sử sửa chữa</span>
+        <div class="min-w-0 space-y-1">
+          <h1 class="text-2xl sm:text-3xl font-bold text-ink-900 tracking-tight text-balance">
+            Lịch sử sửa chữa
           </h1>
-          <p class="text-sm text-ink-500 mt-1">
+          <p class="text-sm text-ink-600 text-pretty">
             {{ historyList === 'visits' ? 'Xem các lượt nhiều thiết bị đã kết thúc và trạng thái từng thiết bị.' : 'Theo dõi chi tiết các dịch vụ sửa chữa đã hoàn thành và chi phí thực hiện.' }}
           </p>
         </div>
 
-        <div v-if="!currentLoading && currentTotal > 0" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto shrink-0">
-          <Sparkles :size="14" class="text-brand-600" />
+        <div v-if="!currentLoading && currentTotal > 0" class="inline-flex items-center px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 text-xs font-semibold text-brand-700 self-start sm:self-auto shrink-0">
           <span>Tổng {{ currentTotal }} {{ historyList === 'visits' ? 'lượt sửa' : 'đơn' }} trong lịch sử</span>
         </div>
       </div>

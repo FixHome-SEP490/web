@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { Check, MapPin } from 'lucide-vue-next';
+import { Check, LocateFixed } from 'lucide-vue-next';
+import RadarMapBackdrop from './RadarMapBackdrop.vue';
 
 const props = withDefaults(defineProps<{
   isVisit?: boolean;
@@ -26,7 +27,7 @@ onMounted(() => {
     if (activeStep.value < scanSteps.length - 1) {
       activeStep.value += 1;
     }
-  }, 450);
+  }, 1150);
 });
 
 onUnmounted(() => {
@@ -35,133 +36,146 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
+  <section
     role="status"
     aria-label="Đang tải danh sách kỹ thuật viên"
     data-testid="candidates-radar-loader"
-    class="rounded-3xl bg-white border border-ink-200/90 px-5 py-8 sm:px-8 sm:py-10 shadow-xs text-center space-y-6 animate-slide-up-delay-2"
+    class="overflow-hidden rounded-2xl border border-ink-200/85 bg-white animate-slide-up-delay-2"
   >
-    <!-- Radar visual (purely decorative coverage rings around customer's booking pin) -->
-    <div class="relative mx-auto flex h-44 w-44 items-center justify-center" aria-hidden="true">
-      <span class="absolute inset-0 rounded-full border border-dashed border-brand-200/90" />
-      <span class="absolute inset-5 rounded-full border border-brand-200/75" />
-      <span class="absolute inset-11 rounded-full border border-brand-200/90 bg-brand-50/40" />
+    <!-- Header row -->
+    <div class="px-4 py-3.5 sm:px-5 sm:py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-start gap-3 min-w-0">
+        <span
+          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white"
+          aria-hidden="true"
+        >
+          <LocateFixed :size="14" class="animate-pulse motion-reduce:animate-none" />
+        </span>
+        <div class="min-w-0 space-y-0.5">
+          <h2 class="text-base sm:text-[17px] font-bold text-ink-900 text-balance">
+            Đang dò kỹ thuật viên quanh khu vực của bạn...
+          </h2>
+          <p class="text-xs sm:text-sm text-ink-600 text-pretty">
+            {{
+              props.isVisit
+                ? 'Đang tìm kỹ thuật viên đáp ứng đủ mọi thiết bị trong lượt sửa theo khung giờ bạn chọn.'
+                : 'Đang kiểm tra khoảng cách, tay nghề xác thực và lịch trống theo khung giờ bạn chọn.'
+            }}
+          </p>
+        </div>
+      </div>
 
-      <span class="radar-ripple absolute inset-8 rounded-full border border-brand-400/50 motion-reduce:hidden" />
-      <span class="radar-sweep absolute inset-0 rounded-full motion-reduce:hidden" />
+      <!-- Compact scan progress pills -->
+      <ol class="flex flex-wrap items-center gap-1.5 shrink-0">
+        <li
+          v-for="(label, idx) in scanSteps"
+          :key="label"
+          class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-200"
+          :class="
+            idx < activeStep
+              ? 'border-success-200 bg-success-50 text-success-700'
+              : idx === activeStep
+                ? 'border-brand-200 bg-brand-50 text-brand-700'
+                : 'border-ink-200/80 bg-ink-50/70 text-ink-500'
+          "
+        >
+          <Check v-if="idx < activeStep" :size="12" :stroke-width="2.5" aria-hidden="true" />
+          <span
+            v-else
+            class="h-1.5 w-1.5 rounded-full"
+            :class="idx === activeStep ? 'bg-brand-600 animate-pulse motion-reduce:animate-none' : 'bg-ink-300'"
+            aria-hidden="true"
+          />
+          <span>{{ label }}</span>
+        </li>
+      </ol>
+    </div>
 
-      <!-- Ambient coverage dots -->
-      <span class="radar-dot radar-dot--1 absolute top-6 right-9 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-brand-100/80" />
-      <span class="radar-dot radar-dot--2 absolute bottom-8 left-6 h-2.5 w-2.5 rounded-full bg-brand-500 ring-4 ring-brand-100/80" />
-      <span class="radar-dot radar-dot--3 absolute bottom-5 right-12 h-2 w-2 rounded-full bg-success-500 ring-4 ring-success-100/80" />
+    <!-- Wide Zoomed-Out Vector Map + Soft Expanding Water-Drop Sonar Ripples -->
+    <div class="relative h-80 sm:h-[26rem] w-full overflow-hidden border-t border-ink-100 bg-[#F3F8FE]" aria-hidden="true">
+      <RadarMapBackdrop class="opacity-95" />
 
-      <!-- Center customer home pin -->
-      <div class="relative z-10 flex h-12 w-12 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm ring-4 ring-brand-100">
-        <MapPin :size="20" :stroke-width="2" />
+      <!-- Soft radial water-drop ripples expanding gently from center -->
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div class="relative flex h-72 w-72 sm:h-96 sm:w-96 items-center justify-center">
+          <span class="water-ripple water-ripple--1 motion-reduce:hidden" />
+          <span class="water-ripple water-ripple--2 motion-reduce:hidden" />
+          <span class="water-ripple water-ripple--3 motion-reduce:hidden" />
+
+          <!-- Subtle static fallback ring shown only under reduced motion -->
+          <span class="hidden motion-reduce:block h-44 w-44 rounded-full bg-brand-500/10 ring-1 ring-brand-500/20" />
+
+          <!-- Center customer location pin -->
+          <span class="center-pin relative z-10 h-4 w-4 rounded-full bg-brand-600 border-[2.5px] border-white shadow-sm ring-8 ring-brand-500/20" />
+        </div>
       </div>
     </div>
-
-    <div class="mx-auto max-w-md space-y-1.5">
-      <h2 class="text-base sm:text-lg font-semibold text-ink-900 text-balance">
-        Đang dò kỹ thuật viên quanh khu vực của bạn...
-      </h2>
-      <p class="text-xs sm:text-sm text-ink-500 text-pretty">
-        {{
-          props.isVisit
-            ? 'Đang tìm kỹ thuật viên đáp ứng đủ mọi thiết bị trong lượt sửa theo khung giờ bạn chọn.'
-            : 'Đang kiểm tra khoảng cách, tay nghề xác thực và lịch trống theo khung giờ bạn chọn.'
-        }}
-      </p>
-    </div>
-
-    <!-- Compact scan progress pills -->
-    <ol class="flex flex-wrap items-center justify-center gap-2 pt-1">
-      <li
-        v-for="(label, idx) in scanSteps"
-        :key="label"
-        class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200"
-        :class="
-          idx < activeStep
-            ? 'border-success-200 bg-success-50 text-success-700'
-            : idx === activeStep
-              ? 'border-brand-200 bg-brand-50 text-brand-700'
-              : 'border-ink-200/80 bg-ink-50/70 text-ink-500'
-        "
-      >
-        <Check v-if="idx < activeStep" :size="13" :stroke-width="2.5" aria-hidden="true" />
-        <span
-          v-else
-          class="h-1.5 w-1.5 rounded-full"
-          :class="idx === activeStep ? 'bg-brand-600 animate-pulse motion-reduce:animate-none' : 'bg-ink-300'"
-          aria-hidden="true"
-        />
-        <span>{{ label }}</span>
-      </li>
-    </ol>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.radar-sweep {
-  background: conic-gradient(
-    from 0deg,
-    rgba(37, 99, 235, 0.16) 0deg,
-    rgba(37, 99, 235, 0.04) 55deg,
-    transparent 90deg
+.water-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(37, 99, 235, 0.04) 35%,
+    rgba(37, 99, 235, 0.16) 82%,
+    rgba(37, 99, 235, 0.28) 100%
   );
-  animation: fh-radar-spin 2.6s linear infinite;
+  box-shadow: inset 0 0 0 1.5px rgba(37, 99, 235, 0.22);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: fh-water-ripple 3.3s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-.radar-ripple {
-  animation: fh-radar-ripple 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+.water-ripple--1 {
+  animation-delay: 0s;
 }
 
-.radar-dot {
-  animation: fh-dot-pulse 2.2s ease-in-out infinite;
-}
-.radar-dot--1 {
-  animation-delay: 0.2s;
-}
-.radar-dot--2 {
-  animation-delay: 0.9s;
-}
-.radar-dot--3 {
-  animation-delay: 1.5s;
+.water-ripple--2 {
+  animation-delay: 1.1s;
 }
 
-@keyframes fh-radar-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.water-ripple--3 {
+  animation-delay: 2.2s;
 }
 
-@keyframes fh-radar-ripple {
+.center-pin {
+  animation: fh-pin-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes fh-water-ripple {
   0% {
-    transform: scale(0.72);
-    opacity: 0.65;
+    transform: scale(0.14);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.32;
   }
   100% {
-    transform: scale(1.48);
+    transform: scale(1.12);
     opacity: 0;
   }
 }
 
-@keyframes fh-dot-pulse {
+@keyframes fh-pin-breathe {
   0%,
   100% {
-    opacity: 0.45;
-    transform: scale(0.92);
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.18), 0 2px 6px rgba(15, 23, 42, 0.18);
   }
   50% {
-    opacity: 1;
-    transform: scale(1.1);
+    box-shadow: 0 0 0 12px rgba(37, 99, 235, 0.1), 0 2px 8px rgba(15, 23, 42, 0.2);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .radar-sweep,
-  .radar-ripple,
-  .radar-dot {
+  .water-ripple,
+  .center-pin {
     animation: none;
   }
 }

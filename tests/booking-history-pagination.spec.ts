@@ -192,14 +192,34 @@ describe('CustomerOrdersPage: requests per tab', () => {
       { page: 1, pageSize: 10, status: 'closed', excludeVisitGroups: 'true' },
       { page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' },
     ]);
-    // A matched booking shows as its order only.
+    // A matched booking shows as its order only; "Tất cả (N)" counts only the active list.
+    expect(wrapper.get('[data-testid="orders-header-artwork"]').attributes('src')).toBe('/images/ui/customer-orders-board.png');
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="pending-requests-callout"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="order-card-o1"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="history-tab-ALL"]').text()).toBe('Tất cả (1)');
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Đã huỷ trước khi có thợ');
     expect(wrapper.text()).toContain('Chưa tìm được thợ, chờ hỗ trợ');
-    expect(wrapper.get('[data-testid="history-tab-ALL"]').text()).toBe('Tất cả (3)');
+    expect(wrapper.get('[data-testid="history-tab-ALL"]').text()).toBe('Tất cả (2)');
+    expect(wrapper.find('[data-testid="history-tab-COMPLETED"]').exists()).toBe(false);
+  });
+
+  it('stays on repair orders when filtering produces zero orders even if unmatched requests exist', async () => {
+    serve(
+      { completed: [makeOrder({ id: 'oDone', status: 'completed' })] },
+      { matching: [makeBooking({ id: 'bWait', status: 'matching' })] },
+    );
+    const wrapper = await mountPage();
+
+    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
+    await wrapper.get('[data-testid="history-tab-IN_PROGRESS"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('[data-testid="orders-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="booking-card-bWait"]').exists()).toBe(false);
   });
 
   it('CANCELLED, IN_PROGRESS and COMPLETED ask the server for their own states only', async () => {

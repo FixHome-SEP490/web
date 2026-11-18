@@ -5,3 +5,10 @@
 export function isAppSurface(path: string): boolean {
   return /^\/(app|tech)(\/|$)/.test(path);
 }
+
+/**
+ * Operations & admin Console routes receive crisp cool-slate surfaces (`.fh-console`).
+ */
+export function isConsoleSurface(path: string): boolean {
+  return /^\/console(\/|$)/.test(path);
+}

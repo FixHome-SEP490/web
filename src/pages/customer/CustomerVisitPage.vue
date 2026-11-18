@@ -1283,7 +1283,7 @@ async function answerCash(agreed: boolean) {
         </div>
 
         <!-- Right column: Unified Sticky Invoice Summary + Checkout Panel (DOM order kept: visit-invoice-summary precedes visit-checkout) -->
-        <aside class="min-w-0 space-y-4 lg:col-start-2 lg:sticky lg:top-4">
+        <aside class="min-w-0 space-y-4 lg:col-start-2 lg:sticky lg:top-20">
           <section v-if="invoiceSummary.rows.length" class="overflow-hidden rounded-2xl border border-ink-200/85 bg-white text-sm shadow-2xs" aria-labelledby="visit-invoice-summary-title" :aria-busy="checkoutLoading" data-testid="visit-invoice-summary">
             <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-4 py-3.5 sm:px-5 sm:py-4">
               <div

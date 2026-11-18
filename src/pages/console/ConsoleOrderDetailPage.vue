@@ -202,7 +202,7 @@ const timelineSteps = computed<TimelineStep[]>(() => {
     </template>
 
     <template v-else-if="order">
-      <ConsolePageHeader :title="order.code" back-to="/console/orders" back-label="Đơn sửa chữa">
+      <ConsolePageHeader class="animate-slide-up" :title="order.code" back-to="/console/orders" back-label="Đơn sửa chữa">
         <template #badges>
           <FhStatusPill :status="order.status" class="whitespace-nowrap" />
           <FhStatusPill :status="paymentTone" :label="paymentStatusLabel(order.paymentStatus)" class="whitespace-nowrap" />
@@ -216,29 +216,46 @@ const timelineSteps = computed<TimelineStep[]>(() => {
         </template>
       </ConsolePageHeader>
 
-      <div class="space-y-2 text-sm">
-        <p v-if="cancelDone" role="status" class="text-success-800">{{ cancelDone }}</p>
+      <div class="animate-slide-up-delay-1 space-y-2 text-sm">
+        <Transition name="fh-fade-slide">
+          <p v-if="cancelDone" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-2.5 text-sm text-success-800">{{ cancelDone }}</p>
+        </Transition>
         <p class="text-ink-600">Trạng thái lịch sử của đơn chưa xác nhận việc đã dừng hay hủy; xem yêu cầu hỗ trợ và đối soát riêng.</p>
         <router-link :to="{ path: '/console/support', query: { serviceOrderId: order.id } }" class="inline-flex min-h-11 items-center font-medium text-brand-700 underline" data-testid="order-support-link">Yêu cầu hỗ trợ của đơn này</router-link>
       </div>
-      <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4" @click.self="cancelBusy || (cancelOpen = false)">
-        <section class="w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-xl sm:p-6" role="dialog" aria-modal="true" aria-labelledby="order-cancel-title" data-testid="order-cancel-dialog">
-          <h2 id="order-cancel-title" class="text-lg font-semibold text-ink-900">Huỷ đơn {{ order.code }}</h2>
-          <p class="text-sm text-ink-700">Đơn sẽ kết thúc, kỹ thuật viên rời đơn. Huỷ bởi quản lý không trừ điểm uy tín của khách hay thợ.</p>
-          <label class="flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do huỷ (10–2.000 ký tự)
-            <textarea v-model="cancelReason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="order-cancel-reason" />
-          </label>
-          <p v-if="cancelError" class="text-sm text-danger-700" role="alert">{{ cancelError }}</p>
-          <div class="flex justify-end gap-2">
-            <FhButton variant="ghost" size="md" :disabled="cancelBusy" @click="cancelOpen = false">Quay lại</FhButton>
-            <FhButton variant="danger" size="md" :loading="cancelBusy" :disabled="cancelBusy" data-testid="order-cancel-confirm" @click="submitCancel">Huỷ đơn</FhButton>
-          </div>
-        </section>
-      </div>
-      <GroupStopIncidentsPanel :key="`group:${order.id}`" :order-id="order.id" :group-id="order.visitGroupId ?? null" />
-      <StoppedWorkFinancePanel :key="order.id" :order-id="order.id" />
+      <Transition name="fh-modal">
+        <div
+          v-if="cancelOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
+          @click.self="cancelBusy || (cancelOpen = false)"
+          @keydown.esc="cancelBusy || (cancelOpen = false)"
+        >
+          <section
+            class="fh-modal-panel w-full max-w-lg space-y-4 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-5 shadow-(--shadow-e3) sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-cancel-title"
+            data-testid="order-cancel-dialog"
+          >
+            <h2 id="order-cancel-title" class="text-base font-semibold text-ink-900">Huỷ đơn {{ order.code }}</h2>
+            <p class="text-sm text-ink-600">Đơn sẽ kết thúc, kỹ thuật viên rời đơn. Huỷ bởi quản lý không trừ điểm uy tín của khách hay thợ.</p>
+            <label class="flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do huỷ (10–2.000 ký tự)
+              <textarea v-model="cancelReason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="order-cancel-reason" />
+            </label>
+            <Transition name="fh-fade-slide">
+              <p v-if="cancelError" class="text-sm text-danger-700" role="alert">{{ cancelError }}</p>
+            </Transition>
+            <div class="flex justify-end gap-2 border-t border-ink-100 pt-3">
+              <FhButton variant="ghost" size="md" :disabled="cancelBusy" @click="cancelOpen = false">Quay lại</FhButton>
+              <FhButton variant="danger" size="md" :loading="cancelBusy" :disabled="cancelBusy" data-testid="order-cancel-confirm" @click="submitCancel">Huỷ đơn</FhButton>
+            </div>
+          </section>
+        </div>
+      </Transition>
+      <GroupStopIncidentsPanel :key="`group:${order.id}`" class="animate-slide-up-delay-1" :order-id="order.id" :group-id="order.visitGroupId ?? null" />
+      <StoppedWorkFinancePanel :key="order.id" class="animate-slide-up-delay-1" :order-id="order.id" />
 
-      <div class="grid gap-6 lg:grid-cols-3">
+      <div class="animate-slide-up-delay-2 grid gap-6 lg:grid-cols-3">
         <div class="space-y-6 lg:col-span-2">
           <FhCard title="Lịch sử trạng thái">
             <FhTimeline v-if="timelineSteps.length > 0" :steps="timelineSteps" />
@@ -246,10 +263,10 @@ const timelineSteps = computed<TimelineStep[]>(() => {
             <div v-if="isStaffMediaViewerAllowed && timelineEntries.length" class="mt-4 space-y-2 border-t border-ink-100 pt-3">
               <p class="text-xs text-ink-500">Lý do gốc do hệ thống ghi nhận</p>
               <details v-for="(entry, index) in timelineEntries" :key="`reason-${entry.status}-${index}`" class="min-w-0">
-                <summary class="cursor-pointer text-sm font-medium text-brand-700">Xem lý do gốc · {{ index + 1 }}</summary>
-                <div class="mt-2 min-w-0 rounded-[var(--radius-sm)] bg-ink-50 p-3 text-sm text-ink-700">
-                  <p><span class="font-medium">Mục {{ index + 1 }} · {{ orderStatusLabel(entry.status) }}</span></p>
-                  <p v-if="entry.timestamp" class="text-xs text-ink-500">{{ vnDateTimeString(entry.timestamp) }}</p>
+                <summary class="cursor-pointer text-sm font-medium text-brand-700">Xem lý do gốc · <span class="font-num">{{ index + 1 }}</span></summary>
+                <div class="mt-2 min-w-0 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25 p-3 text-sm text-ink-700">
+                  <p><span class="font-medium">Mục <span class="font-num">{{ index + 1 }}</span> · {{ orderStatusLabel(entry.status) }}</span></p>
+                  <p v-if="entry.timestamp" class="font-num text-xs text-ink-500">{{ vnDateTimeString(entry.timestamp) }}</p>
                   <p class="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{{ entry.title }}</p>
                 </div>
               </details>

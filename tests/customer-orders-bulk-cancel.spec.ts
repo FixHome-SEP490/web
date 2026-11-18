@@ -83,7 +83,7 @@ describe('CustomerOrdersPage: Request status visibility and bulk actions', () =>
     mockToast.error.mockReset();
   });
 
-  it('surfaces active booking requests banner when viewing repair orders', async () => {
+  it('keeps unmatched booking requests out of the orders view and surfaces their count in the requests tab', async () => {
     mockGet.mockImplementation(async (url: string, opts?: { params?: { status?: string } }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') return response([makeOrder({ id: 'o1' })], 1);
@@ -109,20 +109,20 @@ describe('CustomerOrdersPage: Request status visibility and bulk actions', () =>
     });
     await flushPromises();
 
-    // Default view is orders
+    // Default view is orders and never mixes pending booking requests inside orders-section
     expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
-    // Pending requests banner should be visible
-    const callout = wrapper.find('[data-testid="pending-requests-callout"]');
-    expect(callout.exists()).toBe(true);
-    expect(callout.text()).toContain('Bạn có 2 yêu cầu đặt lịch đang tìm thợ');
+    expect(wrapper.find('[data-testid="pending-requests-callout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-card-b1"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('2');
 
-    // Clicking "Xem yêu cầu" switches list to requests
-    await callout.find('button').trigger('click');
+    // Clicking the requests switcher opens the requests view
+    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
+    expect(wrapper.find('[data-testid="booking-card-b1"]').exists()).toBe(true);
   });
 
-  it('does NOT show pending requests banner when all booking requests are cancelled', async () => {
+  it('shows cancelled bookings count only in requests tab while keeping orders view clean', async () => {
     mockGet.mockImplementation(async (url: string, opts?: { params?: { status?: string } }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') return response([makeOrder({ id: 'o1' })], 1);
@@ -155,10 +155,9 @@ describe('CustomerOrdersPage: Request status visibility and bulk actions', () =>
     });
     await flushPromises();
 
-    // Default view is orders
     expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
-    // Pending requests banner must NOT be visible because 0 are finding technicians
     expect(wrapper.find('[data-testid="pending-requests-callout"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('5');
   });
 
   it('allows selecting requests individually and toggling select all', async () => {

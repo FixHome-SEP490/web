@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { foldForSearch } from '../../utils/formatters';
 import { ref, onMounted, computed, watch } from 'vue';
-import { Plus } from 'lucide-vue-next';
+import { Plus, RotateCcw, X } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhConfirmDialog } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -162,6 +162,12 @@ const triggerToggle = (area: ServiceArea) => {
   showConfirmModal.value = true;
 };
 
+const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || selectedProvince.value !== 'ALL');
+const resetFilters = () => {
+  searchQuery.value = '';
+  selectedProvince.value = 'ALL';
+};
+
 const handleConfirm = async () => {
   actionError.value = '';
   if (confirmAction.value) {
@@ -173,7 +179,7 @@ const handleConfirm = async () => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Khu vực phục vụ" :count="loading || loadError ? null : filteredAreas.length">
+    <ConsolePageHeader class="animate-slide-up" title="Khu vực phục vụ" :count="loading || loadError ? null : filteredAreas.length">
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openAddArea">
           <Plus :size="16" aria-hidden="true" /> Thêm khu vực
@@ -181,7 +187,7 @@ const handleConfirm = async () => {
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm quận, huyện hoặc mã" label="Tìm khu vực" />
       <select v-model="selectedProvince" :class="consoleField" aria-label="Tỉnh, thành phố">
         <option value="ALL">Tất cả tỉnh, thành</option>
@@ -189,99 +195,123 @@ const handleConfirm = async () => {
         <option value="79">TP. Hồ Chí Minh</option>
         <option value="48">Đà Nẵng</option>
       </select>
+      <button
+        v-if="hasFilters"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
+        Đặt lại
+      </button>
     </div>
 
-    <p v-if="actionError" class="text-sm text-danger-600" role="alert">{{ actionError }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="actionError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm text-danger-800" role="alert">{{ actionError }}</p>
+    </Transition>
 
-    <ConsoleLoadError v-if="loadError" @retry="loadAreas" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="areaPage.items"
-      :loading="loading"
-      empty-text="Không có khu vực nào phù hợp."
-    >
-      <template #cell-districtName="{ row }">
-        <span class="font-medium text-ink-900">{{ row.districtName }}</span>
-      </template>
-      <template #cell-province="{ row }">
-        <span class="whitespace-nowrap text-ink-700">{{ row.provinceName }}</span>
-      </template>
-      <template #cell-districtCode="{ row }">
-        <span class="font-num text-ink-600">{{ row.districtCode }}</span>
-      </template>
-      <template #cell-status="{ row }">
-        <FhStatusPill
-          :status="row.isActive ? 'COMPLETED' : 'CANCELLED'"
-          :label="row.isActive ? 'Đang phục vụ' : 'Tạm dừng'"
-        />
-      </template>
-      <template #cell-actions="{ row }">
-        <div class="flex items-center justify-end gap-2">
-          <FhButton variant="secondary" size="sm" @click="openEditArea(row)">Sửa</FhButton>
-          <ConsoleMoreMenu label="Thao tác khác với khu vực">
-            <ConsoleMenuItem :danger="row.isActive" @click="triggerToggle(row)">
-              {{ row.isActive ? 'Tạm dừng khu vực' : 'Mở lại khu vực' }}
-            </ConsoleMenuItem>
-          </ConsoleMoreMenu>
-        </div>
-      </template>
-    </ConsoleTable>
-    <ConsolePagination v-if="!loadError" v-model:page="page" :total="areaPage.total" :page-size="PAGE_SIZE" />
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="loadError" @retry="loadAreas" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="areaPage.items"
+        :loading="loading"
+        empty-text="Không có khu vực nào phù hợp."
+      >
+        <template #cell-districtName="{ row }">
+          <span class="font-medium text-ink-900">{{ row.districtName }}</span>
+        </template>
+        <template #cell-province="{ row }">
+          <span class="whitespace-nowrap text-ink-700">{{ row.provinceName }}</span>
+        </template>
+        <template #cell-districtCode="{ row }">
+          <span class="font-num text-ink-600">{{ row.districtCode }}</span>
+        </template>
+        <template #cell-status="{ row }">
+          <FhStatusPill
+            :status="row.isActive ? 'COMPLETED' : 'CANCELLED'"
+            :label="row.isActive ? 'Đang phục vụ' : 'Tạm dừng'"
+          />
+        </template>
+        <template #cell-actions="{ row }">
+          <div class="flex items-center justify-end gap-2">
+            <FhButton variant="secondary" size="sm" @click="openEditArea(row)">Sửa</FhButton>
+            <ConsoleMoreMenu label="Thao tác khác với khu vực">
+              <ConsoleMenuItem :danger="row.isActive" @click="triggerToggle(row)">
+                {{ row.isActive ? 'Tạm dừng khu vực' : 'Mở lại khu vực' }}
+              </ConsoleMenuItem>
+            </ConsoleMoreMenu>
+          </div>
+        </template>
+      </ConsoleTable>
+      <ConsolePagination v-if="!loadError" v-model:page="page" :total="areaPage.total" :page-size="PAGE_SIZE" />
+    </div>
 
     <!-- Add / edit dialog -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="area-form-title"
-      @keydown.esc="showModal = false"
-    >
-      <form class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-5" @submit.prevent="saveArea">
-        <h3 id="area-form-title" class="text-lg font-semibold text-ink-900">
-          {{ isEditing ? 'Sửa khu vực' : 'Thêm khu vực' }}
-        </h3>
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="showModal"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="area-form-title"
+          @click.self="showModal = false"
+          @keydown.esc="showModal = false"
+        >
+          <form class="fh-modal-panel flex w-full max-w-md flex-col overflow-hidden rounded-[var(--radius-lg)] border border-ink-200 bg-white shadow-(--shadow-e3)" @submit.prevent="saveArea">
+            <div class="flex items-center justify-between border-b border-ink-200 bg-ink-25/60 px-6 py-4">
+              <h3 id="area-form-title" class="text-base font-semibold text-ink-900">
+                {{ isEditing ? 'Sửa khu vực' : 'Thêm khu vực' }}
+              </h3>
+              <button type="button" class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="showModal = false">
+                <X :size="18" aria-hidden="true" />
+              </button>
+            </div>
 
-        <div class="space-y-4">
-          <label :class="consoleLabel">
-            Tỉnh, thành phố
-            <select v-model="areaForm.provinceCode" :class="consoleField" @change="onProvinceChange">
-              <option value="01">Hà Nội</option>
-              <option value="79">TP. Hồ Chí Minh</option>
-              <option value="48">Đà Nẵng</option>
-            </select>
-          </label>
-          <label :class="consoleLabel">
-            Mã quận, huyện
-            <input
-              v-model="areaForm.districtCode"
-              type="text"
-              :disabled="isEditing"
-              :class="consoleField"
-              class="font-num disabled:bg-ink-100"
-              placeholder="Ví dụ: 760"
-            />
-          </label>
-          <label :class="consoleLabel">
-            Tên quận, huyện
-            <input
-              v-model="areaForm.districtName"
-              type="text"
-              :class="consoleField"
-              placeholder="Ví dụ: Quận 1"
-            />
-          </label>
+            <div class="space-y-4 px-6 py-5">
+              <label :class="consoleLabel">
+                Tỉnh, thành phố
+                <select v-model="areaForm.provinceCode" :class="consoleField" @change="onProvinceChange">
+                  <option value="01">Hà Nội</option>
+                  <option value="79">TP. Hồ Chí Minh</option>
+                  <option value="48">Đà Nẵng</option>
+                </select>
+              </label>
+              <label :class="consoleLabel">
+                Mã quận, huyện
+                <input
+                  v-model="areaForm.districtCode"
+                  type="text"
+                  :disabled="isEditing"
+                  :class="consoleField"
+                  class="font-num disabled:bg-ink-100"
+                  placeholder="Ví dụ: 760"
+                />
+              </label>
+              <label :class="consoleLabel">
+                Tên quận, huyện
+                <input
+                  v-model="areaForm.districtName"
+                  type="text"
+                  :class="consoleField"
+                  placeholder="Ví dụ: Quận 1"
+                />
+              </label>
+              <Transition name="fh-fade-slide">
+                <p v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ formError }}</p>
+              </Transition>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 border-t border-ink-200 bg-ink-25/60 px-6 py-4">
+              <FhButton variant="secondary" size="sm" @click="showModal = false">Huỷ</FhButton>
+              <FhButton type="submit" variant="primary" size="sm" :loading="saving">Lưu khu vực</FhButton>
+            </div>
+          </form>
         </div>
-
-        <p v-if="formError" class="text-sm text-danger-600" role="alert">{{ formError }}</p>
-
-        <div class="flex justify-end gap-2">
-          <FhButton variant="secondary" size="sm" @click="showModal = false">Huỷ</FhButton>
-          <FhButton type="submit" variant="primary" size="sm" :loading="saving">Lưu khu vực</FhButton>
-        </div>
-      </form>
-    </div>
+      </Transition>
+    </Teleport>
 
     <FhConfirmDialog
       :open="showConfirmModal"

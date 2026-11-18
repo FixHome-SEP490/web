@@ -460,13 +460,13 @@ watch(caseId, (id) => {
     </template>
 
     <template v-else-if="supportCase">
-      <p v-if="supportCase.caseType === 'technician_delay'" class="text-sm text-ink-600" role="status">Chỉ xem. Đây là thông báo hệ thống về kỹ thuật viên đến trễ; không thực hiện hủy đơn hoặc quyết định tài chính tại đây.</p>
-      <ConsolePageHeader :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
+      <p v-if="supportCase.caseType === 'technician_delay'" class="animate-slide-up text-sm text-ink-600" role="status">Chỉ xem. Đây là thông báo hệ thống về kỹ thuật viên đến trễ; không thực hiện hủy đơn hoặc quyết định tài chính tại đây.</p>
+      <ConsolePageHeader class="animate-slide-up" :title="supportCaseTypeLabels[supportCase.caseType]" back-to="/console/support" back-label="Yêu cầu hỗ trợ">
         <template #badges>
           <FhStatusPill :status="supportCase.status" :label="supportCaseStatusLabels[supportCase.status]" />
-          <span v-if="supportCase.isUrgent && !isTerminal" class="whitespace-nowrap rounded bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700">Cần xử lý ngay</span>
-          <span v-if="overdue" class="whitespace-nowrap rounded bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700">Quá hạn phản hồi</span>
-          <span v-if="supportCase.holdCompletion" class="whitespace-nowrap rounded bg-info-50 px-2 py-0.5 text-xs font-medium text-info-600">Đang giữ đơn</span>
+          <span v-if="supportCase.isUrgent && !isTerminal" class="whitespace-nowrap rounded-full border border-danger-200/80 bg-danger-50 px-2.5 py-0.5 text-xs font-medium text-danger-700">Cần xử lý ngay</span>
+          <span v-if="overdue" class="whitespace-nowrap rounded-full border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700">Quá hạn phản hồi</span>
+          <span v-if="supportCase.holdCompletion" class="whitespace-nowrap rounded-full border border-brand-200/50 bg-info-50 px-2.5 py-0.5 text-xs font-medium text-info-600">Đang giữ đơn</span>
         </template>
         <template #meta>
           <p class="mt-2 max-w-3xl text-sm text-ink-700 text-pretty">{{ supportCase.reason }}</p>
@@ -495,24 +495,28 @@ watch(caseId, (id) => {
         </template>
       </ConsolePageHeader>
 
-      <p v-if="isAdmin" class="text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
+      <p v-if="isAdmin" class="animate-slide-up-delay-1 text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
 
-      <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
-        {{ error }}
-      </div>
-      <div v-if="successMessage" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-        <CheckCircle2 :size="16" aria-hidden="true" />
-        {{ successMessage }}
-      </div>
+      <Transition name="fh-fade-slide">
+        <div v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">
+          {{ error }}
+        </div>
+      </Transition>
+      <Transition name="fh-fade-slide">
+        <div v-if="successMessage" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
+          <CheckCircle2 :size="16" aria-hidden="true" />
+          {{ successMessage }}
+        </div>
+      </Transition>
 
-      <TechnicianReplacementPanel v-if="isReplacementCase && !isTerminal" :support-case="supportCase" @done="onReplacementDone" />
+      <TechnicianReplacementPanel v-if="isReplacementCase && !isTerminal" class="animate-slide-up-delay-1" :support-case="supportCase" @done="onReplacementDone" />
 
-      <div class="grid gap-6 lg:grid-cols-2">
+      <div class="animate-slide-up-delay-1 grid gap-6 lg:grid-cols-2">
         <FhCard title="Thông tin">
           <dl class="space-y-2.5 text-sm">
             <div class="flex justify-between gap-3"><dt class="text-ink-500">Tạo lúc</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.createdAt) }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.updatedAt) }}</dd></div>
-            <div v-if="supportCase.respondBy" class="flex justify-between gap-3"><dt class="text-ink-500">Hạn phản hồi</dt><dd class="whitespace-nowrap font-num" :class="overdue ? 'text-warning-700' : 'text-ink-800'">{{ formatSupportDate(supportCase.respondBy) }}</dd></div>
+            <div v-if="supportCase.respondBy" class="flex justify-between gap-3"><dt class="text-ink-500">Hạn phản hồi</dt><dd class="whitespace-nowrap font-num" :class="overdue ? 'text-warning-700 font-medium' : 'text-ink-800'">{{ formatSupportDate(supportCase.respondBy) }}</dd></div>
             <div class="flex justify-between gap-3"><dt class="text-ink-500">Người xử lý</dt><dd class="text-ink-800">{{ supportCase.assignedManagerId ? 'Đã có người nhận' : 'Chưa có người nhận' }}</dd></div>
           </dl>
           <div v-if="supportCase.description" class="mt-4 border-t border-ink-100 pt-4">
@@ -532,7 +536,7 @@ watch(caseId, (id) => {
                 rel="noopener noreferrer"
                 :title="refValue"
                 @click.prevent="openEvidence(refValue)"
-              >Bằng chứng {{ idx + 1 }} <ExternalLink :size="14" aria-hidden="true" /></a>
+              >Bằng chứng <span class="font-num">{{ idx + 1 }}</span> <ExternalLink :size="14" aria-hidden="true" /></a>
               <span v-else class="break-all text-ink-700">{{ refValue }}</span>
             </li>
           </ul>
@@ -542,25 +546,26 @@ watch(caseId, (id) => {
 
       <SupportCaseContext
         v-if="supportCase.booking || supportCase.serviceOrder || supportCase.invoice || supportCase.cashSettlement"
+        class="animate-slide-up-delay-2"
         :support-case="supportCase"
       />
-      <GroupStopIncidentsPanel v-if="supportCase.serviceOrderId && ['customer_absent', 'customer_unreachable'].includes(supportCase.reasonCode ?? '')" :key="supportCase.id" :order-id="supportCase.serviceOrderId" />
-      <StoppedWorkFinancePanel v-if="supportCase.serviceOrderId" :order-id="supportCase.serviceOrderId" />
+      <GroupStopIncidentsPanel v-if="supportCase.serviceOrderId && ['customer_absent', 'customer_unreachable'].includes(supportCase.reasonCode ?? '')" :key="supportCase.id" class="animate-slide-up-delay-2" :order-id="supportCase.serviceOrderId" />
+      <StoppedWorkFinancePanel v-if="supportCase.serviceOrderId" class="animate-slide-up-delay-2" :order-id="supportCase.serviceOrderId" />
 
-      <FhCard v-if="isTypedTechnicianReport" title="Đánh giá trách nhiệm">
+      <FhCard v-if="isTypedTechnicianReport" class="animate-slide-up-delay-3" title="Đánh giá trách nhiệm">
         <p class="mb-4 text-sm text-ink-600">Báo cáo của kỹ thuật viên; kết luận này không thay đổi trạng thái đơn sửa chữa.</p>
         <dl class="grid gap-4 text-sm sm:grid-cols-2">
-          <div class="min-w-0"><dt class="text-ink-500">Nhóm tình huống</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportClassLabels[supportCase.reasonClass!] }}</dd></div>
-          <div class="min-w-0"><dt class="text-ink-500">Lý do</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportCodeLabels[supportCase.reasonCode!] }}</dd></div>
+          <div class="min-w-0 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 p-3"><dt class="text-xs font-medium text-ink-500">Nhóm tình huống</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportClassLabels[supportCase.reasonClass!] }}</dd></div>
+          <div class="min-w-0 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/60 p-3"><dt class="text-xs font-medium text-ink-500">Lý do</dt><dd class="mt-1 font-medium text-ink-900 text-pretty">{{ technicianReportCodeLabels[supportCase.reasonCode!] }}</dd></div>
         </dl>
-        <div class="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-4">
+        <div class="mt-4 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/70 p-4">
           <p class="text-sm font-semibold text-ink-900">{{ responsibilityLabels[supportCase.responsibility ?? 'pending'] }}</p>
           <p v-if="supportCase.responsibilityReason" class="mt-1 text-sm text-ink-700 text-pretty">{{ supportCase.responsibilityReason }}</p>
           <p v-if="supportCase.responsibility === 'pending'" class="mt-1 text-sm text-ink-600 text-pretty">Chưa có quyết định về điểm uy tín. Báo cáo không tự trừ điểm kỹ thuật viên.</p>
-          <p v-if="supportCase.responsibilityDecidedAt" class="mt-2 text-xs text-ink-500">Quyết định lúc {{ formatSupportDate(supportCase.responsibilityDecidedAt) }}</p>
+          <p v-if="supportCase.responsibilityDecidedAt" class="mt-2 font-num text-xs text-ink-500">Quyết định lúc {{ formatSupportDate(supportCase.responsibilityDecidedAt) }}</p>
           <ul v-if="supportCase.responsibilityEvidenceRefs?.length" class="mt-3 space-y-1 text-sm">
             <li v-for="(refValue, idx) in supportCase.responsibilityEvidenceRefs" :key="refValue">
-              <a v-if="isSafeEvidenceLink(refValue)" :href="refValue" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline" @click.prevent="openEvidence(refValue)">Bằng chứng quyết định {{ idx + 1 }}</a>
+              <a v-if="isSafeEvidenceLink(refValue)" :href="refValue" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline" @click.prevent="openEvidence(refValue)">Bằng chứng quyết định <span class="font-num">{{ idx + 1 }}</span></a>
               <span v-else class="break-all text-ink-700">{{ refValue }}</span>
             </li>
           </ul>
@@ -574,19 +579,21 @@ watch(caseId, (id) => {
               <option value="no_technician_fault">Không thuộc trách nhiệm kỹ thuật viên</option>
               <option value="inconclusive">Chưa đủ căn cứ kết luận</option>
             </select>
-            <span v-if="responsibilityDecision === 'technician_fault'" class="font-normal text-warning-800 text-pretty">Điểm uy tín chỉ được ghi nhận sau khi quản lý xác nhận kết luận này.</span>
+            <span v-if="responsibilityDecision === 'technician_fault'" class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/70 px-3 py-2 text-xs font-normal text-warning-800 text-pretty">Điểm uy tín chỉ được ghi nhận sau khi quản lý xác nhận kết luận này.</span>
           </label>
           <label :class="consoleLabel">
             Lý do kết luận
             <textarea v-model="responsibilityReason" data-testid="responsibility-reason" maxlength="2000" rows="4" required :class="consoleTextarea" aria-describedby="responsibility-reason-hint" @input="resetResponsibilityCommand" />
-            <span id="responsibility-reason-hint" class="font-normal text-ink-600">10–2.000 ký tự, nêu rõ căn cứ cho kết luận.</span>
+            <span id="responsibility-reason-hint" class="text-xs font-normal text-ink-600">10–2.000 ký tự, nêu rõ căn cứ cho kết luận.</span>
           </label>
           <label :class="consoleLabel">
             Bằng chứng bổ sung (không bắt buộc)
             <textarea v-model="responsibilityEvidenceRefsText" rows="3" :class="consoleTextarea" aria-describedby="responsibility-evidence-hint" @input="resetResponsibilityCommand" />
-            <span id="responsibility-evidence-hint" class="font-normal text-ink-600">Mỗi dòng một liên kết, tối đa 20 bằng chứng.</span>
+            <span id="responsibility-evidence-hint" class="text-xs font-normal text-ink-600">Mỗi dòng một liên kết, tối đa 20 bằng chứng.</span>
           </label>
-          <p v-if="responsibilityError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ responsibilityError }}</p>
+          <Transition name="fh-fade-slide">
+            <p v-if="responsibilityError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ responsibilityError }}</p>
+          </Transition>
           <div class="flex justify-end">
             <FhButton type="submit" class="w-full sm:w-auto" :disabled="responsibilitySubmitting" :loading="responsibilitySubmitting">Gửi kết luận</FhButton>
           </div>
@@ -594,12 +601,12 @@ watch(caseId, (id) => {
         <p v-else-if="canManage && supportCase.responsibility === 'pending' && !canDecideResponsibility" class="mt-4 text-sm text-warning-800">Thiếu phiên bản quy trình mới nhất. Tải lại hồ sơ trước khi quyết định.</p>
       </FhCard>
 
-      <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" title="Kết quả xử lý">
+      <FhCard v-if="supportCase.resolutionCode || supportCase.resolutionReason || supportCase.resolvedAt" class="animate-slide-up-delay-3" title="Kết quả xử lý">
         <p class="mb-3 text-sm font-semibold text-ink-900" data-testid="support-execution-state">{{ supportExecutionLabel(supportCase) }}</p>
         <p v-if="supportCase.resolutionExecutionKind !== 'DOMAIN_ACTION_EXECUTED'" class="mb-3 text-sm text-ink-600">Kết luận chưa thực hiện thao tác nghiệp vụ như hoàn tiền, điều chỉnh giá, phạt hoặc thay đổi bảo hành.</p>
-        <p v-if="supportCase.needsManualAction" class="mb-3 text-sm text-warning-800">Cần xử lý tiếp: {{ supportCase.nextActor === 'admin' ? 'Quản trị viên xem xét; quản lý dịch vụ vẫn phụ trách' : 'Quản lý dịch vụ' }}.</p>
+        <p v-if="supportCase.needsManualAction" class="mb-3 rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/70 px-3 py-2 text-sm text-warning-800">Cần xử lý tiếp: {{ supportCase.nextActor === 'admin' ? 'Quản trị viên xem xét; quản lý dịch vụ vẫn phụ trách' : 'Quản lý dịch vụ' }}.</p>
         <dl class="space-y-2.5 text-sm">
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Kết quả</dt><dd class="text-right text-ink-900">{{ resolutionLabel(supportCase.resolutionCode) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-ink-500">Kết quả</dt><dd class="text-right font-medium text-ink-900">{{ resolutionLabel(supportCase.resolutionCode) }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-ink-500">Thời điểm</dt><dd class="whitespace-nowrap font-num text-ink-800">{{ formatSupportDate(supportCase.resolvedAt) }}</dd></div>
           <div v-if="supportCase.liableParty" class="flex justify-between gap-3"><dt class="text-ink-500">Bên chịu trách nhiệm</dt><dd class="text-ink-800">{{ liablePartyLabels[supportCase.liableParty] ?? 'Chưa xác định' }}</dd></div>
           <div v-if="supportCase.amount != null" class="flex justify-between gap-3"><dt class="text-ink-500">Số tiền</dt><dd><FhMoney :amount="supportCase.amount" /></dd></div>
@@ -607,7 +614,7 @@ watch(caseId, (id) => {
         <p v-if="supportCase.resolutionReason" class="mt-4 border-t border-ink-100 pt-4 text-sm text-ink-800 text-pretty">{{ supportCase.resolutionReason }}</p>
       </FhCard>
 
-      <FhCard v-if="canManage && !isTerminal && !isTypedTechnicianReport" title="Ghi nhận kết quả">
+      <FhCard v-if="canManage && !isTerminal && !isTypedTechnicianReport" class="animate-slide-up-delay-3" title="Ghi nhận kết quả">
         <form class="space-y-4" @submit.prevent="submitResolution">
           <fieldset :disabled="submitting || !!resolutionRetry" class="space-y-4">
           <div class="grid gap-4 sm:grid-cols-2">
@@ -624,8 +631,8 @@ watch(caseId, (id) => {
                 <option value="" disabled>Chọn kết quả</option>
                 <option v-for="(label, code) in codeLabels" :key="code" :value="code">{{ label }}</option>
               </select>
-              <span v-if="refundsToWallet" class="font-normal text-warning-800 text-pretty" data-testid="refund-wallet-hint">Tiền hoàn vào ví khách là phần thực trả; FixHome chịu khoản hoàn. Với hóa đơn có voucher, quản lý phải nhập thêm giá gốc được duyệt hoàn để Backend đối chiếu trợ giá FixHome. Tiền hoàn luôn được ghi có vào ví FixHome của khách, kể cả đơn đã thanh toán qua VNPay hoặc tiền mặt, sau khi xác nhận giao dịch gốc đã thanh toán thành công.</span>
-              <span v-if="settlesCash" class="font-normal text-warning-800 text-pretty">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
+              <span v-if="refundsToWallet" class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/70 px-3 py-2 text-xs font-normal text-warning-800 text-pretty" data-testid="refund-wallet-hint">Tiền hoàn vào ví khách là phần thực trả; FixHome chịu khoản hoàn. Với hóa đơn có voucher, quản lý phải nhập thêm giá gốc được duyệt hoàn để Backend đối chiếu trợ giá FixHome. Tiền hoàn luôn được ghi có vào ví FixHome của khách, kể cả đơn đã thanh toán qua VNPay hoặc tiền mặt, sau khi xác nhận giao dịch gốc đã thanh toán thành công.</span>
+              <span v-if="settlesCash" class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/70 px-3 py-2 text-xs font-normal text-warning-800 text-pretty">Hoá đơn được ghi đã trả bằng tiền mặt, phí nền tảng trừ vào ví kỹ thuật viên, đơn hoàn tất nếu khách đã xác nhận công việc.</span>
             </label>
           </div>
           <div v-if="usesStandardCodes && !escalating" class="grid gap-4 sm:grid-cols-2">
@@ -639,12 +646,12 @@ watch(caseId, (id) => {
             <label :class="consoleLabel">
               <template v-if="refundsToWallet">Số tiền hoàn vào ví khách (₫)</template>
               <template v-else>Số tiền ghi nhận (₫, không bắt buộc)</template>
-              <input v-model="amountText" type="number" min="0" step="1000" inputmode="numeric" :class="consoleField" class="h-10" />
+              <input v-model="amountText" type="number" min="0" step="1000" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
             </label>
           </div>
           <label v-if="refundsToWallet" :class="consoleLabel" data-testid="funded-gross-refund-field">
             Giá gốc được duyệt hoàn (đơn có voucher, ₫)
-            <input v-model="grossRefundText" data-testid="funded-gross-refund-input" type="number" min="1" max="2000000000" step="1" inputmode="numeric" :class="consoleField" class="h-10" />
+            <input v-model="grossRefundText" data-testid="funded-gross-refund-input" type="number" min="1" max="2000000000" step="1" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
             <span class="text-xs font-normal text-ink-600">Để trống với đơn không có voucher. Khác với tiền hoàn vào ví khách; Backend đối chiếu phần FixHome tài trợ.</span>
           </label>
           <label :class="consoleLabel">
@@ -658,7 +665,9 @@ watch(caseId, (id) => {
           </label>
           <p v-if="escalating" class="text-sm text-ink-600">Hồ sơ tiếp tục rà soát và giữ nguyên việc giữ đơn; không thực hiện quyết định tiền hoặc trách nhiệm.</p>
           </fieldset>
-          <div v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ formError }}</div>
+          <Transition name="fh-fade-slide">
+            <div v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800" role="alert">{{ formError }}</div>
+          </Transition>
           <div class="flex justify-end">
             <FhButton v-if="resolutionNeedsReload" type="button" variant="secondary" @click="loadCase(caseId)">Tải lại hồ sơ</FhButton>
             <FhButton v-else type="submit" :disabled="submitting">{{ resolutionRetry ? 'Thử lại cùng lệnh' : 'Kiểm tra và xác nhận' }}</FhButton>

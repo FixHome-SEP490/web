@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { RotateCcw } from 'lucide-vue-next';
 import { FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
@@ -141,6 +142,13 @@ const rateColumns: ConsoleColumn[] = [
 ];
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
+const hasQueueFilters = computed(() => Boolean(statusFilter.value || unassignedOnly.value || reviewOnly.value));
+const resetQueueFilters = () => {
+  statusFilter.value = '';
+  unassignedOnly.value = false;
+  reviewOnly.value = false;
+};
+
 watch([statusFilter, unassignedOnly, reviewOnly], () => {
   if (page.value !== 1) page.value = 1;
   else void loadQueue();
@@ -155,11 +163,11 @@ onMounted(() => void loadQueue());
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Yêu cầu bảo hành" :count="tab === 'queue' && !loading && !error ? total : null">
+    <ConsolePageHeader class="animate-slide-up" title="Yêu cầu bảo hành" :count="tab === 'queue' && !loading && !error ? total : null">
       <template #badges>
         <span
           v-if="!canDecide"
-          class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600"
+          class="whitespace-nowrap rounded-full border border-ink-200 bg-white px-2.5 py-0.5 text-xs font-medium text-ink-600 shadow-2xs"
           title="Phân công, duyệt, từ chối và đóng yêu cầu do quản lý dịch vụ thực hiện."
           data-testid="warranty-read-only"
         >Chế độ chỉ đọc</span>
@@ -171,97 +179,112 @@ onMounted(() => void loadQueue());
       </template>
     </ConsolePageHeader>
 
-    <ConsoleTabs v-model="tab" :tabs="tabs" />
+    <ConsoleTabs v-model="tab" class="animate-slide-up-delay-1" :tabs="tabs" />
 
-    <p v-if="notice" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">
-      {{ notice }}
-    </p>
-    <p v-if="actionError" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
-      {{ actionError }}
-    </p>
+    <Transition name="fh-fade-slide">
+      <p v-if="notice" role="status" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800">
+        {{ notice }}
+      </p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="actionError" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">
+        {{ actionError }}
+      </p>
+    </Transition>
 
     <template v-if="tab === 'queue'">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
         <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
           <option value="">Tất cả trạng thái</option>
           <option v-for="[value, item] in statusOptions" :key="value" :value="value">{{ item.label }}</option>
         </select>
-        <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
-          <input v-model="unassignedOnly" type="checkbox" class="h-4 w-4" /> Chưa có kỹ thuật viên
+        <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+          <input v-model="unassignedOnly" type="checkbox" class="h-4 w-4 accent-brand-600" /> Chưa có kỹ thuật viên
         </label>
-        <label class="flex items-center gap-2 whitespace-nowrap text-sm text-ink-700">
-          <input v-model="reviewOnly" type="checkbox" class="h-4 w-4" /> Chờ xét từ chối hoặc không đến
+        <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-ink-700">
+          <input v-model="reviewOnly" type="checkbox" class="h-4 w-4 accent-brand-600" /> Chờ xét từ chối hoặc không đến
         </label>
+        <button
+          v-if="hasQueueFilters"
+          type="button"
+          class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+          @click="resetQueueFilters"
+        >
+          <RotateCcw :size="14" aria-hidden="true" />
+          Đặt lại
+        </button>
       </div>
 
-      <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue" />
-      <ConsoleTable
-        v-else
-        :columns="queueColumns"
-        :rows="claims"
-        :loading="loading"
-        empty-text="Không có yêu cầu bảo hành."
-      >
-        <template #cell-item="{ row }">
-          <router-link
-            :to="`/console/warranty/${row.id}`"
-            class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          >{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</router-link>
-          <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
-        </template>
-        <template #cell-status="{ row }">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span
-              class="inline-flex h-[24px] items-center whitespace-nowrap rounded-[var(--radius-sm)] px-2 text-[12px] font-medium"
-              :class="warrantyClaimToneClasses[meta(row).tone]"
-            >{{ meta(row).label }}</span>
-            <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap text-xs font-medium text-warning-700">Gửi sau hạn</span>
-            <span v-if="row.autoApproved" class="whitespace-nowrap text-xs font-medium text-ink-500">Tự động duyệt</span>
-          </div>
-        </template>
-        <template #cell-technician="{ row }">
-          <span class="whitespace-nowrap">{{ row.technician?.fullName || '—' }}</span>
-        </template>
-        <template #cell-customer="{ row }">
-          <span class="whitespace-nowrap">{{ row.order.customerName }}</span>
-        </template>
-        <template #cell-submittedAt="{ row }">
-          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.submittedAt) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <div v-if="canDecide && !closed(row)" class="flex items-center justify-end gap-2">
-            <FhButton
-              v-if="row.declineReview === 'pending'"
-              variant="primary"
-              size="sm"
-              @click="openModal(row, 'review')"
-            >Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}</FhButton>
-            <FhButton
-              v-else-if="row.status === 'inspected'"
-              variant="primary"
-              size="sm"
-              @click="openModal(row, 'approve')"
-            >Duyệt kết luận</FhButton>
-            <FhButton
-              v-else-if="['submitted', 'accepted'].includes(row.status)"
-              variant="secondary"
-              size="sm"
-              @click="openModal(row, 'assign')"
-            >{{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}</FhButton>
-            <FhButton
-              v-else-if="['in_progress', 'awaiting_customer', 'disputed'].includes(row.status)"
-              variant="primary"
-              size="sm"
-              @click="openModal(row, 'close')"
-            >Đóng yêu cầu</FhButton>
-          </div>
-        </template>
-      </ConsoleTable>
-      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      <div class="animate-slide-up-delay-2 space-y-5">
+        <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue" />
+        <ConsoleTable
+          v-else
+          :columns="queueColumns"
+          :rows="claims"
+          :loading="loading"
+          empty-text="Không có yêu cầu bảo hành."
+        >
+          <template #cell-item="{ row }">
+            <router-link
+              :to="`/console/warranty/${row.id}`"
+              class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</router-link>
+            <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
+          </template>
+          <template #cell-status="{ row }">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span
+                class="inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium"
+                :class="warrantyClaimToneClasses[meta(row).tone]"
+              >{{ meta(row).label }}</span>
+              <span v-if="row.submittedAfterExpiry" class="whitespace-nowrap text-xs font-medium text-warning-700">Gửi sau hạn</span>
+              <span v-if="row.autoApproved" class="whitespace-nowrap text-xs font-medium text-ink-500">Tự động duyệt</span>
+            </div>
+          </template>
+          <template #cell-technician="{ row }">
+            <span class="whitespace-nowrap">{{ row.technician?.fullName || '—' }}</span>
+          </template>
+          <template #cell-customer="{ row }">
+            <span class="whitespace-nowrap">{{ row.order.customerName }}</span>
+          </template>
+          <template #cell-submittedAt="{ row }">
+            <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.submittedAt) }}</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <div v-if="canDecide && !closed(row)" class="flex items-center justify-end gap-2">
+              <FhButton
+                v-if="row.declineReview === 'pending'"
+                variant="primary"
+                size="sm"
+                @click="openModal(row, 'review')"
+              >Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}</FhButton>
+              <FhButton
+                v-else-if="row.status === 'inspected'"
+                variant="primary"
+                size="sm"
+                @click="openModal(row, 'approve')"
+              >Duyệt kết luận</FhButton>
+              <FhButton
+                v-else-if="['submitted', 'accepted'].includes(row.status)"
+                variant="secondary"
+                size="sm"
+                @click="openModal(row, 'assign')"
+              >{{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}</FhButton>
+              <FhButton
+                v-else-if="['in_progress', 'awaiting_customer', 'disputed'].includes(row.status)"
+                variant="primary"
+                size="sm"
+                @click="openModal(row, 'close')"
+              >Đóng yêu cầu</FhButton>
+            </div>
+          </template>
+        </ConsoleTable>
+        <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      </div>
     </template>
 
     <template v-else>
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
         <select v-model.number="windowDays" :class="consoleField" aria-label="Khoảng thời gian">
           <option :value="30">30 ngày</option>
           <option :value="90">90 ngày</option>
@@ -270,27 +293,29 @@ onMounted(() => void loadQueue());
         </select>
         <span class="text-sm text-ink-500" title="Kỹ thuật viên có dưới 10 đơn có bảo hành được đánh dấu Ít dữ liệu.">Dưới 10 đơn: ít dữ liệu, chỉ để tham khảo.</span>
       </div>
-      <ConsoleLoadError v-if="statsError" :message="statsError" @retry="loadStats" />
-      <ConsoleTable
-        v-else
-        :columns="rateColumns"
-        :rows="stats"
-        :row-key="(row) => row.technicianId"
-        :loading="statsLoading"
-        empty-text="Chưa có dữ liệu trong khoảng thời gian này."
-      >
-        <template #cell-fullName="{ row }">
-          <span class="whitespace-nowrap font-medium text-ink-900">{{ row.fullName }}</span>
-          <span v-if="row.lowSample" class="ml-1.5 whitespace-nowrap rounded bg-ink-100 px-1.5 py-0.5 text-xs text-ink-600">Ít dữ liệu</span>
-        </template>
-        <template #cell-ordersWithWarranty="{ row }"><span class="font-num">{{ row.ordersWithWarranty }}</span></template>
-        <template #cell-claims="{ row }"><span class="font-num">{{ row.claims }}</span></template>
-        <template #cell-claimRate="{ row }"><span class="font-num font-semibold">{{ pct(row.claimRate) }}</span></template>
-        <template #cell-notCoveredRate="{ row }"><span class="font-num">{{ pct(row.notCoveredRate) }}</span></template>
-        <template #cell-overriddenRate="{ row }"><span class="font-num">{{ pct(row.overriddenRate) }}</span></template>
-        <template #cell-disputedRate="{ row }"><span class="font-num">{{ pct(row.disputedRate) }}</span></template>
-        <template #cell-declineRate="{ row }"><span class="whitespace-nowrap font-num">{{ pct(row.declineRate) }} ({{ row.declines }})</span></template>
-      </ConsoleTable>
+      <div class="animate-slide-up-delay-2">
+        <ConsoleLoadError v-if="statsError" :message="statsError" @retry="loadStats" />
+        <ConsoleTable
+          v-else
+          :columns="rateColumns"
+          :rows="stats"
+          :row-key="(row) => row.technicianId"
+          :loading="statsLoading"
+          empty-text="Chưa có dữ liệu trong khoảng thời gian này."
+        >
+          <template #cell-fullName="{ row }">
+            <span class="whitespace-nowrap font-medium text-ink-900">{{ row.fullName }}</span>
+            <span v-if="row.lowSample" class="ml-1.5 whitespace-nowrap rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">Ít dữ liệu</span>
+          </template>
+          <template #cell-ordersWithWarranty="{ row }"><span class="font-num">{{ row.ordersWithWarranty }}</span></template>
+          <template #cell-claims="{ row }"><span class="font-num">{{ row.claims }}</span></template>
+          <template #cell-claimRate="{ row }"><span class="font-num font-semibold">{{ pct(row.claimRate) }}</span></template>
+          <template #cell-notCoveredRate="{ row }"><span class="font-num">{{ pct(row.notCoveredRate) }}</span></template>
+          <template #cell-overriddenRate="{ row }"><span class="font-num">{{ pct(row.overriddenRate) }}</span></template>
+          <template #cell-disputedRate="{ row }"><span class="font-num">{{ pct(row.disputedRate) }}</span></template>
+          <template #cell-declineRate="{ row }"><span class="whitespace-nowrap font-num">{{ pct(row.declineRate) }} ({{ row.declines }})</span></template>
+        </ConsoleTable>
+      </div>
     </template>
 
     <WarrantyDecisionModal

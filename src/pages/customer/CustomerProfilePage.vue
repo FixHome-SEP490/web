@@ -857,7 +857,7 @@ const handleSetDefaultAddress = async (addr: UserAddress) => {
                 />
                 <ul
                   v-if="addressSuggestions.length"
-                  class="absolute z-20 mt-1.5 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-48 overflow-auto divide-y divide-ink-100"
+                  class="absolute z-30 mt-1.5 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-48 overflow-auto overscroll-contain divide-y divide-ink-100"
                 >
                   <li
                     v-for="s in addressSuggestions"
