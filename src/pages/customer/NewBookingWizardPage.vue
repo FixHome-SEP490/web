@@ -533,8 +533,17 @@ const reviewDevices = computed(() => {
   return devices;
 });
 
-/** A survey job needs a few words; a firm-priced job may go without. */
-const descriptionRequired = computed(() => summaryPrice.value.kind !== 'firm');
+/**
+ * A survey job needs a few words; a firm-priced job may go without. Same rule as
+ * POST /bookings and /visit-groups: a Catalog V2 service is firm only once the
+ * server confirmed the tier being sent (a one-tier list price such as 449k is
+ * not enough while the scope is unconfirmed); a legacy service only in fixed mode.
+ */
+const descriptionRequired = computed(() => {
+  if (!selectedService.value) return true;
+  if (isCatalogV2Selection.value) return !(catalogPricingConfirmed.value && selectedVariantCode.value);
+  return !(isFixedPrice.value && selectedFixedPrice.value !== null);
+});
 
 const scheduleSummaryText = computed(() => (
   bookingMode.value === 'urgent' || selectedSession.value ? formattedScheduleDisplay.value : null

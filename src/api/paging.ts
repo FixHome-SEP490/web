@@ -66,6 +66,8 @@ export interface ListFilter {
   statuses?: readonly string[] | null;
   /** Server search; accents and case are ignored by the backend. */
   search?: string | null;
+  /** Customer request list: leave out bookings that reached a repair order (listed as that order). */
+  withoutOrder?: boolean;
   /** Opt-in server filter for legacy lists that also have a parent VisitGroup list. */
   excludeVisitGroups?: boolean;
 }
@@ -80,5 +82,6 @@ export function filterParams(filter: ListFilter = {}): Record<string, string> {
   const search = filter.search?.trim();
   if (search) params.search = search;
   if (filter.excludeVisitGroups) params.excludeVisitGroups = 'true';
+  if (filter.withoutOrder) params.withoutOrder = 'true';
   return params;
 }

@@ -268,31 +268,26 @@ describe('P012 device facts and pricing scope in step 1', () => {
     await wrapper.get('[data-testid="device-fact-ac-mounting"] input[value="ceiling"]').setValue();
     await flushPromises();
 
-    // HP is dropped with the wall mounting; cassette is priced by its own approved scope.
-    expect(lastPreviewQuery()).toEqual({ acMounting: 'ceiling' });
+    // HP is dropped with the wall mounting; cassette is priced by its own approved scope,
+    // and its only scope is picked by itself (PO 19/11/2026), never derived from HP.
+    expect(getPreview.mock.calls.map((call) => call[1])).toContainEqual({ acMounting: 'ceiling' });
+    expect(lastPreviewQuery()).toEqual({ acMounting: 'ceiling', selectedVariantCode: 'AC-02-03' });
     expect(wrapper.find('[data-testid="device-fact-ac-horsepower"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="pricing-confirmed"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="pricing-inspection"]').text()).toContain('Cần khảo sát để báo giá');
+    expect(wrapper.get('[data-testid="pricing-confirmed"]').find('[data-money="449000"]').exists()).toBe(true);
 
     await submitBooking(wrapper);
     const payload = createBooking.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.deviceAttributes).toEqual({ acMounting: 'ceiling' });
-    expect(payload).not.toHaveProperty('selectedVariantCode');
+    expect(payload.selectedVariantCode).toBe('AC-02-03');
   });
 
-  it('submits the cassette variant only after the explicit scope confirmation', async () => {
+  it('picks the lone cassette scope by itself and submits only the server-confirmed code', async () => {
     route.query = { serviceId: 'ac-02' };
     const wrapper = await renderWizard();
 
     await wrapper.get('[data-testid="device-fact-ac-mounting"] input[value="ceiling"]').setValue();
     await flushPromises();
 
-    const scopeOption = wrapper.get('[data-testid="device-scope-option-AC-02-03"]');
-    expect(scopeOption.text()).toContain('Âm trần cassette tiêu chuẩn');
-    expect(scopeOption.find('input').element.checked).toBe(false);
-
-    await scopeOption.find('input').setValue();
-    await flushPromises();
     expect(lastPreviewQuery()).toEqual({ acMounting: 'ceiling', selectedVariantCode: 'AC-02-03' });
 
     const confirmed = wrapper.get('[data-testid="pricing-confirmed"]');
@@ -471,5 +466,77 @@ describe('P012 device facts and pricing scope in step 1', () => {
     expect(wrapper.text()).not.toContain('Treo tường');
     // The new service's own grounded range took its place.
     expect(wrapper.get('[data-testid="confirm-v2-range"]').find('[data-money="399000"]').exists()).toBe(true);
+  });
+});
+
+// PO 19/11/2026: a one-tier service (live AC-03 "Lắp đặt điều hòa", 449k) showed
+// "Không bắt buộc" from its list price while the scope was still unconfirmed, so the
+// server (which only treats a confirmed tier as firm) refused the empty description.
+describe('Tình trạng máy is optional exactly when the server would accept it empty', () => {
+  const AC_INSTALL = variant('v-ac-03-04', 'AC-03-04', 'Lắp điều hòa treo tường chuẩn', 449000);
+  const oneTierService = {
+    id: 'ac-03', categoryId: 'cat-ac', name: 'Lắp đặt điều hòa', code: 'AC-03',
+    pricingMode: 'inspection_required', fixedPrice: null, unit: null, estimatedMinutes: 90,
+    priceSummary: { kind: 'fixed_range', minLaborVnd: 449000, maxLaborVnd: 449000 },
+  };
+  const isOptionalShown = (wrapper: ReturnType<typeof mount>) => wrapper.text().includes('Không bắt buộc');
+
+  beforeEach(() => {
+    createBooking.mockReset().mockResolvedValue({ id: 'booking-id' });
+    getCategories.mockReset().mockResolvedValue([{ ...categoryA, services: [...categoryA.services, oneTierService] }]);
+    getAddresses.mockReset().mockResolvedValue([{
+      id: 'addr-1', label: 'Nhà riêng', line1: '123 Test', district: 'Q1', province: 'TP.HCM', isDefault: true,
+    }]);
+    getPreview.mockReset().mockImplementation(async (serviceId: string, query: Record<string, unknown>) => {
+      if (serviceId !== 'ac-03') return defaultPreviewImpl(serviceId, query);
+      return query.selectedVariantCode === 'AC-03-04'
+        ? fixed('ac-03', 'AC-03', AC_INSTALL)
+        : inspection('ac-03', 'AC-03', ['service-specific-scope-confirmation'], [AC_INSTALL]);
+    });
+    toastMock.warning.mockReset();
+    route.query = {};
+    route.meta = {};
+  });
+
+  it('asks for a description while one of several tiers is not chosen yet', async () => {
+    route.query = { serviceId: 'gen-01' };
+    const wrapper = await renderWizard();
+    expect(isOptionalShown(wrapper)).toBe(false);
+    expect(wrapper.findAll('[name="booking-scope-option"]').some((input) => (input.element as HTMLInputElement).checked)).toBe(false);
+    expect(lastPreviewQuery()).toEqual({});
+
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await flushPromises();
+    expect(toastMock.warning).toHaveBeenCalledWith('Vui lòng mô tả sơ bộ tình trạng của thiết bị.');
+    expect(wrapper.get('[data-testid="booking-stepper-compact"]').text()).toContain('Bước 1/3');
+  });
+
+  it('picks the only tier by itself, so the description is optional and none is sent', async () => {
+    route.query = { serviceId: 'ac-03' };
+    const wrapper = await renderWizard();
+    expect(lastPreviewQuery()).toEqual({ selectedVariantCode: 'AC-03-04' });
+    await flushPromises();
+    expect(isOptionalShown(wrapper)).toBe(true);
+
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await flushPromises();
+    expect(toastMock.warning).not.toHaveBeenCalledWith('Vui lòng mô tả sơ bộ tình trạng của thiết bị.');
+    const session = wrapper.find('button[data-testid^="session-2"]');
+    if (session.exists()) await session.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text().includes('Xác nhận'))!.trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="booking-submit"]').trigger('click');
+    await flushPromises();
+    expect(createBooking).toHaveBeenCalledWith(expect.objectContaining({ serviceId: 'ac-03', selectedVariantCode: 'AC-03-04' }));
+    expect((createBooking.mock.calls[0][0] as { description?: string }).description ?? '').toBe('');
+  });
+
+  it('keeps a legacy fixed-price service optional', async () => {
+    route.query = { serviceId: 'legacy-1' };
+    const wrapper = await renderWizard();
+    expect(isOptionalShown(wrapper)).toBe(true);
+    await wrapper.get('[data-testid="step1-next"]').trigger('click');
+    await flushPromises();
+    expect(toastMock.warning).not.toHaveBeenCalledWith('Vui lòng mô tả sơ bộ tình trạng của thiết bị.');
   });
 });

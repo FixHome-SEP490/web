@@ -7,10 +7,11 @@ const api = vi.hoisted(() => ({
   getUsers: vi.fn(), getUser: vi.fn(), createTechnician: vi.fn(), updateStatus: vi.fn(),
   list: vi.fn(), update: vi.fn(),
   listSmPermissions: vi.fn(), setSmPermission: vi.fn(), broadcast: vi.fn(), notifyUser: vi.fn(),
+  listBroadcasts: vi.fn(), recallBroadcast: vi.fn(),
 }));
 vi.mock('../src/api/admin-users.api', () => ({ adminUsersApi: { getUsers: api.getUsers, getUser: api.getUser, createTechnician: api.createTechnician, updateStatus: api.updateStatus } }));
 vi.mock('../src/api/warehouses.api', () => ({ warehousesApi: { list: api.list, update: api.update } }));
-vi.mock('../src/api/admin-controls.api', () => ({ adminControlsApi: { listSmPermissions: api.listSmPermissions, setSmPermission: api.setSmPermission, broadcast: api.broadcast, notifyUser: api.notifyUser } }));
+vi.mock('../src/api/admin-controls.api', () => ({ adminControlsApi: { listSmPermissions: api.listSmPermissions, setSmPermission: api.setSmPermission, broadcast: api.broadcast, notifyUser: api.notifyUser, listBroadcasts: api.listBroadcasts, recallBroadcast: api.recallBroadcast } }));
 import AdminUsersPage from '../src/pages/console/admin/AdminUsersPage.vue';
 import AdminBroadcastPage from '../src/pages/console/admin/AdminBroadcastPage.vue';
 import AdminSmPermissionsPage from '../src/pages/console/admin/AdminSmPermissionsPage.vue';
@@ -28,6 +29,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   api.getUsers.mockResolvedValue({ data: [sm], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } });
   api.getUser.mockResolvedValue(sm);
+  api.listBroadcasts.mockResolvedValue([]);
   api.list.mockResolvedValue([wh('w1', 'Kho Thủ Đức', 'sm-1'), wh('w2', 'Kho Quận 7', 'sm-2')]);
 });
 
@@ -91,6 +93,23 @@ describe('Broadcast (BUG 176)', () => {
     await flushPromises();
     expect(api.broadcast).toHaveBeenCalledWith({ title: 'Bảo trì', message: 'Hệ thống bảo trì 23h ✨', audience: 'technician' });
     expect(w.get('[data-testid="broadcast-result"]').text()).toContain('1.234');
+  });
+
+  it('lists sent broadcasts and recalls one after confirmation', async () => {
+    const KEY = '2026-11-19 01:10:22.123456+00';
+    api.listBroadcasts.mockResolvedValue([{ key: KEY, title: 'Bảo trì', message: 'Tối nay', sentAt: '2026-11-18T18:10:22Z', recipients: 7, read: 2 }]);
+    api.recallBroadcast.mockResolvedValue(7);
+    const w = mount(AdminBroadcastPage);
+    await flushPromises();
+    expect(w.get('[data-testid="broadcast-sent"]').text()).toContain('7 người nhận · 2 đã xem');
+    await w.get(`[data-testid="broadcast-recall-${KEY}"]`).trigger('click');
+    const dialog = w.findComponent({ name: 'FhConfirmDialog' });
+    expect(dialog.props('open')).toBe(true);
+    dialog.vm.$emit('confirm');
+    await flushPromises();
+    expect(api.recallBroadcast).toHaveBeenCalledWith(KEY);
+    expect(w.get('[data-testid="broadcast-result"]').text()).toContain('Đã thu hồi');
+    expect(w.find('[data-testid="broadcast-sent"]').exists()).toBe(false);
   });
 
   it('caps title and message length in the inputs', () => {

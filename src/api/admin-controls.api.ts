@@ -8,6 +8,15 @@ export interface SmPermission {
   granted: boolean;
 }
 
+export interface SentBroadcast {
+  key: string;
+  title: string;
+  message: string;
+  sentAt: string;
+  recipients: number;
+  read: number;
+}
+
 export type BroadcastAudience = 'all' | 'customer' | 'technician' | 'service_manager';
 
 function payload(body: unknown): unknown {
@@ -39,6 +48,20 @@ export const adminControlsApi = {
     const res = await apiClient.post<unknown>('/notifications/broadcast', input);
     const data = payload(res.data) as Record<string, unknown> | null;
     return Number(data?.recipients ?? 0);
+  },
+  async listBroadcasts(): Promise<SentBroadcast[]> {
+    const res = await apiClient.get<unknown>('/notifications/broadcasts');
+    const data = payload(res.data);
+    if (!Array.isArray(data)) throw new Error('Backend returned an invalid broadcast list.');
+    return data.map((row) => {
+      const r = row as Record<string, unknown>;
+      return { key: String(r.key), title: String(r.title ?? ''), message: String(r.message ?? ''), sentAt: String(r.sentAt ?? ''), recipients: Number(r.recipients ?? 0), read: Number(r.read ?? 0) };
+    });
+  },
+  async recallBroadcast(key: string): Promise<number> {
+    const res = await apiClient.delete<unknown>(`/notifications/broadcasts/${encodeURIComponent(key)}`);
+    const data = payload(res.data) as Record<string, unknown> | null;
+    return Number(data?.recalled ?? 0);
   },
   async notifyUser(input: { userId: string; title: string; message: string }): Promise<void> {
     await apiClient.post('/notifications', { ...input, type: 'ADMIN_MESSAGE' });
