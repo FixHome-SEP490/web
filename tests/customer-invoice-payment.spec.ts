@@ -24,10 +24,11 @@ const reservationEvent = {
   preview: { scopeId: 'o1', claimId: 'claim-1', previewOnly: true, paymentAvailable: true, reason: 'server-ready', originalGrossVnd: 300000, eligibleBaseVnd: 250000, fixHomeDiscountSubsidyVnd: 50000, customerDueVnd: 250000, reasonCodes: ['DISCOUNT_APPLIED'] },
 };
 const zeroReservationEvent = { ...reservationEvent, preview: { ...reservationEvent.preview, customerDueVnd: 0, fixHomeDiscountSubsidyVnd: 300000 } };
+let paidOrder = false;
 const mountPage = async (realChooser = false) => {
   api.get.mockImplementation(async (path: string) => {
     if (path === `/finance/cash-intents/SOLO/${recoveryRoute.id}`) return { data: { success: true, statusCode: 200, message: 'Success', data: state.cashIntent, ...(state.cashFirstEnabled !== null ? { meta: { cashFirstEnabled: state.cashFirstEnabled } } : {}) } };
-    if (path === `/service-orders/${recoveryRoute.id}`) return { data: { data: { id: recoveryRoute.id, code: 'FH-TEST', status: 'under_repair', paymentStatus: 'unpaid', completionRequestedAt: '2026-10-20', laborTotal: 0, partsTotal: 0, grandTotal: 0, quotation: state.quote } } };
+    if (path === `/service-orders/${recoveryRoute.id}`) return { data: { data: { id: recoveryRoute.id, code: 'FH-TEST', status: paidOrder ? 'completed' : 'under_repair', paymentStatus: paidOrder ? 'paid' : 'unpaid', completionRequestedAt: '2026-10-20', laborTotal: 0, partsTotal: 0, grandTotal: 0, quotation: state.quote } } };
     if (path.endsWith('/invoice')) return { data: { data: state.invoice } };
     if (path.endsWith('/cash-settlement')) return { data: { data: state.cash } };
     if (path === '/customer/wallet') return { data: { data: { balance: state.balance } } };
@@ -386,6 +387,31 @@ describe('customer invoice payment UI', () => {
     await flushPromises();
     expect(api.post).toHaveBeenLastCalledWith('/finance/cash-intents/SOLO/o1/cancel', { intentId: '11111111-1111-4111-8111-111111111111', commandId: expect.stringMatching(/^[0-9a-f-]{36}$/i) });
     expect(w.get('[data-testid="cash-intent-cancelled"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  // BUG DETECTOR 162: the technician confirms the cash while the customer's payment dialog still waits on it.
+  it('closes the payment dialog with a thank-you once the technician confirms the cash', async () => {
+    installQueryClient(queryClient);
+    state.cashFirstEnabled = true;
+    state.invoice = { ...state.invoice, laborTotal: 300000, grandTotal: 300000 };
+    const created = { id: '11111111-1111-4111-8111-111111111111', scopeKind: 'SOLO', scopeId: 'o1', status: 'pending', grossVnd: 300000, customerDueVnd: 300000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
+    api.post.mockImplementation(async () => { state.cashIntent = created; return { data: { success: true, statusCode: 200, message: 'Success', data: created } }; });
+    const w = await openPayment(300000);
+    await w.get('[data-testid="pay-method-cash"]').trigger('click');
+    await w.get('[data-testid="pay-cash-ok"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(true);
+
+    // The technician confirms: the order now reads paid.
+    paidOrder = true;
+    state.cashIntent = { ...created, status: 'received', receivedAt: '2026-10-29T00:05:00.000Z' };
+    await queryClient.invalidateQueries({ queryKey: queryKeys.orders.customerDetail('o1') });
+    await flushPromises();
+    expect(w.find('[aria-label="Thanh toán đơn"]').exists()).toBe(false);
+    expect(w.text()).not.toContain('Thông tin hóa đơn chưa sẵn sàng');
+    expect(w.text()).toContain('Đơn đã được thanh toán');
+    paidOrder = false;
     w.unmount();
   });
 

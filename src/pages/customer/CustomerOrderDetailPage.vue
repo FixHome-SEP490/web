@@ -1075,6 +1075,15 @@ const isWarrantyExpanded = ref(true);
 
 const isCompleted = computed(() => String(order.value?.status ?? '').toUpperCase() === 'COMPLETED');
 const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
+// BUG DETECTOR 162: the customer who chose cash keeps the payment dialog open while the technician
+// confirms; once the order reads paid the dialog had no way to pay left and showed "Thông tin hóa đơn
+// chưa sẵn sàng hoặc chưa khớp". A paid order closes it and says so.
+watch(isPaid, (paid, wasPaid) => {
+  if (!paid || wasPaid || !showPaymentModal.value) return;
+  showPaymentModal.value = false;
+  paymentDialogError.value = null;
+  actionMessage.value = { type: 'success', text: 'Đơn đã được thanh toán. Cảm ơn anh/chị đã sử dụng FixHome.' };
+});
 // A device of a visit is cancelled and paid with the whole visit (PO 21/10/2026).
 const visitGroupId = computed(() => order.value?.visitGroupId ?? null);
 const canCancel = computed(() => !oldFinanceReview.value && !visitGroupId.value && (order.value?.status === 'ACCEPTED' || order.value?.status === 'EN_ROUTE'));
