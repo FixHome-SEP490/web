@@ -11,6 +11,8 @@ import ConsolePagination from '../../../components/console/ConsolePagination.vue
 import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
+import { adminControlsApi } from '../../../api/admin-controls.api';
+import { warehousesApi, type Warehouse } from '../../../api/warehouses.api';
 import {
   adminUsersApi,
   type AdminUserRecord,
@@ -113,6 +115,7 @@ const confirmStatusChange = async () => {
     });
     const index = users.value.findIndex((user) => user.id === updated.id);
     if (index >= 0) users.value[index] = updated;
+    if (detailUser.value?.id === updated.id) detailUser.value = updated;
     successMessage.value = `Đã cập nhật trạng thái tài khoản của ${updated.fullName}.`;
     showStatusModal.value = false;
     userToToggle.value = null;
@@ -215,6 +218,8 @@ async function openDetail(row: AdminUserRecord) {
   detailOpen.value = true;
   detailUser.value = row;
   detailError.value = '';
+  resetDetailActions();
+  if (row.role.toUpperCase() === 'SERVICE_MANAGER') void loadWarehouses();
   detailLoading.value = true;
   try {
     const fresh = await adminUsersApi.getUser(row.id);
@@ -225,6 +230,75 @@ async function openDetail(row: AdminUserRecord) {
     if (requestId === latestDetail) detailLoading.value = false;
   }
 }
+// BUG 175: actions from the user detail. Lock or unlock reuses the confirm dialog above,
+// a direct notice goes to this one account.
+const notifyTitle = ref('');
+const notifyMessage = ref('');
+const notifySending = ref(false);
+const detailNotice = ref<{ tone: 'success' | 'error'; text: string } | null>(null);
+function resetDetailActions() {
+  notifyTitle.value = '';
+  notifyMessage.value = '';
+  detailNotice.value = null;
+  assignWarehouseId.value = '';
+  warehouses.value = [];
+  warehouseError.value = '';
+}
+function askToggleFromDetail() {
+  if (!detailUser.value || !canToggleStatus(detailUser.value.status)) return;
+  userToToggle.value = detailUser.value;
+  detailOpen.value = false;
+  showStatusModal.value = true;
+}
+async function sendDirectNotice() {
+  const user = detailUser.value;
+  if (!user || notifySending.value || !notifyTitle.value.trim() || !notifyMessage.value.trim()) return;
+  notifySending.value = true;
+  detailNotice.value = null;
+  try {
+    await adminControlsApi.notifyUser({ userId: user.id, title: notifyTitle.value.trim(), message: notifyMessage.value.trim() });
+    detailNotice.value = { tone: 'success', text: `Đã gửi thông báo tới ${user.fullName || user.email}.` };
+    notifyTitle.value = '';
+    notifyMessage.value = '';
+  } catch (reason) {
+    detailNotice.value = { tone: 'error', text: getErrorMessage(reason, 'Chưa gửi được thông báo, vui lòng thử lại.') };
+  } finally {
+    notifySending.value = false;
+  }
+}
+
+// BUG 173: which warehouses a service manager is responsible for, and handing one more over.
+const warehouses = ref<Warehouse[]>([]);
+const warehouseError = ref('');
+const assignWarehouseId = ref('');
+const assigning = ref(false);
+const managedWarehouses = computed(() => warehouses.value.filter((w) => w.responsibleUserId === detailUser.value?.id));
+const otherWarehouses = computed(() => warehouses.value.filter((w) => w.responsibleUserId !== detailUser.value?.id && w.status === 'active'));
+async function loadWarehouses() {
+  warehouseError.value = '';
+  try {
+    warehouses.value = await warehousesApi.list();
+  } catch (reason) {
+    warehouseError.value = getErrorMessage(reason, 'Chưa tải được danh sách kho.');
+  }
+}
+async function assignWarehouse() {
+  const user = detailUser.value;
+  if (!user || !assignWarehouseId.value || assigning.value) return;
+  assigning.value = true;
+  detailNotice.value = null;
+  try {
+    const updated = await warehousesApi.update(assignWarehouseId.value, { responsibleUserId: user.id });
+    warehouses.value = warehouses.value.map((w) => (w.id === updated.id ? updated : w));
+    detailNotice.value = { tone: 'success', text: `Đã giao ${updated.name} cho ${user.fullName || user.email}.` };
+    assignWarehouseId.value = '';
+  } catch (reason) {
+    detailNotice.value = { tone: 'error', text: getErrorMessage(reason, 'Chưa giao được kho, vui lòng thử lại.') };
+  } finally {
+    assigning.value = false;
+  }
+}
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return '—';
   const p = vnParts(value);
@@ -440,7 +514,35 @@ async function handleCreateTechnician() {
             </dl>
             <p v-if="detailLoading" class="text-sm text-ink-500" role="status">Đang tải thông tin mới nhất…</p>
             <p v-if="detailError" class="text-sm text-danger-600" role="alert">{{ detailError }}</p>
-            <div class="flex justify-end">
+            <p v-if="detailNotice" :role="detailNotice.tone === 'error' ? 'alert' : 'status'" data-testid="user-detail-notice" class="rounded-[var(--radius-sm)] border px-3 py-2 text-sm" :class="detailNotice.tone === 'error' ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'">{{ detailNotice.text }}</p>
+
+            <section v-if="detailUser.role.toUpperCase() === 'SERVICE_MANAGER'" class="space-y-2" aria-label="Kho phụ trách">
+              <h4 class="text-sm font-semibold text-ink-900">Kho phụ trách</h4>
+              <p v-if="warehouseError" class="text-sm text-danger-600" role="alert">{{ warehouseError }}</p>
+              <ul v-else-if="managedWarehouses.length" class="space-y-1 text-sm text-ink-800" data-testid="user-detail-warehouses">
+                <li v-for="w in managedWarehouses" :key="w.id">{{ w.name }}</li>
+              </ul>
+              <p v-else class="text-sm text-ink-500">Chưa phụ trách kho nào.</p>
+              <div v-if="otherWarehouses.length" class="flex gap-2">
+                <select v-model="assignWarehouseId" :class="[consoleField, 'min-w-0 flex-1']" aria-label="Chọn kho để giao" data-testid="user-detail-assign-select">
+                  <option value="" disabled>Chọn kho để giao</option>
+                  <option v-for="w in otherWarehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+                </select>
+                <FhButton size="sm" :disabled="!assignWarehouseId" :loading="assigning" data-testid="user-detail-assign" @click="assignWarehouse">Giao kho</FhButton>
+              </div>
+            </section>
+
+            <form class="space-y-2" aria-label="Gửi thông báo" @submit.prevent="sendDirectNotice">
+              <h4 class="text-sm font-semibold text-ink-900">Gửi thông báo cho tài khoản này</h4>
+              <input v-model="notifyTitle" maxlength="200" :class="[consoleField, 'w-full']" placeholder="Tiêu đề" aria-label="Tiêu đề thông báo" data-testid="user-detail-notify-title" />
+              <textarea v-model="notifyMessage" maxlength="2000" rows="3" :class="[consoleField, 'w-full h-auto py-2']" placeholder="Nội dung" aria-label="Nội dung thông báo" data-testid="user-detail-notify-message" />
+              <div class="flex justify-end">
+                <FhButton type="submit" size="sm" :disabled="!notifyTitle.trim() || !notifyMessage.trim()" :loading="notifySending" data-testid="user-detail-notify-send">Gửi</FhButton>
+              </div>
+            </form>
+
+            <div class="flex flex-wrap justify-end gap-2">
+              <FhButton v-if="canToggleStatus(detailUser.status)" :variant="detailUser.status === 'locked' ? 'primary' : 'danger'" size="sm" data-testid="user-detail-toggle" @click="askToggleFromDetail">{{ detailUser.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}</FhButton>
               <FhButton variant="secondary" size="sm" @click="detailOpen = false">Đóng</FhButton>
             </div>
           </div>

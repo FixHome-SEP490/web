@@ -473,6 +473,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Quản lý ưu đãi', roles: ['ADMIN'] },
       },
       {
+        path: 'admin/sm-permissions',
+        name: 'admin-sm-permissions',
+        component: () => import('../pages/console/admin/AdminSmPermissionsPage.vue'),
+        meta: { title: 'Phân quyền quản lý dịch vụ', roles: ['ADMIN'] },
+      },
+      {
+        path: 'admin/broadcast',
+        name: 'admin-broadcast',
+        component: () => import('../pages/console/admin/AdminBroadcastPage.vue'),
+        meta: { title: 'Gửi thông báo', roles: ['ADMIN'] },
+      },
+      {
         path: 'admin/config',
         name: 'admin-config',
         component: () => import('../pages/console/admin/AdminConfigPage.vue'),
