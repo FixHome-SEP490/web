@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { toBankAccountName } from '../../../utils/formatters';
 import { computed, onMounted, ref } from 'vue';
+import { Pencil, X } from 'lucide-vue-next';
 import { FhButton } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
@@ -91,6 +92,21 @@ const VALUE_LABELS: Record<string, string> = {
 const valueLabel = (value: string) => VALUE_LABELS[value] ?? value;
 const foldText = (value: string) => toBankAccountName(value).toLowerCase();
 
+type ConfigCategory = 'ALL' | 'MATCHING_GPS' | 'STRIKE_CANCEL' | 'OTHER';
+const selectedCategory = ref<ConfigCategory>('ALL');
+const CATEGORY_PILLS: { key: ConfigCategory; label: string }[] = [
+  { key: 'ALL', label: 'Tất cả' },
+  { key: 'MATCHING_GPS', label: 'Ghép thợ & GPS' },
+  { key: 'STRIKE_CANCEL', label: 'Kỷ luật & Huỷ' },
+  { key: 'OTHER', label: 'Bằng chứng & Khác' },
+];
+function categoryOf(key: string): Exclude<ConfigCategory, 'ALL'> {
+  if (key.startsWith('matching.') || key.startsWith('geofence.') || key.startsWith('order.')) return 'MATCHING_GPS';
+  if (key.startsWith('strike.') || key.includes('suspension') || key.startsWith('cancel.')) return 'STRIKE_CANCEL';
+  return 'OTHER';
+}
+const categoryLabel = (key: string) => CATEGORY_PILLS.find((c) => c.key === categoryOf(key))?.label ?? 'Khác';
+
 const searchQuery = ref('');
 const loadFailed = ref(false);
 const remoteConfigs = ref<AdminConfigItem[]>([]);
@@ -133,6 +149,7 @@ const configRows = computed<ConfigRow[]>(() => {
   // STALE_REVIEW) would save and change nothing, so the page lists only applied settings.
   return [...knownRows, ...unknownRows].filter((row) =>
     row.available && row.effectStatus === 'ACTIVE'
+    && (selectedCategory.value === 'ALL' || categoryOf(row.key) === selectedCategory.value)
     && (!query || foldText(`${row.key} ${row.description} ${STATUS_LABELS[row.effectStatus] ?? ''}`).includes(query)),
   );
 });
@@ -228,7 +245,7 @@ const statusClass = (status: ConfigEffectStatus) => ({
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Cấu hình hệ thống" :count="loading || error ? null : configRows.length">
+    <ConsolePageHeader class="animate-slide-up" title="Cấu hình hệ thống" :count="loading || error ? null : configRows.length">
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem :disabled="loading" @click="loadConfigs">Làm mới</ConsoleMenuItem>
@@ -236,65 +253,99 @@ const statusClass = (status: ConfigEffectStatus) => ({
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center justify-between gap-2.5">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm tham số" label="Tìm tham số cấu hình" />
+      <div class="inline-flex flex-wrap items-center gap-1 rounded-xl bg-ink-100 p-1" role="group" aria-label="Nhóm tham số">
+        <button
+          v-for="cat in CATEGORY_PILLS"
+          :key="cat.key"
+          type="button"
+          class="h-8 rounded-lg px-3 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 cursor-pointer"
+          :class="selectedCategory === cat.key ? 'bg-white text-brand-700 font-semibold shadow-2xs' : 'text-ink-600 hover:text-ink-900'"
+          @click="selectedCategory = cat.key"
+        >
+          {{ cat.label }}
+        </button>
+      </div>
     </div>
 
-    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
-      {{ successMessage }}
-    </p>
-    <p v-if="error && !loadFailed" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">
+        {{ successMessage }}
+      </p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="error && !loadFailed" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    </Transition>
 
-    <ConsoleLoadError v-if="loadFailed" :message="error" @retry="loadConfigs" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="configRows"
-      :loading="loading"
-      :row-key="(row) => row.key"
-      empty-text="Không có tham số phù hợp."
-    >
-      <template #cell-description="{ row }">
-        <div class="max-w-xl text-ink-900 text-pretty">{{ row.description }}</div>
-      </template>
-      <template #cell-value="{ row }">
-        <span v-if="row.value !== null" class="whitespace-nowrap font-num font-medium text-ink-900">{{ valueLabel(row.value) }}</span>
-        <span v-else class="whitespace-nowrap text-ink-400">Chưa có</span>
-      </template>
-      <template #cell-effectStatus="{ row }">
-        <span class="whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium" :class="statusClass(row.effectStatus)">{{ statusLabel(row.effectStatus) }}</span>
-      </template>
-      <template #cell-actions="{ row }">
-        <FhButton v-if="canEdit(row)" variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
-      </template>
-    </ConsoleTable>
-
-    <div
-      v-if="showEditModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 backdrop-blur-xs p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="config-edit-title"
-      @keydown.esc="showEditModal = false"
-    >
-      <form class="bg-white rounded-[var(--radius-md)] max-w-md w-full p-6 shadow-xl space-y-4" @submit.prevent="saveConfig">
-        <h3 id="config-edit-title" class="text-base font-semibold text-ink-900 text-pretty">{{ configToEdit?.description }}</h3>
-        <label :class="consoleLabel" for="config-value">
-          Giá trị mới
-          <select v-if="configToEdit?.enumValues?.length" id="config-value" v-model="editValue" :class="consoleField">
-            <option v-for="option in configToEdit.enumValues" :key="option" :value="option">{{ valueLabel(option) }}</option>
-          </select>
-          <input v-else id="config-value" v-model="editValue" type="text" :class="consoleField" class="font-num" />
-        </label>
-        <p v-if="configToEdit && (configToEdit.min !== undefined || configToEdit.max !== undefined)" class="text-xs text-ink-500">
-          Từ <span class="font-num">{{ configToEdit.min ?? '—' }}</span> đến <span class="font-num">{{ configToEdit.max ?? '—' }}</span>
-        </p>
-        <p v-if="validationError" class="text-sm text-danger-600" role="alert">{{ validationError }}</p>
-        <div class="flex justify-end gap-2">
-          <FhButton variant="secondary" size="sm" :disabled="saveLoading" @click="showEditModal = false">Huỷ</FhButton>
-          <FhButton type="submit" variant="primary" size="sm" :loading="saveLoading">Lưu</FhButton>
-        </div>
-      </form>
+    <div class="animate-slide-up-delay-2">
+      <ConsoleLoadError v-if="loadFailed" :message="error" @retry="loadConfigs" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="configRows"
+        :loading="loading"
+        :row-key="(row) => row.key"
+        empty-text="Không có tham số phù hợp."
+      >
+        <template #cell-description="{ row }">
+          <div class="max-w-xl space-y-1">
+            <p class="font-medium text-ink-900 text-pretty">{{ row.description }}</p>
+            <span class="inline-block rounded-md bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">{{ categoryLabel(row.key) }}</span>
+          </div>
+        </template>
+        <template #cell-value="{ row }">
+          <span v-if="row.value !== null" class="inline-flex items-center whitespace-nowrap rounded-lg border border-ink-200/80 bg-ink-50 px-2.5 py-1 font-num text-xs font-semibold text-ink-900">{{ valueLabel(row.value) }}</span>
+          <span v-else class="whitespace-nowrap text-ink-400">Chưa có</span>
+        </template>
+        <template #cell-effectStatus="{ row }">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium" :class="statusClass(row.effectStatus)">
+            <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+            {{ statusLabel(row.effectStatus) }}
+          </span>
+        </template>
+        <template #cell-actions="{ row }">
+          <FhButton v-if="canEdit(row)" variant="secondary" size="sm" @click="openEdit(row)">
+            <Pencil :size="13" aria-hidden="true" /> Sửa
+          </FhButton>
+        </template>
+      </ConsoleTable>
     </div>
+
+    <Transition name="fh-modal">
+      <div
+        v-if="showEditModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="config-edit-title"
+        @click.self="!saveLoading && (showEditModal = false)"
+        @keydown.esc="showEditModal = false"
+      >
+        <form class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-md w-full p-6 shadow-(--shadow-e3) space-y-4" @submit.prevent="saveConfig">
+          <div class="flex items-start justify-between gap-3">
+            <h3 id="config-edit-title" class="text-base font-semibold text-ink-900 text-pretty">{{ configToEdit?.description }}</h3>
+            <button type="button" class="rounded-lg p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showEditModal = false">
+              <X :size="18" aria-hidden="true" />
+            </button>
+          </div>
+          <label :class="consoleLabel" for="config-value">
+            Giá trị mới
+            <select v-if="configToEdit?.enumValues?.length" id="config-value" v-model="editValue" :class="consoleField">
+              <option v-for="option in configToEdit.enumValues" :key="option" :value="option">{{ valueLabel(option) }}</option>
+            </select>
+            <input v-else id="config-value" v-model="editValue" type="text" :class="consoleField" class="font-num" />
+          </label>
+          <p v-if="configToEdit && (configToEdit.min !== undefined || configToEdit.max !== undefined)" class="inline-block rounded-lg bg-ink-50 px-2.5 py-1 text-xs text-ink-600 border border-ink-200/70">
+            Giới hạn: <span class="font-num font-medium text-ink-900">{{ configToEdit.min ?? '—' }}</span> đến <span class="font-num font-medium text-ink-900">{{ configToEdit.max ?? '—' }}</span>
+          </p>
+          <p v-if="validationError" class="text-sm text-danger-600" role="alert">{{ validationError }}</p>
+          <div class="flex justify-end gap-2 pt-1">
+            <FhButton variant="secondary" size="sm" :disabled="saveLoading" @click="showEditModal = false">Huỷ</FhButton>
+            <FhButton type="submit" variant="primary" size="sm" :loading="saveLoading">Lưu</FhButton>
+          </div>
+        </form>
+      </div>
+    </Transition>
   </div>
 </template>

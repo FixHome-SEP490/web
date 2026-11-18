@@ -13,7 +13,7 @@ const count = ref<number | null>(null);
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Hoàn trả linh kiện" :count="count" />
+    <ConsolePageHeader class="animate-slide-up" title="Hoàn trả linh kiện" :count="count" />
     <PartReturnsQueue @count="count = $event" />
   </div>
 </template>

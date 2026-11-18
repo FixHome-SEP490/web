@@ -106,8 +106,13 @@ describe('Customer order detail', () => {
     api.getOrder.mockResolvedValue(order());
     const w = mount(CustomerOrderDetailPage, { global: { stubs } });
     await flushPromises();
+    expect(w.get('[data-testid="order-costs"]').classes()).toContain('lg:top-20');
     expect(w.find('[data-testid="order-cancel"]').exists()).toBe(false);
-    await w.get('[data-testid="order-more"]').trigger('click');
+    const moreBtn = w.get('[data-testid="order-more"]');
+    const topActionBar = moreBtn.element.closest('div.flex.items-center.justify-between.gap-3');
+    expect(topActionBar?.className).toContain('z-10');
+    await moreBtn.trigger('click');
+    expect(topActionBar?.className).toContain('z-40');
     expect(w.get('[data-testid="order-cancel"]').text()).toBe('Huỷ đơn');
   });
 

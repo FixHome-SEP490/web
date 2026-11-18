@@ -184,6 +184,15 @@ describe('Console pages on a failed load', () => {
     expect(w.text()).toContain('Không có đơn nào phù hợp.');
   });
 
+  it('activates cool-slate surface tokens only on /console routes while leaving public landing warm', async () => {
+    const { isConsoleSurface, isAppSurface } = await import('../src/utils/app-surface');
+    expect(isConsoleSurface('/console/admin/users')).toBe(true);
+    expect(isConsoleSurface('/console')).toBe(true);
+    expect(isConsoleSurface('/app/orders')).toBe(false);
+    expect(isConsoleSurface('/')).toBe(false);
+    expect(isAppSurface('/console/admin/users')).toBe(false);
+  });
+
   it('orders: status filter speaks Vietnamese only', async () => {
     getConsoleOrdersPage.mockResolvedValueOnce({ items: [], total: 0, page: 1, pageSize: 20 });
     const { default: Page } = await import('../src/pages/console/ConsoleOrdersPage.vue');

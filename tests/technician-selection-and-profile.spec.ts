@@ -131,8 +131,13 @@ describe('Technician Selection and Profile Modal Feature', () => {
     expect(modal.text()).toContain('Độ tin cậy');
     expect(modal.text()).toContain('Giới thiệu');
 
-    // Check API was called with technician id
+    // Check API was called with technician id and modal uses lightweight GPU tab switching (no backdrop-blur-xs)
     expect(reviewsApi.getByTechnician).toHaveBeenCalledWith('user-tech-1');
+    expect(modal.classes()).not.toContain('backdrop-blur-xs');
+    const reviewTab = modal.findAll('[role="tab"]').find((t) => t.text().includes('Đánh giá'));
+    expect(reviewTab?.exists()).toBe(true);
+    await reviewTab!.trigger('click');
+    expect(reviewTab!.attributes('aria-selected')).toBe('true');
 
     wrapper.unmount();
   });

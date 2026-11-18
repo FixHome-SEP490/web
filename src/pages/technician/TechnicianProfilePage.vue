@@ -1520,7 +1520,7 @@ const openAvatarModal = () => {
 
               <ul
                 v-if="locationSuggestions.length"
-                class="absolute z-20 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-56 overflow-auto divide-y divide-ink-100 text-sm"
+                class="absolute z-30 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-xl max-h-56 overflow-auto overscroll-contain divide-y divide-ink-100 text-sm"
               >
                 <li v-for="s in locationSuggestions" :key="s.placeId">
                   <button

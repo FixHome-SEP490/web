@@ -2,6 +2,7 @@
 // Admin, read only: what each completed order owes the platform. Due =
 // commission (snapshot) + FixHome parts (snapshot, no commission on parts).
 import { computed, onMounted, ref, watch } from 'vue';
+import { RotateCcw } from 'lucide-vue-next';
 import { FhMoney, FhStatusPill } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
@@ -94,7 +95,7 @@ const formatDate = (value: string | null) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Công nợ nền tảng" :count="loading || error ? null : total">
+    <ConsolePageHeader class="animate-slide-up" title="Công nợ nền tảng" :count="loading || error ? null : total">
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem :disabled="loading" @click="loadDues">Làm mới</ConsoleMenuItem>
@@ -102,41 +103,52 @@ const formatDate = (value: string | null) => {
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái">
         <option value="">Tất cả trạng thái</option>
         <option v-for="(item, key) in STATUS" :key="key" :value="key">{{ item.label }}</option>
       </select>
+      <button
+        v-if="statusFilter"
+        type="button"
+        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+        @click="statusFilter = ''"
+      >
+        <RotateCcw :size="14" aria-hidden="true" />
+        Đặt lại
+      </button>
     </div>
 
-    <ConsoleLoadError v-if="error" :message="error" @retry="loadDues" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="dues"
-      :loading="loading"
-      empty-text="Không có công nợ phù hợp."
-    >
-      <template #cell-order="{ row }">
-        <router-link :to="`/console/orders/${row.serviceOrderId}`" class="whitespace-nowrap text-brand-700 hover:underline">Xem đơn</router-link>
-      </template>
-      <template #cell-labor="{ row }"><FhMoney :amount="row.laborTotalSnapshot" /></template>
-      <template #cell-parts="{ row }"><FhMoney :amount="row.fixHomePartsTotalSnapshot" /></template>
-      <template #cell-commission="{ row }">
-        <FhMoney :amount="row.commissionAmountSnapshot" />
-        <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ ratePercent(row.commissionRateSnapshot) }}</div>
-      </template>
-      <template #cell-due="{ row }">
-        <FhMoney :amount="row.dueAmount" />
-      </template>
-      <template #cell-status="{ row }">
-        <FhStatusPill :status="statusOf(row.status).tone" :label="statusOf(row.status).label" />
-      </template>
-      <template #cell-settledAt="{ row }">
-        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(row.settledAt) }}</span>
-      </template>
-    </ConsoleTable>
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="error" :message="error" @retry="loadDues" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="dues"
+        :loading="loading"
+        empty-text="Không có công nợ phù hợp."
+      >
+        <template #cell-order="{ row }">
+          <router-link :to="`/console/orders/${row.serviceOrderId}`" class="whitespace-nowrap font-medium text-brand-700 hover:underline">Xem đơn</router-link>
+        </template>
+        <template #cell-labor="{ row }"><FhMoney :amount="row.laborTotalSnapshot" /></template>
+        <template #cell-parts="{ row }"><FhMoney :amount="row.fixHomePartsTotalSnapshot" /></template>
+        <template #cell-commission="{ row }">
+          <FhMoney :amount="row.commissionAmountSnapshot" />
+          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ ratePercent(row.commissionRateSnapshot) }}</div>
+        </template>
+        <template #cell-due="{ row }">
+          <FhMoney :amount="row.dueAmount" />
+        </template>
+        <template #cell-status="{ row }">
+          <FhStatusPill :status="statusOf(row.status).tone" :label="statusOf(row.status).label" />
+        </template>
+        <template #cell-settledAt="{ row }">
+          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(row.settledAt) }}</span>
+        </template>
+      </ConsoleTable>
 
-    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+    </div>
   </div>
 </template>

@@ -119,7 +119,7 @@ async function confirmReject() {
 
 <template>
   <div class="space-y-5" data-testid="customer-verifications">
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
       <ConsoleSearch v-model="searchInput" placeholder="Tìm tên, email, số điện thoại, CCCD" label="Tìm hồ sơ khách hàng" :maxlength="100" />
       <select v-model="status" :class="consoleField" aria-label="Trạng thái hồ sơ" data-testid="cv-status">
         <option value="pending">Đang chờ duyệt</option>
@@ -129,13 +129,15 @@ async function confirmReject() {
       </select>
     </div>
 
-    <p
-      v-if="message"
-      :role="message.tone === 'error' ? 'alert' : 'status'"
-      class="rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
-      :class="message.tone === 'error' ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'"
-      data-testid="cv-message"
-    >{{ message.text }}</p>
+    <Transition name="fh-fade-slide">
+      <p
+        v-if="message"
+        :role="message.tone === 'error' ? 'alert' : 'status'"
+        class="rounded-[var(--radius-sm)] border px-4 py-3 text-sm"
+        :class="message.tone === 'error' ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'"
+        data-testid="cv-message"
+      >{{ message.text }}</p>
+    </Transition>
 
     <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
     <template v-else>
@@ -151,7 +153,7 @@ async function confirmReject() {
         <template #cell-customer="{ row }">
           <button
             type="button"
-            class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
             @click="selected = row"
           >{{ nameOf(row) }}</button>
           <div class="truncate text-xs text-ink-500" :title="row.customer?.email || ''">

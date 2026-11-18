@@ -8,12 +8,12 @@ const widths = ['72%', '48%', '60%', '36%', '54%', '40%'];
 
 <template>
   <div
-    class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200 bg-white"
+    class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)"
     aria-busy="true"
     aria-label="Đang tải"
     data-testid="console-table-skeleton"
   >
-    <div class="flex gap-6 border-b border-ink-100 bg-ink-25 px-6 py-3.5">
+    <div class="flex gap-6 border-b border-ink-200/80 bg-ink-50/90 px-6 py-3.5">
       <div v-for="c in columns" :key="c" class="flex-1"><FhSkeleton height="10px" width="40%" /></div>
     </div>
     <div v-for="r in rows" :key="r" class="flex items-center gap-6 border-b border-ink-100 px-6 py-4 last:border-b-0">

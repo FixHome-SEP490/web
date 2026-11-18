@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Plus } from 'lucide-vue-next';
+import { Check, Copy, Plus, RotateCcw, X } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog } from '../../../components';
 import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
@@ -148,12 +148,40 @@ const statusLabel = (status: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status.toUpperCase()) {
-    case 'ACTIVE': return 'bg-emerald-500';
-    case 'LOCKED': return 'bg-red-500';
-    case 'SUSPENDED': return 'bg-red-500';
-    case 'PENDING_VERIFICATION': return 'bg-amber-400';
-    default: return 'bg-gray-400';
+    case 'ACTIVE': return 'bg-success-500';
+    case 'LOCKED':
+    case 'SUSPENDED': return 'bg-danger-500';
+    case 'PENDING_VERIFICATION': return 'bg-warning-500';
+    default: return 'bg-ink-400';
   }
+};
+
+const statusPillClass = (status: string) => {
+  switch (status.toUpperCase()) {
+    case 'ACTIVE': return 'border-success-200/80 bg-success-50 text-success-700';
+    case 'LOCKED':
+    case 'SUSPENDED': return 'border-danger-200/80 bg-danger-50 text-danger-700';
+    case 'PENDING_VERIFICATION': return 'border-warning-200/80 bg-warning-50 text-warning-700';
+    default: return 'border-ink-200 bg-ink-100 text-ink-600';
+  }
+};
+
+const rolePillClass = (role: string) => {
+  const r = role.toUpperCase();
+  if (r === 'ADMIN') return 'bg-brand-50 text-brand-700 border-brand-200/70';
+  if (r === 'SERVICE_MANAGER') return 'bg-info-50 text-info-600 border-brand-200/50';
+  if (r === 'TECHNICIAN') return 'bg-ink-100 text-ink-800 border-ink-200';
+  return 'bg-ink-50 text-ink-600 border-ink-200/80';
+};
+
+const hasActiveFilters = computed(
+  () => searchQuery.value.trim() !== '' || roleFilter.value !== 'ALL' || statusFilter.value !== 'ALL',
+);
+
+const resetFilters = () => {
+  searchQuery.value = '';
+  roleFilter.value = 'ALL';
+  statusFilter.value = 'ALL';
 };
 
 const formatDate = (value: string) => {
@@ -209,11 +237,24 @@ const createTechForm = ref({ email: '', fullName: '', phoneNumber: '' });
 const createTechLoading = ref(false);
 const createTechError = ref('');
 const createdTech = ref<{ email: string; fullName: string; tempPassword: string } | null>(null);
+const passwordCopied = ref(false);
+
+async function copyTempPassword() {
+  if (!createdTech.value?.tempPassword || typeof navigator === 'undefined' || !navigator.clipboard) return;
+  try {
+    await navigator.clipboard.writeText(createdTech.value.tempPassword);
+    passwordCopied.value = true;
+    setTimeout(() => { passwordCopied.value = false; }, 1800);
+  } catch {
+    passwordCopied.value = false;
+  }
+}
 
 function openCreateTechModal() {
   createTechForm.value = { email: '', fullName: '', phoneNumber: '' };
   createTechError.value = '';
   createdTech.value = null;
+  passwordCopied.value = false;
   showCreateTechModal.value = true;
 }
 
@@ -248,7 +289,7 @@ async function handleCreateTechnician() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader title="Người dùng" :count="loading || loadError ? null : total">
+    <ConsolePageHeader class="animate-slide-up" title="Người dùng" :count="loading || loadError ? null : total">
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openCreateTechModal">
           <Plus :size="16" aria-hidden="true" /> Tạo tài khoản thợ
@@ -259,7 +300,7 @@ async function handleCreateTechnician() {
       </template>
     </ConsolePageHeader>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo email hoặc tên" label="Tìm người dùng" />
       <select v-model="roleFilter" :class="consoleField" aria-label="Vai trò">
         <option value="ALL">Tất cả vai trò</option>
@@ -275,57 +316,72 @@ async function handleCreateTechnician() {
         <option value="suspended">Tạm khoá</option>
         <option value="locked">Đã khoá</option>
       </select>
+      <button
+        v-if="hasActiveFilters"
+        type="button"
+        class="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 text-xs font-semibold text-ink-700 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer"
+        @click="resetFilters"
+      >
+        <RotateCcw :size="13" aria-hidden="true" />
+        Đặt lại
+      </button>
     </div>
 
-    <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
-    <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+    <Transition name="fh-fade-slide">
+      <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
+    </Transition>
 
-    <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadUsers" />
-    <ConsoleTable
-      v-else
-      :columns="columns"
-      :rows="users"
-      :loading="loading"
-      empty-text="Không tìm thấy người dùng."
-    >
-      <template #cell-name="{ row }">
-        <div class="flex items-center gap-3">
-          <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
-            <img v-if="row.avatarUrl" :src="row.avatarUrl" alt="" class="h-full w-full object-cover" />
-            <span v-else aria-hidden="true">{{ getInitial(row.fullName, row.email) }}</span>
+    <div class="animate-slide-up-delay-2 space-y-5">
+      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadUsers" />
+      <ConsoleTable
+        v-else
+        :columns="columns"
+        :rows="users"
+        :loading="loading"
+        empty-text="Không tìm thấy người dùng."
+      >
+        <template #cell-name="{ row }">
+          <div class="flex items-center gap-3">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 ring-1 ring-brand-200/70 text-sm font-semibold text-brand-700">
+              <img v-if="row.avatarUrl" :src="row.avatarUrl" alt="" class="h-full w-full object-cover" />
+              <span v-else aria-hidden="true">{{ getInitial(row.fullName, row.email) }}</span>
+            </div>
+            <div class="min-w-0">
+              <button type="button" class="block max-w-full truncate text-left font-semibold text-ink-900 transition-colors hover:text-brand-700 hover:underline cursor-pointer" @click="openDetail(row)">{{ row.fullName || row.email.split('@')[0] }}</button>
+              <div class="max-w-48 truncate text-xs text-ink-500 xl:hidden" :title="row.email">{{ row.email }}</div>
+            </div>
           </div>
-          <div class="min-w-0">
-            <button type="button" class="block max-w-full truncate text-left font-medium text-ink-900 hover:text-brand-700 hover:underline" @click="openDetail(row)">{{ row.fullName || row.email.split('@')[0] }}</button>
-            <div class="max-w-48 truncate text-xs text-ink-500 xl:hidden" :title="row.email">{{ row.email }}</div>
-          </div>
-        </div>
-      </template>
-      <template #cell-email="{ row }">
-        <span class="block max-w-64 truncate text-ink-700" :title="row.email">{{ row.email }}</span>
-      </template>
-      <template #cell-role="{ row }">
-        <span class="whitespace-nowrap text-ink-700">{{ displayRole(String(row.role)) }}</span>
-      </template>
-      <template #cell-status="{ row }">
-        <span class="inline-flex items-center gap-2 whitespace-nowrap">
-          <span class="h-2 w-2 shrink-0 rounded-full" :class="getStatusColor(String(row.status))" aria-hidden="true"></span>
-          <span class="text-ink-700">{{ statusLabel(String(row.status)) }}</span>
-        </span>
-      </template>
-      <template #cell-createdAt="{ row }">
-        <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.createdAt)) }}</span>
-      </template>
-      <template #cell-active="{ row }">
-        <ConsoleMoreMenu label="Thao tác với tài khoản">
-          <ConsoleMenuItem @click="openDetail(row)">Xem chi tiết</ConsoleMenuItem>
-          <ConsoleMenuItem v-if="canToggleStatus(row.status)" :danger="row.status !== 'locked'" @click="userToToggle = row; showStatusModal = true">
-            {{ row.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}
-          </ConsoleMenuItem>
-        </ConsoleMoreMenu>
-      </template>
-    </ConsoleTable>
+        </template>
+        <template #cell-email="{ row }">
+          <span class="block max-w-64 truncate text-ink-600" :title="row.email">{{ row.email }}</span>
+        </template>
+        <template #cell-role="{ row }">
+          <span class="inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium" :class="rolePillClass(String(row.role))">{{ displayRole(String(row.role)) }}</span>
+        </template>
+        <template #cell-status="{ row }">
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium" :class="statusPillClass(String(row.status))">
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="getStatusColor(String(row.status))" aria-hidden="true"></span>
+            <span>{{ statusLabel(String(row.status)) }}</span>
+          </span>
+        </template>
+        <template #cell-createdAt="{ row }">
+          <span class="whitespace-nowrap font-num text-ink-600">{{ formatDate(String(row.createdAt)) }}</span>
+        </template>
+        <template #cell-active="{ row }">
+          <ConsoleMoreMenu label="Thao tác với tài khoản">
+            <ConsoleMenuItem @click="openDetail(row)">Xem chi tiết</ConsoleMenuItem>
+            <ConsoleMenuItem v-if="canToggleStatus(row.status)" :danger="row.status !== 'locked'" @click="userToToggle = row; showStatusModal = true">
+              {{ row.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}
+            </ConsoleMenuItem>
+          </ConsoleMoreMenu>
+        </template>
+      </ConsoleTable>
 
-    <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+      <ConsolePagination v-model:page="page" :total-pages="totalPages" :disabled="loading" />
+    </div>
 
     <FhConfirmDialog
       :open="showStatusModal"
@@ -339,90 +395,124 @@ async function handleCreateTechnician() {
       @cancel="showStatusModal = false"
     />
 
-    <div
-      v-if="detailOpen && detailUser"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="user-detail-title"
-      data-testid="user-detail"
-      @click.self="detailOpen = false"
-      @keydown.esc="detailOpen = false"
-    >
-      <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-        <div class="flex items-center gap-3">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-lg font-semibold text-brand-700">
-            <img v-if="detailUser.avatarUrl" :src="detailUser.avatarUrl" alt="" class="h-full w-full object-cover" />
-            <span v-else aria-hidden="true">{{ getInitial(detailUser.fullName, detailUser.email) }}</span>
+    <Transition name="fh-modal">
+      <div
+        v-if="detailOpen && detailUser"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-detail-title"
+        data-testid="user-detail"
+        @click.self="detailOpen = false"
+        @keydown.esc="detailOpen = false"
+      >
+        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden shadow-(--shadow-e3)">
+          <div class="flex items-start justify-between gap-3 border-b border-ink-100 px-6 py-4">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 ring-1 ring-brand-200/70 text-lg font-semibold text-brand-700">
+                <img v-if="detailUser.avatarUrl" :src="detailUser.avatarUrl" alt="" class="h-full w-full object-cover" />
+                <span v-else aria-hidden="true">{{ getInitial(detailUser.fullName, detailUser.email) }}</span>
+              </div>
+              <div class="min-w-0">
+                <h3 id="user-detail-title" class="truncate text-lg font-semibold text-ink-900">{{ detailUser.fullName }}</h3>
+                <div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium" :class="rolePillClass(detailUser.role)">{{ displayRole(detailUser.role) }}</span>
+                  <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium" :class="statusPillClass(detailUser.status)">
+                    <span class="h-1.5 w-1.5 rounded-full" :class="getStatusColor(detailUser.status)" aria-hidden="true"></span>
+                    {{ statusLabel(detailUser.status) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="detailOpen = false">
+              <X :size="18" aria-hidden="true" />
+            </button>
           </div>
-          <div class="min-w-0">
-            <h3 id="user-detail-title" class="truncate text-lg font-semibold text-ink-900">{{ detailUser.fullName }}</h3>
-            <p class="truncate text-sm text-ink-500">{{ displayRole(detailUser.role) }}</p>
+          <div class="space-y-4 overflow-y-auto overscroll-contain p-6">
+            <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/70 px-4 text-sm">
+              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Email</dt><dd class="break-all text-right font-medium text-ink-900">{{ detailUser.email }}</dd></div>
+              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Số điện thoại</dt><dd class="text-right font-num font-medium text-ink-900">{{ detailUser.phoneNumber || '—' }}</dd></div>
+              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Trạng thái</dt><dd class="text-right font-medium text-ink-900">{{ statusLabel(detailUser.status) }}</dd></div>
+              <div v-if="detailUser.bookingSuspendedUntil" class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Tạm khoá đặt lịch đến</dt><dd class="text-right font-num text-danger-700">{{ formatDateTime(detailUser.bookingSuspendedUntil) }}</dd></div>
+              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Ngày tạo</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.createdAt) }}</dd></div>
+              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Cập nhật gần nhất</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.updatedAt) }}</dd></div>
+              <div class="flex justify-between gap-3 py-2.5"><dt class="shrink-0 text-ink-500">Mã tài khoản</dt><dd class="break-all text-right font-num text-xs text-ink-600">{{ detailUser.id }}</dd></div>
+            </dl>
+            <p v-if="detailLoading" class="text-sm text-ink-500" role="status">Đang tải thông tin mới nhất…</p>
+            <p v-if="detailError" class="text-sm text-danger-600" role="alert">{{ detailError }}</p>
+            <div class="flex justify-end">
+              <FhButton variant="secondary" size="sm" @click="detailOpen = false">Đóng</FhButton>
+            </div>
           </div>
-        </div>
-        <dl class="space-y-2 text-sm">
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Email</dt><dd class="break-all text-right text-ink-900">{{ detailUser.email }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Số điện thoại</dt><dd class="text-right font-num text-ink-900">{{ detailUser.phoneNumber || '—' }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Trạng thái</dt><dd class="text-right text-ink-900">{{ statusLabel(detailUser.status) }}</dd></div>
-          <div v-if="detailUser.bookingSuspendedUntil" class="flex justify-between gap-3"><dt class="text-ink-500">Tạm khoá đặt lịch đến</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.bookingSuspendedUntil) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Ngày tạo</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.createdAt) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Cập nhật gần nhất</dt><dd class="text-right font-num text-ink-900">{{ formatDateTime(detailUser.updatedAt) }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-ink-500">Mã tài khoản</dt><dd class="break-all text-right font-num text-xs text-ink-600">{{ detailUser.id }}</dd></div>
-        </dl>
-        <p v-if="detailLoading" class="text-sm text-ink-500" role="status">Đang tải thông tin mới nhất…</p>
-        <p v-if="detailError" class="text-sm text-danger-600" role="alert">{{ detailError }}</p>
-        <div class="flex justify-end">
-          <FhButton variant="secondary" size="sm" @click="detailOpen = false">Đóng</FhButton>
         </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Create a technician account -->
-    <div
-      v-if="showCreateTechModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-tech-title"
-      @keydown.esc="showCreateTechModal = false"
-    >
-      <div class="bg-white rounded-2xl max-w-sm w-full p-6 space-y-5 shadow-2xl">
-        <template v-if="!createdTech">
-          <div>
-            <h3 id="create-tech-title" class="text-lg font-semibold text-ink-900">Tạo tài khoản kỹ thuật viên</h3>
-            <p class="mt-1 text-sm text-ink-500">Mật khẩu tạm chỉ hiện một lần.</p>
-          </div>
-          <form class="space-y-3" @submit.prevent="handleCreateTechnician">
-            <label :class="consoleLabel">
-              Họ và tên
-              <input v-model="createTechForm.fullName" type="text" autocomplete="name" :class="consoleField" class="h-10" />
-            </label>
-            <label :class="consoleLabel">
-              Email đăng nhập
-              <input v-model="createTechForm.email" type="email" autocomplete="email" :class="consoleField" class="h-10" />
-            </label>
-            <label :class="consoleLabel">
-              Số điện thoại (không bắt buộc)
-              <input v-model="createTechForm.phoneNumber" type="tel" autocomplete="tel" :class="consoleField" class="h-10 font-num" />
-            </label>
-            <p v-if="createTechError" class="text-sm text-danger-600" role="alert">{{ createTechError }}</p>
-            <div class="flex justify-end gap-2 pt-1">
-              <FhButton variant="secondary" size="sm" @click="showCreateTechModal = false">Huỷ</FhButton>
-              <FhButton type="submit" variant="primary" size="sm" :loading="createTechLoading">Tạo tài khoản</FhButton>
+    <Transition name="fh-modal">
+      <div
+        v-if="showCreateTechModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-tech-title"
+        @click.self="!createTechLoading && (showCreateTechModal = false)"
+        @keydown.esc="showCreateTechModal = false"
+      >
+        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-sm w-full p-6 space-y-5 shadow-(--shadow-e3)">
+          <template v-if="!createdTech">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="create-tech-title" class="text-lg font-semibold text-ink-900">Tạo tài khoản kỹ thuật viên</h3>
+                <p class="mt-1 text-sm text-ink-500">Mật khẩu tạm chỉ hiện một lần.</p>
+              </div>
+              <button type="button" class="rounded-lg p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showCreateTechModal = false">
+                <X :size="18" aria-hidden="true" />
+              </button>
             </div>
-          </form>
-        </template>
-        <template v-else>
-          <div>
-            <h3 id="create-tech-title" class="text-lg font-semibold text-success-700">Đã tạo tài khoản</h3>
-            <p class="mt-1 text-sm text-ink-600 text-pretty">{{ createdTech.fullName }} ({{ createdTech.email }}). Sao chép mật khẩu tạm và gửi cho thợ, đóng lại là không xem được nữa.</p>
-          </div>
-          <div class="select-all break-all rounded-xl border border-ink-200 bg-ink-50 p-4 text-center font-num text-base font-semibold text-ink-900">
-            {{ createdTech.tempPassword }}
-          </div>
-          <FhButton variant="primary" size="sm" block @click="showCreateTechModal = false">Đã sao chép, đóng lại</FhButton>
-        </template>
+            <form class="space-y-3" @submit.prevent="handleCreateTechnician">
+              <label :class="consoleLabel">
+                Họ và tên
+                <input v-model="createTechForm.fullName" type="text" autocomplete="name" :class="consoleField" class="h-10" />
+              </label>
+              <label :class="consoleLabel">
+                Email đăng nhập
+                <input v-model="createTechForm.email" type="email" autocomplete="email" :class="consoleField" class="h-10" />
+              </label>
+              <label :class="consoleLabel">
+                Số điện thoại (không bắt buộc)
+                <input v-model="createTechForm.phoneNumber" type="tel" autocomplete="tel" :class="consoleField" class="h-10 font-num" />
+              </label>
+              <p v-if="createTechError" class="text-sm text-danger-600" role="alert">{{ createTechError }}</p>
+              <div class="flex justify-end gap-2 pt-1">
+                <FhButton variant="secondary" size="sm" @click="showCreateTechModal = false">Huỷ</FhButton>
+                <FhButton type="submit" variant="primary" size="sm" :loading="createTechLoading">Tạo tài khoản</FhButton>
+              </div>
+            </form>
+          </template>
+          <template v-else>
+            <div>
+              <h3 id="create-tech-title" class="text-lg font-semibold text-success-700">Đã tạo tài khoản</h3>
+              <p class="mt-1 text-sm text-ink-600 text-pretty">{{ createdTech.fullName }} ({{ createdTech.email }}). Sao chép mật khẩu tạm và gửi cho thợ, đóng lại là không xem được nữa.</p>
+            </div>
+            <div class="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 p-3.5">
+              <span class="select-all break-all font-num text-base font-semibold text-ink-900">
+                {{ createdTech.tempPassword }}
+              </span>
+              <button
+                type="button"
+                class="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-ink-200 bg-white px-2.5 text-xs font-medium text-ink-700 transition-colors hover:bg-ink-100 cursor-pointer"
+                @click="copyTempPassword"
+              >
+                <Check v-if="passwordCopied" :size="14" class="text-success-600" aria-hidden="true" />
+                <Copy v-else :size="14" aria-hidden="true" />
+                <span>{{ passwordCopied ? 'Đã chép' : 'Sao chép' }}</span>
+              </button>
+            </div>
+            <FhButton variant="primary" size="sm" block @click="showCreateTechModal = false">Đã sao chép, đóng lại</FhButton>
+          </template>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>

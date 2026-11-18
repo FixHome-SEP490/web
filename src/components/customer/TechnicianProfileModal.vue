@@ -3,7 +3,7 @@
 // comes from the candidate record or the technician's published reviews; the
 // matching query only returns technicians whose profile and skill for this
 // service FixHome has verified, which is what "Đã xác thực" refers to.
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { X, Star, MapPin, Briefcase, ShieldCheck, CheckCircle2, Check, Wrench, ClipboardCheck, Award } from 'lucide-vue-next';
 import { FhButton, FhStatusPill, FhMoney, FhEmptyState, FhSkeleton } from '../index';
 import type { TechnicianCandidate } from '../../api/bookings.api';
@@ -33,96 +33,45 @@ const emit = defineEmits<{
 const activeTab = ref<'about' | 'reviews'>('about');
 const loadingReviews = ref(false);
 const reviews = ref<Review[]>([]);
-
-// ── Tab sliding indicator animation (consistent with FixHome design system) ──
-const tabListRef = ref<HTMLElement | null>(null);
-const tabRefs = ref<Record<string, HTMLElement | null>>({});
-const indicatorStyle = ref<Record<string, string>>({ opacity: '0' });
-
-function updateTabIndicator() {
-  const activeEl = tabRefs.value[activeTab.value];
-  const container = tabListRef.value;
-  if (!activeEl || !container || activeEl.offsetWidth === 0) {
-    indicatorStyle.value = { opacity: '0' };
-    return;
-  }
-  const left = activeEl.offsetLeft;
-  const top = activeEl.offsetTop;
-  const width = activeEl.offsetWidth;
-  const height = activeEl.offsetHeight;
-
-  indicatorStyle.value = {
-    transform: `translate3d(${left}px, ${top}px, 0)`,
-    width: `${width}px`,
-    height: `${height}px`,
-    opacity: width > 0 ? '1' : '0',
-  };
-}
-
-let resizeObserver: ResizeObserver | null = null;
-
-watch(tabListRef, (el) => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-  if (el && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(() => {
-      updateTabIndicator();
-    });
-    resizeObserver.observe(el);
-  }
-  void nextTick(updateTabIndicator);
-});
+const reviewsCache = new Map<string, Review[]>();
 
 const fetchReviews = async (techId: string) => {
+  const cached = reviewsCache.get(techId);
+  if (cached) {
+    reviews.value = cached;
+    loadingReviews.value = false;
+    return;
+  }
   loadingReviews.value = true;
   try {
     const res = await reviewsApi.getByTechnician(techId);
-    reviews.value = res.data || [];
+    const loaded = res.data || [];
+    reviewsCache.set(techId, loaded);
+    if (props.candidate?.id === techId) {
+      reviews.value = loaded;
+    }
   } catch {
-    reviews.value = [];
+    if (props.candidate?.id === techId) {
+      reviews.value = [];
+    }
   } finally {
-    loadingReviews.value = false;
-    void nextTick(updateTabIndicator);
+    if (props.candidate?.id === techId) {
+      loadingReviews.value = false;
+    }
   }
 };
 
 watch(
-  () => [props.isOpen, props.candidate?.id],
+  () => [props.isOpen, props.candidate?.id] as const,
   ([open, id]) => {
     if (open && id) {
       activeTab.value = 'about';
-      void fetchReviews(id as string);
-      void nextTick(() => {
-        updateTabIndicator();
-        setTimeout(updateTabIndicator, 50);
-      });
+      reviews.value = reviewsCache.get(id) ?? [];
+      void fetchReviews(id);
     }
   },
   { immediate: true },
 );
-
-watch(activeTab, () => {
-  void nextTick(updateTabIndicator);
-});
-
-onMounted(() => {
-  void nextTick(updateTabIndicator);
-  if (typeof window !== 'undefined') {
-    window.addEventListener('resize', updateTabIndicator);
-  }
-});
-
-onUnmounted(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', updateTabIndicator);
-  }
-});
 
 const parseReviewContent = (rawComment?: string | null) => {
   if (!rawComment) return { tags: [] as string[], text: '' };
@@ -165,19 +114,18 @@ const handleClose = () => emit('close');
 </script>
 
 <template>
-  <Transition name="fh-modal">
+  <div
+    v-if="isOpen && candidate"
+    class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/55"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-technician-name"
+    @click.self="handleClose"
+    @keydown.esc="handleClose"
+  >
     <div
-      v-if="isOpen && candidate"
-      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/60 backdrop-blur-xs"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-technician-name"
-      @click.self="handleClose"
-      @keydown.esc="handleClose"
+      class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[92dvh] flex flex-col shadow-(--shadow-e3) border border-ink-200/90 overflow-hidden"
     >
-      <div
-        class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[92dvh] flex flex-col shadow-(--shadow-e3) border border-ink-200/90 overflow-hidden"
-      >
       <!-- Header Hero Card -->
       <div class="px-5 sm:px-6 pt-5 pb-4 border-b border-ink-100 bg-gradient-to-b from-brand-50/40 via-white to-white shrink-0">
         <div class="flex items-start gap-4">
@@ -232,42 +180,40 @@ const handleClose = () => emit('close');
 
         <!-- Key Metrics Cards -->
         <dl class="grid grid-cols-3 gap-2.5 mt-4 text-center select-none">
-          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-all hover:bg-white hover:shadow-2xs">
+          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-[background-color,box-shadow] duration-150 hover:bg-white hover:shadow-2xs">
             <dt class="text-[11px] sm:text-xs text-ink-500 font-medium">Đơn đã thực hiện</dt>
             <dd class="text-base sm:text-lg font-bold text-ink-900 font-num mt-0.5">{{ completedOrdersCount ?? '—' }}</dd>
           </div>
-          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-all hover:bg-white hover:shadow-2xs">
+          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-[background-color,box-shadow] duration-150 hover:bg-white hover:shadow-2xs">
             <dt class="text-[11px] sm:text-xs text-ink-500 font-medium">Tỷ lệ hoàn thành</dt>
             <dd class="text-base sm:text-lg font-bold text-ink-900 font-num mt-0.5">{{ completionRate != null ? `${completionRate}%` : '—' }}</dd>
           </div>
-          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-all hover:bg-white hover:shadow-2xs">
+          <div class="p-3 rounded-2xl bg-ink-50/70 border border-ink-100/80 transition-[background-color,box-shadow] duration-150 hover:bg-white hover:shadow-2xs">
             <dt class="text-[11px] sm:text-xs text-ink-500 font-medium">Độ tin cậy</dt>
             <dd class="text-base sm:text-lg font-bold text-ink-900 font-num mt-0.5">{{ candidate.reliabilityScore != null ? `${candidate.reliabilityScore}%` : '—' }}</dd>
           </div>
         </dl>
       </div>
 
-      <!-- Animated Sliding Tabs Bar -->
+      <!-- GPU-composited Sliding Tabs Bar (no JS layout read/reflow on open) -->
       <div class="px-5 sm:px-6 pt-3.5 shrink-0">
         <div
-          ref="tabListRef"
-          class="relative flex w-full items-center gap-1 p-1 bg-ink-100 rounded-xl text-xs sm:text-sm select-none"
+          class="relative grid grid-cols-2 w-full items-center p-1 bg-ink-100 rounded-xl text-xs sm:text-sm select-none"
           role="tablist"
           aria-label="Hồ sơ thợ"
         >
-          <!-- Sliding active indicator pill -->
+          <!-- Pure transform active indicator pill -->
           <div
-            class="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-xs transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]"
-            :style="indicatorStyle"
+            class="pointer-events-none absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-lg bg-white shadow-xs transition-transform duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
+            :class="activeTab === 'reviews' ? 'translate-x-full' : 'translate-x-0'"
             aria-hidden="true"
           />
 
           <button
             type="button"
             role="tab"
-            :ref="(el) => { tabRefs['about'] = el as HTMLElement }"
             :aria-selected="activeTab === 'about'"
-            class="relative z-10 flex-1 h-9 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center justify-center gap-1.5"
+            class="relative z-10 h-9 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
             :class="activeTab === 'about' ? 'font-semibold text-ink-900' : 'text-ink-600 hover:text-ink-900'"
             @click="activeTab = 'about'"
           >
@@ -276,9 +222,8 @@ const handleClose = () => emit('close');
           <button
             type="button"
             role="tab"
-            :ref="(el) => { tabRefs['reviews'] = el as HTMLElement }"
             :aria-selected="activeTab === 'reviews'"
-            class="relative z-10 flex-1 h-9 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center justify-center gap-1.5"
+            class="relative z-10 h-9 rounded-lg font-medium transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
             :class="activeTab === 'reviews' ? 'font-semibold text-ink-900' : 'text-ink-600 hover:text-ink-900'"
             @click="activeTab = 'reviews'"
           >
@@ -294,9 +239,8 @@ const handleClose = () => emit('close');
       </div>
 
       <!-- Body Content -->
-      <div class="px-5 sm:px-6 py-4 overflow-y-auto space-y-4 text-xs sm:text-sm text-ink-800 flex-1">
-        <Transition name="fh-fade-slide" mode="out-in">
-          <div v-if="activeTab === 'about'" key="about" class="space-y-4">
+      <div class="px-5 sm:px-6 py-4 overflow-y-auto overscroll-contain space-y-4 text-xs sm:text-sm text-ink-800 flex-1">
+          <div v-if="activeTab === 'about'" class="space-y-4">
             <p v-if="candidate.bio" class="text-ink-700 leading-relaxed text-pretty whitespace-pre-line bg-ink-50/50 p-3.5 rounded-2xl border border-ink-100">
               {{ candidate.bio }}
             </p>
@@ -356,7 +300,7 @@ const handleClose = () => emit('close');
                   <div v-for="star in [5, 4, 3, 2, 1]" :key="star" class="flex items-center gap-2 text-xs text-ink-600">
                     <span class="w-9 font-num shrink-0 whitespace-nowrap">{{ star }} sao</span>
                     <div class="flex-1 h-2 rounded-full bg-ink-200/80 overflow-hidden">
-                      <div class="h-full bg-warning-400 rounded-full transition-all duration-300" :style="{ width: `${starStats.pct(starStats.counts[star])}%` }" />
+                      <div class="h-full bg-warning-400 rounded-full transition-[width] duration-300 motion-reduce:transition-none" :style="{ width: `${starStats.pct(starStats.counts[star])}%` }" />
                     </div>
                     <span class="w-6 text-right font-num text-ink-500 shrink-0">{{ starStats.counts[star] }}</span>
                   </div>
@@ -395,7 +339,6 @@ const handleClose = () => emit('close');
               description="Kỹ thuật viên này chưa nhận được đánh giá nào từ khách hàng."
             />
           </div>
-        </Transition>
       </div>
 
       <!-- Footer Action Area -->
@@ -421,7 +364,6 @@ const handleClose = () => emit('close');
         </div>
       </div>
     </div>
-    </div>
-  </Transition>
+  </div>
 </template>
 
