@@ -98,7 +98,8 @@
  * /console; the public landing page keeps the warm editorial neutrals above.
  */
 .fh-app,
-.fh-console {
+.fh-console,
+.fh-public {
   --color-ink-25:  #FBFCFD;
   --color-ink-50:  #F8FAFC;
   --color-ink-100: #F1F5F9;

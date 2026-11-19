@@ -3,18 +3,34 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Menu, X, ArrowRight, LayoutGrid, CalendarPlus, ShieldCheck, Sparkles } from 'lucide-vue-next';
 import { useAuthStore } from '../stores/auth';
+import { useNotificationsStore } from '../stores/notifications.store';
 import { FhButton } from '../components';
 import AccountMenu from '../components/account/AccountMenu.vue';
+import CustomerTopHeader from '../components/account/CustomerTopHeader.vue';
+import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import RoleChatDock from '../components/chat/RoleChatDock.vue';
 import { roleAreaLink, roleHeaderAction } from '../utils/account-menu';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const notifStore = useNotificationsStore();
 const mobileMenuOpen = ref(false);
 const menuTrigger = ref<HTMLButtonElement | null>(null);
 const header = ref<HTMLElement | null>(null);
 const isScrolled = ref(false);
+
+const isAuthenticatedCustomer = computed(
+  () => authStore.isAuthenticated && String(authStore.userRole ?? '').toUpperCase() === 'CUSTOMER',
+);
+
+const isCustomerSuspended = computed<boolean>(() => {
+  if (authStore.user?.status === 'SUSPENDED') return true;
+  if (authStore.user?.bookingSuspendedUntil) {
+    return new Date(authStore.user.bookingSuspendedUntil) > new Date();
+  }
+  return false;
+});
 
 // Same order as the sections on the landing page (PO 21/10/2026): every item
 // scrolls within the landing; "Giới thiệu" is its first screen. The full
@@ -73,10 +89,21 @@ async function logout() {
 }
 onMounted(() => {
   handleScroll();
+  if (authStore.isAuthenticated) {
+    void notifStore.fetchUnreadCount?.();
+  }
   window.addEventListener('scroll', handleScroll, { passive: true });
   document.addEventListener('keydown', handleEscape);
   document.addEventListener('click', handleOutsideClick);
 });
+watch(
+  () => authStore.isAuthenticated,
+  (isAuth) => {
+    if (isAuth) {
+      void notifStore.fetchUnreadCount?.();
+    }
+  },
+);
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
   document.removeEventListener('keydown', handleEscape);
@@ -85,9 +112,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="public-shell flex min-h-screen min-w-0 flex-col bg-transparent text-ink-900">
+  <div class="public-shell fh-public flex min-h-screen min-w-0 flex-col bg-transparent text-ink-900">
     <a href="#main-content" class="skip-link">Đến nội dung chính</a>
+    <CustomerTopHeader
+      v-if="isAuthenticatedCustomer"
+      :is-suspended="isCustomerSuspended"
+      :scrolled="isScrolled"
+      @logout="logout"
+    />
     <header
+      v-else
       ref="header"
       class="public-header sticky top-0 z-40 min-w-0 border-b transition-all duration-300"
       :class="isScrolled ? 'border-transparent bg-white/95 backdrop-blur-md shadow-(--shadow-e1)' : 'border-ink-200/80 bg-white/90 backdrop-blur-md'"
@@ -118,6 +152,7 @@ onUnmounted(() => {
               </FhButton>
             </div>
             <span v-if="headerAction" class="hidden sm:block h-5 w-px bg-ink-200" aria-hidden="true" />
+            <NotificationBellDropdown />
             <AccountMenu context="public" @logout="logout" />
           </template>
           <template v-else>
