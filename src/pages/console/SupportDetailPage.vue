@@ -236,8 +236,8 @@ async function submitResponsibilityDecision() {
     responsibilityError.value = 'Lý do kết luận cần từ 10 đến 2000 ký tự.';
     return;
   }
-  if (evidenceRefs.length > 20 || evidenceRefs.some((value) => value.length > 500)) {
-    responsibilityError.value = 'Tối đa 20 bằng chứng, mỗi mục không quá 500 ký tự.';
+  if (evidenceRefs.length > 20 || evidenceRefs.some((value) => value.length > 512)) {
+    responsibilityError.value = 'Tối đa 20 bằng chứng, mỗi mục không quá 512 ký tự.';
     return;
   }
   responsibilityCommandId.value ??= crypto.randomUUID();
@@ -349,8 +349,8 @@ function buildResolvePayload(): SupportCaseResolvePayload | null {
     formError.value = 'Tối đa 20 bằng chứng.';
     return null;
   }
-  if (evidenceRefs.some((ref) => ref.length > 500)) {
-    formError.value = 'Mỗi bằng chứng tối đa 500 ký tự.';
+  if (evidenceRefs.some((ref) => ref.length > 512)) {
+    formError.value = 'Mỗi bằng chứng tối đa 512 ký tự.';
     return null;
   }
   if (code === 'escalate_admin') {
@@ -646,7 +646,7 @@ watch(caseId, (id) => {
             <label :class="consoleLabel">
               <template v-if="refundsToWallet">Số tiền hoàn vào ví khách (₫)</template>
               <template v-else>Số tiền ghi nhận (₫, không bắt buộc)</template>
-              <input v-model="amountText" type="number" min="0" step="1000" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
+              <input v-model="amountText" type="number" min="0" step="1" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
             </label>
           </div>
           <label v-if="refundsToWallet" :class="consoleLabel" data-testid="funded-gross-refund-field">

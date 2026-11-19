@@ -33,7 +33,7 @@ watch(search, () => { sequence++; customers.value = []; searched.value = false; 
 watch(() => props.canManage, allowed => { if (!allowed) { session++; sequence++; customers.value = []; selected.value = null; busy.value = false; message.value = ''; } });
 onBeforeUnmount(() => { session++; sequence++; });
 async function findCustomers(nextPage = 1) {
-  if (!props.canManage || searching.value || uncertain.value || busy.value || search.value.trim().length < 2) return;
+  if (!props.canManage || searching.value || uncertain.value || busy.value || !search.value.trim()) return;
   const request = ++sequence;
   searching.value = true;
   searchError.value = '';
@@ -83,7 +83,7 @@ async function grant() {
       <label for="voucher-grant-campaign" class="block text-sm font-medium text-ink-800">Chiến dịch cá nhân<select id="voucher-grant-campaign" v-model="campaignId" :disabled="busy || uncertain" class="grant-field"><option value="">Chọn chiến dịch</option><option v-for="campaign in personalCampaigns" :key="campaign.id" :value="campaign.id" :disabled="campaign.status !== 'ACTIVE'">{{ campaign.title }}{{ campaign.status === 'ACTIVE' ? '' : ' · Tạm dừng' }}</option></select></label>
       <form data-testid="voucher-customer-search" class="flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="findCustomers()">
         <label for="voucher-grant-search" class="block min-w-0 flex-1 text-sm font-medium text-ink-800">Tìm khách hàng<input id="voucher-grant-search" v-model="search" type="search" :disabled="busy || uncertain" class="grant-field" placeholder="Tên, email hoặc số điện thoại" autocomplete="off" /></label>
-        <FhButton type="submit" variant="secondary" size="md" :loading="searching" :disabled="busy || uncertain || search.trim().length < 2 || searching">Tìm khách hàng</FhButton>
+        <FhButton type="submit" variant="secondary" size="md" :loading="searching" :disabled="busy || uncertain || !search.trim() || searching">Tìm khách hàng</FhButton>
       </form>
       <p v-if="searchError" role="alert" class="text-sm text-danger-800">{{ searchError }}</p>
       <p v-else-if="searched && !customers.length" role="status" class="text-sm text-ink-600">Không có khách hàng đang hoạt động phù hợp.</p>

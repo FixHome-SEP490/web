@@ -37,6 +37,7 @@ import { useChatStore } from '../../stores/chat.store';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
+import { ORDER_STATES, REQUEST_STATES, canCancelVisit, pickInitialList, staleWaiting, type OrdersTab } from './customer-orders-filters';
 import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const PAGE_SIZE = 10;
@@ -44,141 +45,35 @@ const PAGE_SIZE = 10;
 const router = useRouter();
 const chatStore = useChatStore();
 
-type Tab = 'ALL' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+type Tab = OrdersTab;
 const TAB_KEYS: readonly Tab[] = ['ALL', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const activeTab = useQueryChoice<Tab>('tab', TAB_KEYS, 'ALL');
 
 // "Đặt lại thợ" from a completed or cancelled order, or a booking cancelled before any technician accepted.
 const rebookFor = ref<{ bookingId: string; serviceName?: string } | null>(null);
 const canRebookOrder = (order: ServiceOrderItem) => ['COMPLETED', 'CANCELLED'].includes(String(order.status).toUpperCase());
-// Searches on the server (order code, service; accents ignored), kept as ?q=.
+// Searches on the server (order code, service, technician; accents ignored), kept as ?q=.
 const { input: searchQuery, search } = useQuerySearch();
 
 const emptyPage = <T,>(page: number, pageSize: number): Promise<PageResult<T>> =>
   Promise.resolve({ items: [], total: 0, page, pageSize });
 
-// The current Backend list contract only accepts one `status` per request.
-// Composite tabs therefore merge their individual status pages in the client.
-// This avoids the strict ValidationPipe rejecting the whole page for sending
-// the not-yet-supported `statuses` or `search` query parameters.
-const ORDER_STATES: Record<Tab, string[]> = {
-  ALL: ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'],
-  IN_PROGRESS: ['accepted', 'en_route', 'under_repair'],
-  COMPLETED: ['completed'],
-  CANCELLED: ['cancelled'],
-};
-// A matched booking already shows as its order, so it is never listed twice.
-const BOOKING_STATES: Record<Tab, string[]> = {
-  ALL: ['submitted', 'matching', 'closed', 'cancelled'],
-  IN_PROGRESS: ['submitted', 'matching'],
-  COMPLETED: [],
-  CANCELLED: ['cancelled'],
-};
-
-type DatedItem = { id: string; createdAt: string };
-
-const BACKEND_PAGE_SIZE = 100;
-
-function foldSearchText(value: unknown): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
-}
-
-function newestFirst(a: DatedItem, b: DatedItem): number {
-  return Date.parse(b.createdAt) - Date.parse(a.createdAt);
-}
-
-async function readStatusPrefix<T extends DatedItem>(
-  status: string,
-  wanted: number | null,
-  fetchPage: (page: number, pageSize: number, status: string) => Promise<PageResult<T>>,
-): Promise<{ items: T[]; total: number }> {
-  const chunkSize = wanted === null ? BACKEND_PAGE_SIZE : Math.min(BACKEND_PAGE_SIZE, Math.max(1, wanted));
-  const first = await fetchPage(1, chunkSize, status);
-  const target = wanted === null ? first.total : Math.min(first.total, wanted);
-  const pages = Math.ceil(target / chunkSize);
-  const rest: PageResult<T>[] = [];
-  // Keep at most one request per status in flight; a long history must not
-  // create an unbounded burst of requests while the customer is searching.
-  for (let nextPage = 2; nextPage <= pages; nextPage += 1) {
-    rest.push(await fetchPage(nextPage, chunkSize, status));
-  }
-  return { items: [first, ...rest].flatMap((result) => result.items).slice(0, target), total: first.total };
-}
-
-/**
- * Produces an exact page across several separately paged statuses. Without a
- * search, only the prefix that can reach the requested page is read. Search is
- * performed locally because these two Backend endpoints do not accept it yet.
- */
-async function readMergedPage<T extends DatedItem>(options: {
-  page: number;
-  pageSize: number;
-  statuses: readonly string[];
-  search: string;
-  fetchPage: (page: number, pageSize: number, status: string) => Promise<PageResult<T>>;
-  searchableText: (item: T) => string;
-  onStatusTotals?: (totals: Record<string, number>) => void;
-}): Promise<PageResult<T>> {
-  const query = foldSearchText(options.search.trim());
-  const wanted = query ? null : options.page * options.pageSize;
-  const groups = await Promise.all(
-    options.statuses.map((status) => readStatusPrefix(status, wanted, options.fetchPage)),
-  );
-  if (options.onStatusTotals) {
-    const totals: Record<string, number> = {};
-    for (let i = 0; i < options.statuses.length; i++) {
-      totals[options.statuses[i]] = groups[i].total;
-    }
-    options.onStatusTotals(totals);
-  }
-  const unique = new Map<string, T>();
-  for (const item of groups.flatMap((group) => group.items).sort(newestFirst)) unique.set(item.id, item);
-  const rows = [...unique.values()]
-    .sort(newestFirst)
-    .filter((item) => !query || foldSearchText(options.searchableText(item)).includes(query));
-  const total = query ? rows.length : groups.reduce((sum, group) => sum + group.total, 0);
-  const start = (options.page - 1) * options.pageSize;
-  return { items: rows.slice(start, start + options.pageSize), total, page: options.page, pageSize: options.pageSize };
-}
-
+// One request per page: the server filters by state and searches (order code, service,
+// technician; accents ignored), so pages, totals and the newest-first order are exact
+// (was: every state read separately and merged here, search matching only code and service).
 function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
-  // The unfiltered endpoint already provides the exact ALL page efficiently.
-  if (activeTab.value === 'ALL' && !search.value) return ordersApi.getMyOrdersPage(page, pageSize, { excludeVisitGroups: true });
-  const statuses = ORDER_STATES[activeTab.value];
-  if (statuses.length === 1 && !search.value) {
-    return ordersApi.getMyOrdersPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
-  }
-  return readMergedPage({
-    page,
-    pageSize,
-    statuses,
+  return ordersApi.getMyOrdersPage(page, pageSize, {
+    statuses: ORDER_STATES[activeTab.value],
     search: search.value,
-    fetchPage: (statusPage, statusPageSize, status) =>
-      ordersApi.getMyOrdersPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
-    searchableText: (order) => `${order.code} ${order.serviceName}`,
+    excludeVisitGroups: true,
   });
 }
 
 async function fetchBookingsPage(page: number, pageSize: number): Promise<PageResult<BookingItem>> {
-  const statuses = BOOKING_STATES[activeTab.value];
+  const statuses = REQUEST_STATES[activeTab.value];
   if (statuses.length === 0) return emptyPage<BookingItem>(page, pageSize);
-  if (statuses.length === 1 && !search.value) {
-    return bookingsApi.getMyBookingsPage(page, pageSize, { status: statuses[0], excludeVisitGroups: true });
-  }
-  return readMergedPage({
-    page,
-    pageSize,
-    statuses,
-    search: search.value,
-    fetchPage: (statusPage, statusPageSize, status) =>
-      bookingsApi.getMyBookingsPage(statusPage, statusPageSize, { status, excludeVisitGroups: true }),
-    searchableText: (booking) => booking.serviceName ?? '',
-  });
+  // A booking whose order was cancelled is that cancelled order, never also a cancelled request.
+  return bookingsApi.getMyBookingsPage(page, pageSize, { statuses, search: search.value, excludeVisitGroups: true, withoutOrder: true });
 }
 
 const ordersList = usePagedList<ServiceOrderItem>({
@@ -257,18 +152,12 @@ watch(
   [loadingOrders, loadingBookings, loadingVisitGroups, ordersTotal, bookingsTotal, visitGroupsTotal],
   ([ordLoading, reqLoading, visitLoading, ordTotal, reqTotal, visTotal]) => {
     if (chosenList.value || initialListPicked.value || activeTab.value !== 'ALL' || search.value) return;
-    if (ordLoading) return;
-    if (ordTotal > 0) {
-      initialListPicked.value = 'orders';
-      return;
-    }
-    if (!reqLoading && reqTotal > 0) {
-      initialListPicked.value = 'requests';
-      return;
-    }
-    if (!reqLoading && !visitLoading && visTotal > 0) {
-      initialListPicked.value = 'visits';
-    }
+    const picked = pickInitialList({
+      orders: { loading: ordLoading, total: ordTotal },
+      requests: { loading: reqLoading, total: reqTotal, statuses: bookings.value.map((b) => String(b.status)) },
+      visits: { loading: visitLoading, total: visTotal, statuses: visitGroups.value.map((g) => String(g.status)) },
+    });
+    if (picked) initialListPicked.value = picked;
   },
   { immediate: true },
 );
@@ -490,6 +379,8 @@ async function handleChat(order: ServiceOrderItem, event: Event) {
 const selectedBookingIds = ref<string[]>([]);
 const targetSingleBooking = ref<BookingItem | null>(null);
 const showCancelDialog = ref(false);
+// "Huỷ lượt" on a multi-device visit nobody holds yet (PO 19/11/2026); same dialog and reasons.
+const targetVisit = ref<VisitGroupPageItem | null>(null);
 const cancelReasonSelected = ref('Thay đổi nhu cầu / kế hoạch');
 const customCancelReason = ref('');
 const bulkCancelling = ref(false);
@@ -551,7 +442,16 @@ function openBulkCancelDialog() {
   showCancelDialog.value = true;
 }
 
+function openVisitCancel(group: VisitGroupPageItem) {
+  targetSingleBooking.value = null;
+  targetVisit.value = group;
+  cancelReasonSelected.value = 'Thay đổi nhu cầu / kế hoạch';
+  customCancelReason.value = '';
+  showCancelDialog.value = true;
+}
+
 function openSingleCancel(booking: BookingItem) {
+  targetVisit.value = null;
   targetSingleBooking.value = booking;
   cancelReasonSelected.value = 'Thay đổi nhu cầu / kế hoạch';
   customCancelReason.value = '';
@@ -562,9 +462,11 @@ function closeCancelDialog() {
   if (bulkCancelling.value) return;
   showCancelDialog.value = false;
   targetSingleBooking.value = null;
+  targetVisit.value = null;
 }
 
 const cancelDialogTitle = computed(() => {
+  if (targetVisit.value) return 'Huỷ lượt sửa';
   if (targetSingleBooking.value) {
     return 'Huỷ yêu cầu đặt lịch';
   }
@@ -572,13 +474,39 @@ const cancelDialogTitle = computed(() => {
 });
 
 const cancelDialogConsequence = computed(() => {
+  if (targetVisit.value) {
+    return `Bạn có chắc muốn huỷ lượt sửa ${targetVisit.value.items.length} thiết bị? Hệ thống sẽ ngừng tìm thợ cho cả lượt này.`;
+  }
   if (targetSingleBooking.value) {
     return `Bạn có chắc muốn huỷ yêu cầu "${targetSingleBooking.value.serviceName}"? Hệ thống sẽ ngừng tìm thợ cho yêu cầu này.`;
   }
   return `Bạn đang chọn huỷ ${selectedBookingIds.value.length} yêu cầu đặt lịch đã chọn. Hệ thống sẽ ngừng tìm thợ cho các yêu cầu này.`;
 });
 
+async function confirmVisitCancel(group: VisitGroupPageItem, reason: string) {
+  bulkCancelling.value = true;
+  try {
+    await visitGroupsApi.cancel(group.id, reason);
+    toast.success('Đã huỷ lượt sửa.');
+    showCancelDialog.value = false;
+    targetVisit.value = null;
+    await retryVisitGroups();
+  } catch {
+    toast.error('Chưa huỷ được lượt sửa. Vui lòng thử lại.');
+  } finally {
+    bulkCancelling.value = false;
+  }
+}
+
 async function confirmCancel() {
+  if (targetVisit.value) {
+    if (bulkCancelling.value) return;
+    const visitReason = cancelReasonSelected.value === 'Lý do khác'
+      ? (customCancelReason.value.trim() || 'Khách hàng huỷ lượt sửa')
+      : cancelReasonSelected.value;
+    await confirmVisitCancel(targetVisit.value, visitReason);
+    return;
+  }
   const idsToCancel = targetSingleBooking.value
     ? [targetSingleBooking.value.id]
     : [...selectedBookingIds.value];
@@ -630,6 +558,33 @@ async function confirmCancel() {
     bulkCancelling.value = false;
   }
 }
+// ── Waiting too long (PO 19/11/2026) ──
+// Requests and visits still waiting for a technician after 24 hours, read from the pages
+// on hand (active ones come first from the server), so a waiting state never hides.
+const staleItems = computed(() => staleWaiting(bookings.value, visitGroups.value, Date.now()));
+const staleReminder = computed(() => {
+  const items = staleItems.value;
+  if (!items.length) return null;
+  const visits = items.filter((i) => i.kind === 'visit').length;
+  const requests = items.length - visits;
+  const parts = [requests ? `${requests} yêu cầu` : '', visits ? `${visits} lượt sửa` : ''].filter(Boolean).join(' và ');
+  return { text: `Bạn có ${parts} chờ thợ hơn 24 giờ.`, oldest: items[0] };
+});
+function viewStale() {
+  const oldest = staleReminder.value?.oldest;
+  if (oldest) switchList(oldest.kind === 'visit' ? 'visits' : 'requests');
+}
+function cancelStale() {
+  const oldest = staleReminder.value?.oldest;
+  if (!oldest) return;
+  if (oldest.kind === 'visit') {
+    const group = visitGroups.value.find((g) => g.id === oldest.id);
+    if (group) openVisitCancel(group);
+  } else {
+    const booking = bookings.value.find((b) => b.id === oldest.id);
+    if (booking) openSingleCancel(booking);
+  }
+}
 </script>
 
 <template>
@@ -653,6 +608,21 @@ async function confirmCancel() {
         <p class="text-sm text-ink-600">Theo dõi yêu cầu đặt lịch, đơn sửa chữa đang thực hiện và các lượt nhiều thiết bị.</p>
       </div>
     </header>
+
+    <div
+      v-if="staleReminder"
+      data-testid="stale-waiting-reminder"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2.5 text-sm text-warning-800"
+    >
+      <span class="flex min-w-0 items-center gap-2">
+        <Clock :size="16" class="shrink-0" aria-hidden="true" />
+        <span>{{ staleReminder.text }}</span>
+      </span>
+      <span class="flex shrink-0 items-center gap-1">
+        <button type="button" data-testid="stale-waiting-view" class="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold hover:bg-warning-100" @click="viewStale">Xem</button>
+        <button type="button" data-testid="stale-waiting-cancel" class="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold hover:bg-warning-100" @click="cancelStale">Huỷ</button>
+      </span>
+    </div>
 
     <div class="relative animate-slide-up-delay-1">
       <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -900,7 +870,16 @@ async function confirmCancel() {
                 </span>
               </li>
             </ul>
-            <div class="flex justify-end border-t border-ink-100 pt-2.5">
+            <div class="flex justify-end gap-1 border-t border-ink-100 pt-2.5">
+              <button
+                v-if="canCancelVisit(group.status)"
+                type="button"
+                class="inline-flex h-9 items-center rounded-lg px-2.5 text-xs font-medium text-ink-500 hover:bg-danger-50 hover:text-danger-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 cursor-pointer"
+                :data-testid="`cancel-visit-btn-${group.id}`"
+                @click.stop="openVisitCancel(group)"
+              >
+                Huỷ lượt
+              </button>
               <router-link :to="`/app/visits/${group.id}`" :data-testid="`visit-group-open-${group.id}`" class="inline-flex h-9 items-center gap-1 rounded-xl px-3 text-xs sm:text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
                 Xem lượt sửa <ChevronRight :size="15" aria-hidden="true" />
               </router-link>
@@ -1321,7 +1300,7 @@ async function confirmCancel() {
           v-if="cancelReasonSelected === 'Lý do khác'"
           v-model="customCancelReason"
           type="text"
-          maxlength="200"
+          maxlength="2000"
           placeholder="Nhập lý do huỷ cụ thể..."
           class="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
         />

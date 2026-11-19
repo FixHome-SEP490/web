@@ -86,10 +86,6 @@ function askAdjust() {
     formError.value = 'Lý do tối thiểu 10 ký tự.';
     return;
   }
-  if (adjustType.value === 'DEBIT' && detail.value && amount.value > detail.value.balance) {
-    formError.value = 'Không trừ quá số dư hiện có của khách.';
-    return;
-  }
   confirming.value = true;
 }
 

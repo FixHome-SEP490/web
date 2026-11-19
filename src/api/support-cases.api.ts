@@ -325,7 +325,7 @@ function normalizeEvidenceRefs(
   if (
     !Array.isArray(source.evidenceRefs) ||
     source.evidenceRefs.length > 20 ||
-    source.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 500)
+    source.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 512)
   ) {
     invalid(message);
   }
@@ -669,7 +669,7 @@ function assertResolvePayload(payload: SupportCaseResolvePayload): void {
     (payload.evidenceRefs !== undefined &&
       (!Array.isArray(payload.evidenceRefs) ||
         payload.evidenceRefs.length > 20 ||
-        payload.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 500)))
+        payload.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 512)))
   ) {
     invalid('Invalid support case resolve payload.');
   }
@@ -692,7 +692,7 @@ function assertTechnicianReportPayload(payload: TechnicianReportPayload): void {
   if (typeof payload.serviceOrderId !== 'string' || !payload.serviceOrderId.trim() || (!skillGap && !validClass)
     || reason.length < 10 || reason.length > 2000
     || (evidenceRefs !== undefined && (!Array.isArray(evidenceRefs) || evidenceRefs.length > 20
-      || evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 500)))) {
+      || evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 512)))) {
     invalid('Invalid technician report payload.');
   }
 }
@@ -703,7 +703,7 @@ function assertResponsibilityPayload(payload: TechnicianResponsibilityPayload): 
     || !['technician_fault', 'no_technician_fault', 'inconclusive'].includes(payload.decision)
     || reason.length < 10 || reason.length > 2000
     || (payload.evidenceRefs !== undefined && (!Array.isArray(payload.evidenceRefs) || payload.evidenceRefs.length > 20
-      || payload.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 500)))) {
+      || payload.evidenceRefs.some((ref) => typeof ref !== 'string' || ref.length > 512)))) {
     invalid('Invalid technician responsibility payload.');
   }
 }

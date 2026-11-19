@@ -27,6 +27,8 @@ import {
   Warehouse,
   Building2,
   ClipboardCheck,
+  KeyRound,
+  Megaphone,
 } from 'lucide-vue-next';
 
 export interface ConsoleNavItem {
@@ -111,6 +113,8 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
         group: 'Hệ thống',
         items: [
           item('Người dùng', '/console/admin/users', Users),
+          item('Phân quyền SM', '/console/admin/sm-permissions', KeyRound),
+          item('Gửi thông báo', '/console/admin/broadcast', Megaphone),
           item('Đánh giá', '/console/admin/reviews', Star),
           item('Cấu hình', '/console/admin/config', Sliders),
           item('Cấu hình giao hàng', '/console/admin/w3-delivery-policy', Package),

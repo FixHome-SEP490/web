@@ -804,7 +804,7 @@ const handleWithdraw = async () => {
                 type="number"
                 inputmode="numeric"
                 min="10000"
-                step="10000"
+                step="1"
                 placeholder="200000"
                 class="w-full h-12 pl-4 pr-12 rounded-xl border border-ink-200 font-num font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />
@@ -888,7 +888,7 @@ const handleWithdraw = async () => {
                 inputmode="numeric"
                 :min="minimumWithdrawal"
                 :max="wallet?.withdrawableBalance ?? 0"
-                step="10000"
+                step="1"
                 placeholder="100000"
                 class="w-full h-12 pl-4 pr-12 rounded-xl border border-ink-200 font-num font-semibold text-ink-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 text-lg"
               />

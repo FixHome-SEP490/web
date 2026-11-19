@@ -122,8 +122,8 @@ function openCancel() {
 async function submitCancel() {
   if (cancelBusy.value || !order.value) return;
   const reason = cancelReason.value.trim();
-  if (reason.length < 10 || reason.length > 2000) {
-    cancelError.value = reason.length > 2000 ? 'Lý do không được vượt quá 2.000 ký tự.' : 'Ghi lý do huỷ, tối thiểu 10 ký tự.';
+  if (!reason || reason.length > 2000) {
+    cancelError.value = reason.length > 2000 ? 'Lý do không được vượt quá 2.000 ký tự.' : 'Vui lòng nhập lý do huỷ đơn.';
     return;
   }
   cancelBusy.value = true;

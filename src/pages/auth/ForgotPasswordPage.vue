@@ -211,11 +211,7 @@ const handleConfirmOtp = () => {
     toast.error('Vui lòng nhập đầy đủ mã OTP 6 chữ số');
     return;
   }
-  if (expireSeconds.value <= 0) {
-    toast.error('Mã OTP đã hết hạn. Vui lòng bấm Gửi lại mã.');
-    return;
-  }
-  // Proceed to Step 3 (Set New Password)
+  // Proceed to Step 3 (Set New Password); BE validates actual OTP expiry on submit.
   currentStep.value = 3;
 };
 
@@ -496,7 +492,7 @@ const handleResetPassword = async () => {
       <button
         type="submit"
         class="w-full h-10 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-bold border border-slate-300 rounded-xl transition-all mt-4 flex items-center justify-center gap-2 shadow-sm hover:shadow-md cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white disabled:shadow-none"
-        :disabled="!isOtpComplete || expireSeconds <= 0 || authStore.loading || isCooldown"
+        :disabled="!isOtpComplete || authStore.loading || isCooldown"
       >
         <span>Tiếp tục đặt mật khẩu</span>
       </button>

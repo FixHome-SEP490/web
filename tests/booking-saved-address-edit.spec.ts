@@ -112,7 +112,8 @@ describe('WEB-H03 saved address edit', () => {
     wrapper.unmount();
   });
 
-  it('rejects moving to a different administrative area instead of retaining old codes', async () => {
+  it('updates to a verified different administrative area with the new district instead of retaining old codes', async () => {
+    updateAddress.mockResolvedValue({ ...oldAddress, line1: '8 Different Street', ward: 'Phường 2', district: 'Quận 3', lat: 10.79, lng: 106.68 });
     reverse.mockResolvedValue({ formattedAddress: '8 Different Street', ward: 'Phường 2', district: 'Quận 3', province: 'TP. Hồ Chí Minh' });
     const wrapper = await render();
     await openEdit(wrapper);
@@ -122,8 +123,15 @@ describe('WEB-H03 saved address edit', () => {
     await wrapper.find('[data-testid="verify-saved-address-coordinates"]').trigger('click');
     await flushPromises();
     await wrapper.find(save).trigger('click');
-    expect(updateAddress).not.toHaveBeenCalled();
-    expect(wrapper.find(addressError).text()).toContain('khu vực');
+    await flushPromises();
+    expect(updateAddress).toHaveBeenCalledWith('address-owned-id', expect.objectContaining({
+      line1: '8 Different Street',
+      ward: 'Phường 2',
+      district: 'Quận 3',
+      province: 'TP. Hồ Chí Minh',
+      lat: 10.79,
+      lng: 106.68,
+    }));
     wrapper.unmount();
   });
 

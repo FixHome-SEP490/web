@@ -288,8 +288,8 @@ const handleAdjust = async () => {
     adjustError.value = 'Số tiền phải lớn hơn 0.';
     return;
   }
-  if (!adjustReason.value.trim() || adjustReason.value.trim().length < 10) {
-    adjustError.value = 'Ghi lý do điều chỉnh, tối thiểu 10 ký tự.';
+  if (!adjustReason.value.trim()) {
+    adjustError.value = 'Ghi lý do điều chỉnh.';
     return;
   }
 
@@ -565,13 +565,13 @@ onMounted(() => {
         </Transition>
         <label :class="consoleLabel">
           Ký quỹ tối thiểu (₫)
-          <input v-model.number="editMinBalance" type="number" min="0" step="50000" inputmode="numeric" :class="consoleField" class="h-10 max-w-xs font-num" />
+          <input v-model.number="editMinBalance" type="number" min="0" max="100000000" step="1" inputmode="numeric" :class="consoleField" class="h-10 max-w-xs font-num" />
           <span class="text-xs font-normal text-ink-500">Số dư thấp hơn mức này thì kỹ thuật viên không nhận lời mời mới.</span>
         </label>
         <label :class="consoleLabel">
           Phí nền tảng (phần vạn)
           <span class="flex max-w-xs items-center gap-3">
-            <input v-model.number="editFeeRateBps" type="number" min="0" max="5000" step="100" inputmode="numeric" :class="consoleField" class="h-10 w-full font-num" />
+            <input v-model.number="editFeeRateBps" type="number" min="0" max="5000" step="1" inputmode="numeric" :class="consoleField" class="h-10 w-full font-num" />
             <span class="whitespace-nowrap font-num font-semibold text-brand-700">= {{ (editFeeRateBps / 100).toFixed(1) }}%</span>
           </span>
           <span class="text-xs font-normal text-ink-500">1500 = 15%, trừ khi đơn hoàn thành.</span>
@@ -630,11 +630,11 @@ onMounted(() => {
             </div>
             <label :class="consoleLabel">
               Số tiền (₫)
-              <input v-model.number="adjustAmount" type="number" min="1000" step="10000" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
+              <input v-model.number="adjustAmount" type="number" min="1" max="100000000" step="1" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
             </label>
             <label :class="consoleLabel">
               Lý do
-              <textarea v-model="adjustReason" rows="3" placeholder="Tối thiểu 10 ký tự" :class="consoleTextarea" />
+              <textarea v-model="adjustReason" rows="3" placeholder="Nhập lý do điều chỉnh" :class="consoleTextarea" />
             </label>
             <Transition name="fh-fade-slide">
               <p v-if="adjustError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ adjustError }}</p>

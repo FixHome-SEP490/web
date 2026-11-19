@@ -186,12 +186,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
     const wrapper = await mountPage();
 
     expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, excludeVisitGroups: 'true' }]);
-    expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'submitted', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'matching', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'closed', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' },
-    ]);
+    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'submitted,matching,closed,cancelled', excludeVisitGroups: 'true', withoutOrder: 'true' }]);
     // A matched booking shows as its order only; "Tất cả (N)" counts only the active list.
     expect(wrapper.get('[data-testid="orders-header-artwork"]').attributes('src')).toBe('/images/ui/customer-orders-board.png');
     expect(wrapper.find('[data-testid="booking-card-bm"]').exists()).toBe(false);
@@ -209,7 +204,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
   it('stays on repair orders when filtering produces zero orders even if unmatched requests exist', async () => {
     serve(
       { completed: [makeOrder({ id: 'oDone', status: 'completed' })] },
-      { matching: [makeBooking({ id: 'bWait', status: 'matching' })] },
+      { closed: [makeBooking({ id: 'bWait', status: 'closed' })] },
     );
     const wrapper = await mountPage();
 
@@ -225,7 +220,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
   it('CANCELLED, IN_PROGRESS and COMPLETED ask the server for their own states only', async () => {
     serve(
       { cancelled: [makeOrder({ id: 'oX', status: 'cancelled' })], under_repair: [makeOrder({ id: 'oR', status: 'under_repair' })] },
-      { cancelled: [makeBooking({ id: 'bC', status: 'cancelled' })], matching: [makeBooking({ id: 'bM', status: 'matching' })] },
+      { cancelled: [makeBooking({ id: 'bC', status: 'cancelled' })], closed: [makeBooking({ id: 'bM', status: 'closed' })] },
     );
     const wrapper = await mountPage();
 
@@ -233,7 +228,7 @@ describe('CustomerOrdersPage: requests per tab', () => {
     await wrapper.get('[data-testid="history-tab-CANCELLED"]').trigger('click');
     await flushPromises();
     expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' }]);
-    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' }]);
+    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true', withoutOrder: 'true' }]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oX']);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bC']);
@@ -242,16 +237,9 @@ describe('CustomerOrdersPage: requests per tab', () => {
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-IN_PROGRESS"]').trigger('click');
     await flushPromises();
-    // The strict Backend DTO accepts one status per request; the page merges them.
-    expect(calls('/service-orders/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'accepted', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'en_route', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'under_repair', excludeVisitGroups: 'true' },
-    ]);
-    expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 10, status: 'submitted', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 10, status: 'matching', excludeVisitGroups: 'true' },
-    ]);
+    // One request per tab: the server takes several states at once.
+    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'accepted,en_route,under_repair', excludeVisitGroups: 'true' }]);
+    expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, statuses: 'submitted,matching,closed', excludeVisitGroups: 'true', withoutOrder: 'true' }]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oR']);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['bM']);
@@ -302,12 +290,7 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     mockGet.mockClear();
     await pager.get('[data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
-    expect(calls('/bookings/my')).toEqual([
-      { page: 1, pageSize: 20, status: 'submitted', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 20, status: 'matching', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 20, status: 'closed', excludeVisitGroups: 'true' },
-      { page: 1, pageSize: 20, status: 'cancelled', excludeVisitGroups: 'true' },
-    ]);
+    expect(calls('/bookings/my')).toEqual([{ page: 2, pageSize: 10, statuses: 'submitted,matching,closed,cancelled', excludeVisitGroups: 'true', withoutOrder: 'true' }]);
     expect(calls('/service-orders/my')).toEqual([]);
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['c6', 'c5', 'c4', 'c3', 'c2', 'c1']);
   });
@@ -334,8 +317,8 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     expect(calls('/service-orders/my').filter((p) => p.page === 2)).toHaveLength(1);
   });
 
-  it('searches locally without sending query parameters rejected by the Backend DTO', async () => {
-    serve({ accepted: orders25 }, { submitted: [makeBooking({ id: 'bS', serviceName: 'Sửa điều hoà' })] });
+  it('searches on the server with one request per list, back on page 1', async () => {
+    serve({ accepted: orders25 }, { closed: [makeBooking({ id: 'bS', status: 'closed', serviceName: 'Sửa điều hoà' })] });
     const wrapper = await mountPage();
     await wrapper.get('[data-testid="orders-section"] [data-testid="pagination-page-2"]').trigger('click');
     await flushPromises();
@@ -346,16 +329,13 @@ describe('CustomerOrdersPage: numbered pagination', () => {
     expect(mockGet).not.toHaveBeenCalled();
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
-    expect(calls('/service-orders/my')).toEqual(
-      ['accepted', 'en_route', 'under_repair', 'completed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status, excludeVisitGroups: 'true' })),
-    );
-    expect(calls('/bookings/my')).toEqual(
-      ['submitted', 'matching', 'closed', 'cancelled'].map((status) => ({ page: 1, pageSize: 100, status, excludeVisitGroups: 'true' })),
-    );
-    expect(mockGet.mock.calls.some(([, options]) => 'statuses' in (options as { params: Params }).params || 'search' in (options as { params: Params }).params)).toBe(false);
+    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, search: 'ORD-3', excludeVisitGroups: 'true' }]);
+    expect(calls('/bookings/my')).toEqual([
+      { page: 1, pageSize: 10, statuses: 'submitted,matching,closed,cancelled', search: 'ORD-3', excludeVisitGroups: 'true', withoutOrder: 'true' },
+    ]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['o3']);
 
-    await wrapper.get('input[type="text"]').setValue('sua dieu hoa');
+    await wrapper.get('input[type="text"]').setValue('điều hoà');
     await new Promise((resolve) => setTimeout(resolve, 350));
     await flushPromises();
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
@@ -372,7 +352,7 @@ describe('CustomerOrdersPage: one list at a time', () => {
   it('shows repair orders first, with both counts on the switch, and the requests on demand', async () => {
     serve(
       { accepted: [makeOrder({ id: 'o1', bookingId: 'x1' })], completed: [makeOrder({ id: 'o2', bookingId: 'x2', status: 'completed' })] },
-      { submitted: [makeBooking({ id: 'b1' })] },
+      { closed: [makeBooking({ id: 'b1', status: 'closed' })] },
     );
     const wrapper = await mountPage();
     expect(wrapper.get('[data-testid="list-switch-orders"]').text()).toContain('Đơn sửa chữa');
@@ -385,6 +365,19 @@ describe('CustomerOrdersPage: one list at a time', () => {
     expect(cardIds(wrapper, 'booking-card-')).toEqual(['b1']);
     expect(cardIds(wrapper, 'order-card-')).toEqual([]);
     expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
+  });
+
+  it('opens on a request still waiting for a technician even when repair orders exist (PO 19/11)', async () => {
+    serve({ under_repair: [makeOrder({ id: 'o1', bookingId: 'x1', status: 'under_repair' })] }, { matching: [makeBooking({ id: 'bW', status: 'matching' })] });
+    const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
+    expect(cardIds(wrapper, 'booking-card-')).toEqual(['bW']);
+  });
+
+  it('opens on a visit still waiting for a technician even when repair orders exist (PO 19/11)', async () => {
+    serve({ under_repair: [makeOrder({ id: 'o1', bookingId: 'x1', status: 'under_repair' })] }, {}, [{ ...makeVisit('vW'), status: 'submitted' }], 1);
+    const wrapper = await mountPage();
+    expect(wrapper.get('[data-testid="list-switch-visits"]').attributes('aria-pressed')).toBe('true');
   });
 
   it('opens on the requests when there is no repair order yet', async () => {
@@ -465,7 +458,7 @@ describe('CustomerOrdersPage: partial failure', () => {
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') throw new Error('Network Error');
-      return opts.params.status === 'submitted' ? response([makeBooking()], 1) : response([], 0);
+      return (opts.params.statuses ?? '').split(',').includes('submitted') ? response([makeBooking()], 1) : response([], 0);
     });
     const wrapper = await mountPage();
     expect(wrapper.get('[data-testid="booking-card-b1"]').text()).toContain('Sửa điều hoà');
@@ -487,7 +480,7 @@ describe('CustomerOrdersPage: partial failure', () => {
     let attempts = 0;
     mockGet.mockReset().mockImplementation(async (url: string, opts: { params: Params }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
-      if (url === '/bookings/my') return opts.params.status === 'submitted' ? response([makeBooking({ id: 'keep' })], 1) : response([], 0);
+      if (url === '/bookings/my') return (opts.params.statuses ?? '').split(',').includes('closed') ? response([makeBooking({ id: 'keep', status: 'closed' })], 1) : response([], 0);
       if (opts.params.page === 2) {
         attempts++;
         if (attempts === 1) throw new Error('network failure');

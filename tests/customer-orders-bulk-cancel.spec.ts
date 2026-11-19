@@ -83,14 +83,13 @@ describe('CustomerOrdersPage: Request status visibility and bulk actions', () =>
     mockToast.error.mockReset();
   });
 
-  it('keeps unmatched booking requests out of the orders view and surfaces their count in the requests tab', async () => {
-    mockGet.mockImplementation(async (url: string, opts?: { params?: { status?: string } }) => {
+  it('opens on requests still waiting for a technician, never mixing them into the orders view (PO 19/11)', async () => {
+    mockGet.mockImplementation(async (url: string, opts?: { params?: { statuses?: string } }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') return response([makeOrder({ id: 'o1' })], 1);
       if (url === '/bookings/my') {
-        const st = opts?.params?.status;
-        if (st === 'submitted') return response([makeBooking({ id: 'b1', status: 'submitted' })], 1);
-        if (st === 'matching') return response([makeBooking({ id: 'b2', status: 'matching' })], 1);
+        const states = (opts?.params?.statuses ?? '').split(',');
+        if (states.includes('submitted')) return response([makeBooking({ id: 'b1', status: 'submitted' }), makeBooking({ id: 'b2', status: 'matching' })], 2);
         return response([], 0);
       }
       return response([], 0);
@@ -109,26 +108,24 @@ describe('CustomerOrdersPage: Request status visibility and bulk actions', () =>
     });
     await flushPromises();
 
-    // Default view is orders and never mixes pending booking requests inside orders-section
-    expect(wrapper.get('[data-testid="list-switch-orders"]').attributes('aria-pressed')).toBe('true');
-    expect(wrapper.find('[data-testid="pending-requests-callout"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="booking-card-b1"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('2');
-
-    // Clicking the requests switcher opens the requests view
-    await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
-    await flushPromises();
+    // Waiting requests are what the customer is told about, so they open first.
     expect(wrapper.get('[data-testid="list-switch-requests"]').attributes('aria-pressed')).toBe('true');
     expect(wrapper.find('[data-testid="booking-card-b1"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="list-switch-requests"]').text()).toContain('2');
+
+    // The orders view never shows them.
+    await wrapper.get('[data-testid="list-switch-orders"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="pending-requests-callout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="booking-card-b1"]').exists()).toBe(false);
   });
 
   it('shows cancelled bookings count only in requests tab while keeping orders view clean', async () => {
-    mockGet.mockImplementation(async (url: string, opts?: { params?: { status?: string } }) => {
+    mockGet.mockImplementation(async (url: string, opts?: { params?: { statuses?: string } }) => {
       if (url === '/visit-groups/my-page') return response([], 0);
       if (url === '/service-orders/my') return response([makeOrder({ id: 'o1' })], 1);
       if (url === '/bookings/my') {
-        const st = opts?.params?.status;
-        if (st === 'cancelled') {
+        if ((opts?.params?.statuses ?? '').split(',').includes('cancelled')) {
           return response([
             makeBooking({ id: 'b1', status: 'cancelled' }),
             makeBooking({ id: 'b2', status: 'cancelled' }),

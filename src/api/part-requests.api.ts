@@ -365,7 +365,7 @@ const REVIEW_STATUSES: readonly LegacyReviewStatus[] = ['INVESTIGATING', 'PHYSIC
 const reviewText = (value: unknown): string => {
   if (typeof value !== 'string') throw new LegacyManualReviewPayloadError();
   const text = value.trim();
-  if (text.length < 5 || text.length > 300 || /https?:\/\/|\S+@\S+|(?:\+?84|0)[\d .()-]{8,}/i.test(text)) throw new LegacyManualReviewPayloadError();
+  if (text.length < 5 || text.length > 300 || !/^(?![\s\S]*(?:https?:\/\/|www\.|@|\+?\d[\d .()-]{8,}\d))[^\x00-\x1f\x7f]+$/i.test(text)) throw new LegacyManualReviewPayloadError();
   return text;
 };
 /** Mirrors DTO bounds for feedback only; the SM-only Backend remains authoritative. */

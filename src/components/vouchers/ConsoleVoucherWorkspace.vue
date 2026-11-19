@@ -78,7 +78,6 @@ const normalizedDraft = computed(() => ({ ...draft,
 const errors = computed(() => {
   const found = validateVoucherCampaignDraft(normalizedDraft.value);
   if ((draft.categoryIds?.length ?? 0) > 100 || (draft.serviceIds?.length ?? 0) > 100) found.push('Chỉ chọn tối đa 100 danh mục và 100 dịch vụ.');
-  if (draft.categoryIds?.length && draft.serviceIds?.some(id => !props.services.some(s => s.id === id && draft.categoryIds?.includes(s.categoryId)))) found.push('Dịch vụ đã chọn phải thuộc danh mục đã chọn.');
   return found;
 });
 const canWrite = computed(() => props.canManage && props.connected && props.state === 'ready' && !props.busy);

@@ -337,12 +337,12 @@ const handleSubmit = async () => {
                 id="review-comment"
                 v-model="comment"
                 rows="3"
-                maxlength="500"
+                maxlength="2000"
                 placeholder="Chia sẻ thêm cảm nhận của bạn về sự tận tâm, chuyên nghiệp, thời gian và chất lượng dịch vụ..."
                 class="w-full p-3 bg-white border border-ink-200 rounded-xl text-xs text-ink-800 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20 transition-all placeholder:text-ink-400"
               ></textarea>
               <div class="flex justify-end text-xs text-ink-400">
-                {{ comment.length }}/500
+                {{ comment.length }}/2000
               </div>
             </div>
 

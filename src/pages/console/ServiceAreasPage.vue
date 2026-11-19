@@ -13,12 +13,25 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import { consoleField, consoleLabel } from '../../components/console/console-ui';
 import { userFacingError } from '../../utils/user-facing-error';
 import { serviceAreasApi, type ServiceArea } from '../../api/service-areas.api';
+import { vietnamProvincesApi } from '../../api/vietnam-provinces.api';
 import { slicePage } from '../../api/paging';
 import { useQueryPage } from '../../composables/useQueryState';
+
+interface ProvinceOption {
+  code: string;
+  name: string;
+}
+
+const DEFAULT_PROVINCES: ProvinceOption[] = [
+  { code: '01', name: 'Hà Nội' },
+  { code: '79', name: 'TP. Hồ Chí Minh' },
+  { code: '48', name: 'Đà Nẵng' },
+];
 
 const loading = ref(true);
 const loadError = ref(false);
 const serviceAreas = ref<ServiceArea[]>([]);
+const loadedProvinces = ref<ProvinceOption[]>([]);
 const formError = ref('');
 const actionError = ref('');
 const saving = ref(false);
@@ -65,8 +78,49 @@ const loadAreas = async () => {
   }
 };
 
+const loadProvinces = async () => {
+  try {
+    const items = await vietnamProvincesApi.getProvinces(1);
+    if (!Array.isArray(items) || items.length === 0) return;
+    loadedProvinces.value = items
+      .map((item) => ({
+        code: String(item.code ?? '').trim().padStart(2, '0'),
+        name: String(item.name ?? '').trim(),
+      }))
+      .filter((item) => item.code && item.name);
+  } catch {
+    // Fallback to DEFAULT_PROVINCES and existing service areas
+  }
+};
+
 onMounted(() => {
   loadAreas();
+  void loadProvinces();
+});
+
+const provinceOptions = computed<ProvinceOption[]>(() => {
+  const byCode = new Map<string, ProvinceOption>();
+  for (const item of DEFAULT_PROVINCES) {
+    byCode.set(item.code, item);
+  }
+  for (const item of loadedProvinces.value) {
+    if (!byCode.has(item.code)) {
+      byCode.set(item.code, item);
+    }
+  }
+  for (const area of serviceAreas.value) {
+    const code = area.provinceCode?.trim();
+    const name = area.provinceName?.trim();
+    if (code && name && !byCode.has(code)) {
+      byCode.set(code, { code, name });
+    }
+  }
+  const currentCode = areaForm.value.provinceCode?.trim();
+  const currentName = areaForm.value.provinceName?.trim();
+  if (currentCode && currentName && !byCode.has(currentCode)) {
+    byCode.set(currentCode, { code: currentCode, name: currentName });
+  }
+  return Array.from(byCode.values());
 });
 
 const filteredAreas = computed(() => {
@@ -110,12 +164,9 @@ const openEditArea = (area: ServiceArea) => {
 };
 
 const onProvinceChange = () => {
-  if (areaForm.value.provinceCode === '01') {
-    areaForm.value.provinceName = 'Hà Nội';
-  } else if (areaForm.value.provinceCode === '79') {
-    areaForm.value.provinceName = 'TP. Hồ Chí Minh';
-  } else if (areaForm.value.provinceCode === '48') {
-    areaForm.value.provinceName = 'Đà Nẵng';
+  const matched = provinceOptions.value.find((prov) => prov.code === areaForm.value.provinceCode);
+  if (matched) {
+    areaForm.value.provinceName = matched.name;
   }
 };
 
@@ -191,9 +242,7 @@ const handleConfirm = async () => {
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm quận, huyện hoặc mã" label="Tìm khu vực" />
       <select v-model="selectedProvince" :class="consoleField" aria-label="Tỉnh, thành phố">
         <option value="ALL">Tất cả tỉnh, thành</option>
-        <option value="01">Hà Nội</option>
-        <option value="79">TP. Hồ Chí Minh</option>
-        <option value="48">Đà Nẵng</option>
+        <option v-for="prov in provinceOptions" :key="prov.code" :value="prov.code">{{ prov.name }}</option>
       </select>
       <button
         v-if="hasFilters"
@@ -274,9 +323,7 @@ const handleConfirm = async () => {
               <label :class="consoleLabel">
                 Tỉnh, thành phố
                 <select v-model="areaForm.provinceCode" :class="consoleField" @change="onProvinceChange">
-                  <option value="01">Hà Nội</option>
-                  <option value="79">TP. Hồ Chí Minh</option>
-                  <option value="48">Đà Nẵng</option>
+                  <option v-for="prov in provinceOptions" :key="prov.code" :value="prov.code">{{ prov.name }}</option>
                 </select>
               </label>
               <label :class="consoleLabel">
