@@ -197,10 +197,12 @@ const applyPlace = (lat: number, lng: number, place?: { formattedAddress?: strin
     addressForm.value.district = place.district || addressForm.value.district;
     addressForm.value.province = place.province || addressForm.value.province;
     if (originalAddress.value) {
-      editLocationVerified.value = Boolean((place.formattedAddress || place.description) && place.province && place.district &&
-        sameArea(place.province, originalAddress.value.province) &&
-        sameArea(place.district, originalAddress.value.district));
-      addressError.value = editLocationVerified.value ? '' : 'Không thể đổi sang khu vực khác tại đây. Vui lòng thêm địa chỉ mới.';
+      editLocationVerified.value = Boolean(
+        (place.formattedAddress || place.description)
+        && (place.province || addressForm.value.province)
+        && (place.district || place.ward || place.province || addressForm.value.district),
+      );
+      addressError.value = '';
     }
   }
 };
@@ -435,14 +437,11 @@ const handleSaveAddress = async () => {
   }
   const areaChanged = !sameArea(original.province, addressForm.value.province) ||
     !sameArea(original.district, addressForm.value.district);
-  if (areaChanged) {
-    addressError.value = 'Không thể đổi sang khu vực khác tại đây. Vui lòng thêm địa chỉ mới.';
-    return;
-  }
   const lat = addressLat.value === '' ? null : Number(addressLat.value);
   const lng = addressLng.value === '' ? null : Number(addressLng.value);
   const locationChanged = line1 !== original.line1.trim() ||
     (addressForm.value.ward || '') !== (original.ward || '') ||
+    areaChanged ||
     lat !== (original.lat == null ? null : Number(original.lat)) ||
     lng !== (original.lng == null ? null : Number(original.lng));
   if (locationChanged && (!editLocationVerified.value || !validCoordinates(addressLat.value, addressLng.value))) {
@@ -453,10 +452,12 @@ const handleSaveAddress = async () => {
   // pinned, so ask for the pin here instead of sending.
   const storedPin = original.lat != null && original.lng != null;
   if (!checkAddressFields({ location: locationChanged || !storedPin })) return;
+  const nextProvince = normalizeAddressText(addressForm.value.province);
+  const nextDistrict = normalizeAddressText(addressForm.value.district || addressForm.value.ward || addressForm.value.province);
   const dto = locationChanged ? {
     label: normalizeAddressText(addressForm.value.label), isDefault: addressForm.value.isDefault,
     line1: normalizeAddressText(line1), ward: normalizeAddressText(addressForm.value.ward),
-    district: original.district, province: original.province,
+    district: nextDistrict, province: nextProvince,
     lat: lat!, lng: lng!,
   } : {
     label: normalizeAddressText(addressForm.value.label), isDefault: addressForm.value.isDefault,

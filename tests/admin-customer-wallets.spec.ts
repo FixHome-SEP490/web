@@ -65,7 +65,10 @@ describe('Admin customer wallets', () => {
     expect(history).toMatch(/Rút về ngân hàng[^₫]*−30\.000/);
   });
 
-  it('refuses a short reason and a debit above the balance before asking', async () => {
+  it('refuses a short reason before asking and surfaces server error when debit exceeds live balance', async () => {
+    adjust.mockRejectedValue({
+      response: { status: 400, data: { success: false, error: { code: 'VALIDATION_FAILED', message: 'Số dư ví khách không đủ để trừ số tiền này' } } },
+    });
     const w = mount(AdminCustomerWalletsPage, { attachTo: document.body });
     await flushPromises();
     await w.get('[data-testid="wallet-row-c1"]').trigger('click');
@@ -76,13 +79,17 @@ describe('Admin customer wallets', () => {
     await w.get('[data-testid="adjust-reason"]').setValue('ngắn');
     await w.get('[data-testid="adjust-form"]').trigger('submit');
     expect(w.text()).toContain('tối thiểu 10 ký tự');
+    expect(adjust).not.toHaveBeenCalled();
+
     await w.get('[data-testid="adjust-debit"]').setValue(true);
     await w.get('[data-testid="adjust-amount"]').setValue('150001');
     await w.get('[data-testid="adjust-reason"]').setValue('Thu lại khoản cộng nhầm');
     await w.get('[data-testid="adjust-form"]').trigger('submit');
     await flushPromises();
-    expect(w.text()).toContain('Không trừ quá số dư');
-    expect(adjust).not.toHaveBeenCalled();
+    confirmButton()!.click();
+    await flushPromises();
+    expect(adjust).toHaveBeenCalledWith('c1', { type: 'DEBIT', amount: 150001, reason: 'Thu lại khoản cộng nhầm' });
+    expect(w.text()).toContain('Số dư ví khách không đủ để trừ số tiền này');
     w.unmount();
   });
 

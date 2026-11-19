@@ -1506,7 +1506,7 @@ const parsedReview = computed(() => {
             </div>
             <input
               v-model.number="confirmCashAmount"
-              type="number" min="0" step="1000" inputmode="numeric"
+              type="number" min="0" step="1" inputmode="numeric"
               class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600 font-num"
             />
           </label>

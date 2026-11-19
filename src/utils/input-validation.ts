@@ -80,9 +80,10 @@ export function validatePassword(value: string): string {
 const PHONE_SHAPE = /^0[35789][0-9]{8}$/;
 
 export function validatePhoneNumber(value: string): string {
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/\s+/g, '');
   if (!trimmed) return '';
-  if (!PHONE_SHAPE.test(trimmed)) return 'SĐT không hợp lệ (VD: 0901234567)';
+  const normalized = trimmed.replace(/^\+84/, '0');
+  if (!PHONE_SHAPE.test(normalized)) return 'SĐT không hợp lệ (VD: 0901234567 hoặc +84901234567)';
   return '';
 }
 

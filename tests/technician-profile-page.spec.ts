@@ -217,8 +217,18 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
     expect((wrapper.get('#tp-warranty-s-1').element as HTMLInputElement).value).toBe('');
     expect(wrapper.get('#tp-warranty-s-1').attributes('placeholder')).toBe('30 (mặc định)');
 
-    await input.setValue('400');
+    await input.setValue('4000');
     expect(buttonsWith(wrapper, 'Lưu mặc định')[0].attributes('disabled')).toBeDefined();
+
+    technicianProfileApi.setDefaultLaborWarranty.mockRejectedValueOnce({
+      response: { status: 400, data: { error: { code: 'BAD_REQUEST', message: 'Bảo hành công tối đa 365 ngày' } } },
+    });
+    await input.setValue('400');
+    expect(buttonsWith(wrapper, 'Lưu mặc định')[0].attributes('disabled')).toBeUndefined();
+    await wrapper.get('[data-testid="default-warranty"]').trigger('submit');
+    await flushPromises();
+    expect(technicianProfileApi.setDefaultLaborWarranty).toHaveBeenCalledWith(400, false);
+    expect(wrapper.text()).toContain('Bảo hành công tối đa 365 ngày');
 
     await input.setValue('90');
     await wrapper.get('[data-testid="warranty-apply-all"]').setValue(true);

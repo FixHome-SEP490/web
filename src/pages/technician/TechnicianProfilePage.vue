@@ -370,7 +370,7 @@ const isSkillDirty = (serviceId: string): boolean => {
 };
 
 // ----------------- Bảo hành công mặc định (PO 10/10/2026) -----------------
-const MAX_WARRANTY_DAYS = 365;
+const MAX_WARRANTY_DAYS = 3650;
 const defaultWarrantyDraft = ref('');
 const applyWarrantyToAll = ref(false);
 const savingDefaultWarranty = ref(false);
@@ -385,7 +385,7 @@ const defaultWarrantyDirty = computed(
 watch(savedDefaultWarranty, (days) => { defaultWarrantyDraft.value = days == null ? '' : String(days); }, { immediate: true });
 
 const handleSaveDefaultWarranty = async () => {
-  if (!defaultWarrantyValid.value) return;
+  if (!defaultWarrantyValid.value || savingDefaultWarranty.value) return;
   savingDefaultWarranty.value = true;
   try {
     const days = Number(defaultWarrantyDraft.value);
@@ -395,8 +395,8 @@ const handleSaveDefaultWarranty = async () => {
     applyWarrantyToAll.value = false;
     if (toAll) await loadServicesAndOfferings();
     showFeedback(toAll ? `Đã đặt bảo hành ${days} ngày cho mọi dịch vụ.` : `Đã đặt bảo hành mặc định ${days} ngày.`);
-  } catch {
-    showFeedback('Chưa lưu được. Vui lòng thử lại.', 'error');
+  } catch (err) {
+    showFeedback(userFacingError(err, 'Chưa lưu được. Vui lòng thử lại.'), 'error');
   } finally {
     savingDefaultWarranty.value = false;
   }
@@ -1081,7 +1081,7 @@ const openAvatarModal = () => {
                   type="number"
                   inputmode="numeric"
                   min="0"
-                  max="60"
+                  max="80"
                   class="w-full h-11 px-3.5 bg-white border border-ink-200 rounded-xl text-[15px] font-num focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
@@ -1145,6 +1145,7 @@ const openAvatarModal = () => {
         <form
           class="p-4 sm:p-5 bg-white rounded-2xl border border-ink-200/80 flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4"
           data-testid="default-warranty"
+          novalidate
           @submit.prevent="handleSaveDefaultWarranty"
         >
           <div class="sm:w-56">
@@ -1289,7 +1290,7 @@ const openAvatarModal = () => {
                     type="number"
                     inputmode="numeric"
                     min="0"
-                    step="10000"
+                    step="1"
                     :disabled="isFixedPrice(service)"
                     :placeholder="isFixedPrice(service) ? 'Theo giá cố định' : 'VD: 150000'"
                     class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl font-num disabled:bg-ink-100 disabled:text-ink-500 focus:outline-none focus:border-brand-600"

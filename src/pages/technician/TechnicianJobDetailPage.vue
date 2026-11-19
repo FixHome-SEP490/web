@@ -2058,7 +2058,7 @@ watch(
 );
 const quoteLaborWarrantyValid = computed(() => {
   const days = quoteLaborWarranty.value;
-  return days === '' || (Number.isInteger(days) && days >= 0 && days <= 365);
+  return days === '' || (Number.isInteger(days) && days >= 0 && days <= 3650);
 });
 
 // A fixed-price device of a visit is quoted at its listed price; the line is filled in for the technician (PO 21/10/2026).
@@ -2559,7 +2559,7 @@ async function handleReceiveCashIntent() {
 const handleDeclareCash = async () => {
   if (actionLoading.value || cashIntentCapability.value === null || cashFirstEnabled.value) return;
   if (!visitGroupId.value && hasCashPayment.value !== 'YES') return;
-  if (!declaredCashAmount.value || declaredCashAmount.value <= 0) {
+  if (!Number.isFinite(declaredCashAmount.value) || declaredCashAmount.value < 0) {
     notifyError('Vui lòng nhập số tiền mặt đã thu.');
     return;
   }
@@ -3163,7 +3163,7 @@ const toggleMore = async () => {
                 :disabled="fixedVisitBase || (item.type === 'PARTS' && item.partSource === 'fixhome')"
                 type="number"
                 min="0"
-                step="10000"
+                step="1"
                 inputmode="numeric"
                 placeholder="Đơn giá"
                 aria-label="Đơn giá"
@@ -3196,7 +3196,7 @@ const toggleMore = async () => {
                 v-model.number="quoteLaborWarranty"
                 type="number"
                 min="0"
-                max="365"
+                max="3650"
                 step="1"
                 inputmode="numeric"
                 placeholder="30"
@@ -3295,7 +3295,7 @@ const toggleMore = async () => {
                 <input
                   v-model.number="declaredCashAmount"
                   type="number"
-                  step="10000"
+                  step="1"
                   inputmode="numeric"
                   placeholder="VD: 300000"
                   class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num text-ink-900"
@@ -3844,7 +3844,7 @@ const toggleMore = async () => {
                       v-else
                       v-model.number="item.unitPrice"
                       type="number"
-                      step="10000"
+                      step="1"
                       inputmode="numeric"
                       placeholder="Đơn giá"
                       aria-label="Đơn giá"
@@ -3910,7 +3910,7 @@ const toggleMore = async () => {
                       <input
                         v-model.number="acShippingFee"
                         type="number"
-                        step="5000"
+                        step="1"
                         inputmode="numeric"
                         class="w-28 h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm font-num focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                       />

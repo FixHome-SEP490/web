@@ -138,12 +138,6 @@ const handleVerify = async () => {
     return;
   }
 
-  if (expireSeconds.value <= 0) {
-    errorMessage.value = 'Mã OTP đã hết hạn. Vui lòng bấm Gửi lại mã.';
-    toast.error(errorMessage.value);
-    return;
-  }
-
   isCooldown.value = true;
   errorMessage.value = '';
 
@@ -311,7 +305,7 @@ const handleResend = async () => {
       <button
         type="submit"
         class="w-full h-10 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-bold border border-slate-300 rounded-xl transition-all mt-4 flex items-center justify-center gap-2 shadow-sm hover:shadow-md cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white disabled:shadow-none"
-        :disabled="!isComplete || expireSeconds <= 0 || authStore.loading || isCooldown"
+        :disabled="!isComplete || authStore.loading || isCooldown"
       >
         <span
           v-if="authStore.loading"

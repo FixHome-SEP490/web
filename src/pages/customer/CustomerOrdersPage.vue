@@ -1300,7 +1300,7 @@ function cancelStale() {
           v-if="cancelReasonSelected === 'Lý do khác'"
           v-model="customCancelReason"
           type="text"
-          maxlength="200"
+          maxlength="2000"
           placeholder="Nhập lý do huỷ cụ thể..."
           class="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none"
         />

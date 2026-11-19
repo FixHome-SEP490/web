@@ -95,11 +95,11 @@ const showStatusModal = ref(false);
 const mutationLoading = ref(false);
 
 const nextStatus = computed<AdminUserStatus>(() =>
-  userToToggle.value?.status === 'locked' ? 'active' : 'locked',
+  userToToggle.value?.status === 'locked' || userToToggle.value?.status === 'suspended' ? 'active' : 'locked',
 );
 
 const canToggleStatus = (status: AdminUserStatus) =>
-  status === 'active' || status === 'locked';
+  status === 'active' || status === 'locked' || status === 'suspended';
 
 const confirmStatusChange = async () => {
   if (
@@ -338,7 +338,7 @@ async function handleCreateTechnician() {
     createTechError.value = 'Nhập họ tên và email.';
     return;
   }
-  const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '');
+  const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '').replace(/^\+84/, '0');
   if (phone && !/^0[35789]\d{8}$/.test(phone)) {
     createTechError.value = 'Số điện thoại phải là số di động Việt Nam 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09.';
     return;
@@ -447,8 +447,8 @@ async function handleCreateTechnician() {
         <template #cell-active="{ row }">
           <ConsoleMoreMenu label="Thao tác với tài khoản">
             <ConsoleMenuItem @click="openDetail(row)">Xem chi tiết</ConsoleMenuItem>
-            <ConsoleMenuItem v-if="canToggleStatus(row.status)" :danger="row.status !== 'locked'" @click="userToToggle = row; showStatusModal = true">
-              {{ row.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}
+            <ConsoleMenuItem v-if="canToggleStatus(row.status)" :danger="row.status === 'active'" @click="userToToggle = row; showStatusModal = true">
+              {{ row.status === 'active' ? 'Khoá tài khoản' : 'Mở khoá tài khoản' }}
             </ConsoleMenuItem>
           </ConsoleMoreMenu>
         </template>
@@ -542,7 +542,7 @@ async function handleCreateTechnician() {
             </form>
 
             <div class="flex flex-wrap justify-end gap-2">
-              <FhButton v-if="canToggleStatus(detailUser.status)" :variant="detailUser.status === 'locked' ? 'primary' : 'danger'" size="sm" data-testid="user-detail-toggle" @click="askToggleFromDetail">{{ detailUser.status === 'locked' ? 'Mở khoá tài khoản' : 'Khoá tài khoản' }}</FhButton>
+              <FhButton v-if="canToggleStatus(detailUser.status)" :variant="detailUser.status === 'active' ? 'danger' : 'primary'" size="sm" data-testid="user-detail-toggle" @click="askToggleFromDetail">{{ detailUser.status === 'active' ? 'Khoá tài khoản' : 'Mở khoá tài khoản' }}</FhButton>
               <FhButton variant="secondary" size="sm" @click="detailOpen = false">Đóng</FhButton>
             </div>
           </div>

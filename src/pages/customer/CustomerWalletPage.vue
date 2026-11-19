@@ -237,7 +237,7 @@ async function topUp() {
                   inputmode="numeric"
                   min="10000"
                   max="50000000"
-                  step="10000"
+                  step="1"
                   placeholder="Số tiền khác (từ 10.000 ₫)"
                   aria-label="Số tiền nạp"
                   data-testid="topup-amount"

@@ -161,17 +161,17 @@ describe('OrderComplaintPanel', () => {
     withCase.unmount();
   });
 
-  it('blocks a too-short description and does not call the API', async () => {
+  it('blocks an empty description and does not call the API', async () => {
     apiClientMock.get.mockResolvedValueOnce(envelope([], { ...listMeta, total: 0, totalPages: 0 }));
     const wrapper = await mountPanel();
 
     await wrapper.findAll('button').find((b) => b.text() === 'Gửi khiếu nại')!.trigger('click');
-    await wrapper.get('#complaint-reason').setValue('ngắn');
+    await wrapper.get('#complaint-reason').setValue('   ');
     const submit = wrapper.findAll('button').filter((b) => b.text().includes('Gửi khiếu nại')).at(-1)!;
     await submit.trigger('click');
 
     expect(apiClientMock.post).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('ít nhất 10 ký tự');
+    expect(wrapper.text()).toContain('Vui lòng mô tả vấn đề');
     wrapper.unmount();
   });
 
