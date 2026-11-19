@@ -114,7 +114,7 @@ function cancel() {
           v-model="newPassword"
           type="password"
           autocomplete="new-password"
-          placeholder="Tối thiểu 6 ký tự"
+          placeholder="Tối thiểu 8 ký tự (chữ hoa, thường, số, ký tự đặc biệt)"
           class="h-9 rounded-xl border border-ink-200 bg-white px-3 text-sm font-normal focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
       </label>

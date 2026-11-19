@@ -77,13 +77,28 @@ describe('Technician labor warranty on the job page', () => {
     w.unmount();
   });
 
-  it('refuses more than 365 days without calling the server', async () => {
+  it('refuses more than 3650 days on the client and surfaces server max-days rejection for 400 days', async () => {
     const w = await mountPage(base);
-    await w.get('[data-testid="quote-labor-warranty"] input').setValue(400);
+    await w.get('[data-testid="quote-labor-warranty"] input').setValue(4000);
     await submitQuote(w);
 
     expect(mockPost.mock.calls.some(([p]) => p === '/service-orders/job-1/quotations')).toBe(false);
     expect(w.get('[data-testid="quote-labor-warranty"] input').classes()).toContain('border-danger-500');
+
+    const form = w.get('[data-testid="quotation-form"]');
+    await form.findAll('button').find(b => b.text().includes('Thêm tiền công'))!.trigger('click');
+    const [description, price] = form.findAll('input').slice(0, 2);
+    await description.setValue('Thay bạc đạn');
+    await price.setValue(150000);
+    await w.get('[data-testid="quote-labor-warranty"] input').setValue(400);
+    mockPost.mockRejectedValueOnce({
+      response: { status: 400, data: { error: { code: 'BAD_REQUEST', message: 'Bảo hành công tối đa 365 ngày' } } },
+    });
+    await submitQuote(w);
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-1/quotations', expect.objectContaining({
+      items: [expect.objectContaining({ warrantyDays: 400 })],
+    }));
+    expect(w.text()).toContain('Bảo hành công tối đa 365 ngày');
     w.unmount();
   });
 

@@ -81,7 +81,6 @@ const isLoadingUrls = ref(false);
 
 const attendedVisit = computed(() => detail.value?.visits.find((v) => v.status === 'attended') ?? null);
 const scheduledVisit = computed(() => detail.value?.visits.find((v) => v.status === 'scheduled') ?? null);
-const canApprove = computed(() => Boolean(attendedVisit.value) && Object.values(decisions).some((d) => d.approved));
 
 const detailDocuments = computed(() => detail.value?.documents ?? []);
 const frontIdDoc = computed(() => detailDocuments.value.find((d) => d.documentType.toLowerCase() === 'citizen_id_front'));
@@ -178,7 +177,7 @@ const resetMissed = () =>
   detail.value && act(() => adminOfficeVisitsApi.resetMissed(detail.value!.technicianId), 'Đã cho phép thợ đặt lại lịch.', 'Chưa cho phép đặt lại được.');
 
 const approve = async () => {
-  if (!detail.value || !canApprove.value) return;
+  if (!detail.value || busy.value) return;
   const technicianId = detail.value.technicianId;
   const skills = detail.value.skills.map((s) => ({ skillId: s.id, level: decisions[s.id].level, approved: decisions[s.id].approved }));
   await act(
@@ -275,6 +274,7 @@ const confirmReject = async () => {
         <option value="visit_required">Chờ thợ đặt lịch</option>
         <option value="visit_scheduled">Đã đặt lịch lên trụ sở</option>
         <option value="profile_review">Đã gặp, chờ duyệt hồ sơ</option>
+        <option value="profile_rejected">Hồ sơ bị từ chối</option>
         <option value="visit_blocked">Bị khóa đặt lịch</option>
       </select>
       <button
@@ -350,6 +350,9 @@ const confirmReject = async () => {
             </header>
 
             <div class="flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-5">
+              <Transition name="fh-fade-slide">
+                <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800">{{ error }}</p>
+              </Transition>
               <section class="space-y-2 rounded-[var(--radius-md)] border border-ink-200 bg-ink-25/50 p-4">
                 <h4 class="text-sm font-semibold text-ink-900">Buổi gặp tại trụ sở</h4>
                 <p v-if="scheduledVisit" class="text-sm text-ink-700">
@@ -532,7 +535,7 @@ const confirmReject = async () => {
               <div class="flex flex-wrap justify-end gap-2">
                 <FhButton variant="secondary" size="sm" @click="closeDetail">Đóng</FhButton>
                 <FhButton variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
-                <FhButton variant="primary" size="sm" :loading="busy" :disabled="!canApprove" @click="approve">Duyệt hồ sơ</FhButton>
+                <FhButton variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
               </div>
             </footer>
           </section>

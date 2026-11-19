@@ -1094,8 +1094,10 @@ describe('customer visit page', () => {
     visitApi.checkout.mockResolvedValue(checkout({ pendingCash: { id: 'c1', amount: 250000 } }));
     visitApi.confirmCash.mockRejectedValue(new Error('Network unavailable'));
     const w = await mountPage();
+    await w.get('[data-testid="visit-cash-dispute-reason"]').setValue('Tôi chỉ đưa 200.000 đ');
     await w.get('[data-testid="visit-cash-dispute"]').trigger('click');
     await flushPromises();
+    expect(visitApi.confirmCash).toHaveBeenCalledWith('v1', false, 'Tôi chỉ đưa 200.000 đ');
     const alert = w.get('[data-testid="visit-action-message"]');
     expect(alert.attributes('role')).toBe('alert');
     expect(alert.text()).toContain('Chưa gửi được yêu cầu kiểm tra tiền mặt');

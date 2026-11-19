@@ -52,7 +52,7 @@ describe('Service Manager cancels an order', () => {
     await wrapper.get('[data-testid="order-cancel-open"]').trigger('click');
     await wrapper.get('[data-testid="order-cancel-confirm"]').trigger('click');
     expect(mocks.cancelOrder).not.toHaveBeenCalled();
-    expect(wrapper.get('[role="alert"]').text()).toContain('tối thiểu 10 ký tự');
+    expect(wrapper.get('[role="alert"]').text()).toContain('nhập lý do');
     mocks.getConsoleOrderContext.mockResolvedValue(order('cancelled'));
     await wrapper.get('[data-testid="order-cancel-reason"]').setValue('  Khách báo đã tự sửa được máy  ');
     const confirm = wrapper.get('[data-testid="order-cancel-confirm"]');

@@ -1961,7 +1961,7 @@ const handleLogout = async () => {
             <input
               v-model.number="serviceRadiusKm"
               type="range"
-              min="3"
+              min="1"
               max="40"
               step="1"
               class="w-full accent-brand-600 cursor-pointer"

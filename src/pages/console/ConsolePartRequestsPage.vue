@@ -412,7 +412,7 @@ const isOpen = (req: PartRequest) => ['requested', 'ready', 'delivering'].includ
 const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.toLowerCase()) && !!req.qrToken && (req.fulfillmentMethod === 'delivery' || allocationFor(req)?.mode === 'legacy');
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
 const canMarkLegacyPickupReady = (req: PartRequest) => req.fulfillmentMethod === 'pickup' && allocationFor(req)?.mode === 'legacy';
-const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
+const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'quotation' ? 'Báo giá tại chỗ' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
 // The technician takes the new part first and brings the faulty one back later; the manager inspects it once it is back, once.
 const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !!req.faultyReturnedAt && !req.faultyInspectionResult;
 const faultyReturnLabel = (req: PartRequest) => {
@@ -515,6 +515,7 @@ const getUsageBadgeClass = (status: string) => {
       <select v-model="typeFilter" :class="consoleField" aria-label="Loại yêu cầu">
         <option value="ALL">Tất cả loại</option>
         <option value="PRE_REPAIR">Trước sửa chữa</option>
+        <option value="QUOTATION">Báo giá tại chỗ</option>
         <option value="ADDITIONAL">Phát sinh</option>
         <option value="WARRANTY">Bảo hành</option>
       </select>

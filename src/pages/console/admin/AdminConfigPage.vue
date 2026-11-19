@@ -39,8 +39,8 @@ const configDefinitions: ConfigDefinition[] = [
   { key: 'matching.max_shortlist', valueType: 'int', effectStatus: 'NOT_IMPLEMENTED', min: 1, max: 2, description: 'Số kỹ thuật viên khách được chọn (cố định 1 đến 2, chỉ để tham khảo).' },
   { key: 'matching.mode', valueType: 'enum', effectStatus: 'STALE_REVIEW', enumValues: ['SEQUENTIAL'], description: 'Cách mời kỹ thuật viên.' },
   { key: 'matching.invitation_ttl_minutes', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 1440, description: 'Thời gian lời mời còn hiệu lực (phút).' },
-  { key: 'geofence.radius_meters', valueType: 'int', effectStatus: 'TO_WIRE', min: 10, max: 5000, description: 'Bán kính xác nhận đã đến nơi (mét).' },
-  { key: 'geofence.min_gps_accuracy_meters', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 500, description: 'Sai số GPS tối đa khi xác nhận đến nơi (mét).' },
+  { key: 'geofence.radius_meters', valueType: 'int', effectStatus: 'TO_WIRE', min: 10, max: 10000, description: 'Bán kính xác nhận đã đến nơi (mét).' },
+  { key: 'geofence.min_gps_accuracy_meters', valueType: 'int', effectStatus: 'ACTIVE', min: 5, max: 10000, description: 'Sai số GPS tối đa khi xác nhận đến nơi (mét).' },
   { key: 'evidence.before.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh trước sửa chữa tối thiểu.' },
   { key: 'evidence.after.min_count', valueType: 'int', effectStatus: 'ACTIVE', min: 0, max: 10, description: 'Số ảnh sau sửa chữa tối thiểu.' },
   { key: 'evidence.max_file_mb', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 50, description: 'Dung lượng tối đa mỗi ảnh bằng chứng (MB).' },
@@ -58,10 +58,10 @@ const configDefinitions: ConfigDefinition[] = [
   { key: 'additional_cost.approval_ttl_minutes', valueType: 'int', effectStatus: 'STALE_REVIEW', min: 5, max: 1440, description: 'Thời gian chờ khách duyệt chi phí phát sinh (phút).' },
   { key: 'warranty.default_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Thời hạn bảo hành mặc định (ngày).' },
   { key: 'warranty.max_days', valueType: 'int', effectStatus: 'TO_WIRE', min: 0, max: 3650, description: 'Thời hạn bảo hành tối đa (ngày).' },
-  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'fixhome'], description: 'Nguồn chẩn đoán AI đang dùng.' },
+  { key: 'ai.provider', valueType: 'enum', effectStatus: 'TO_WIRE', enumValues: ['stub', 'gemini', 'openai', 'fixhome'], description: 'Nguồn chẩn đoán AI đang dùng.' },
   { key: 'ai.timeout_ms', valueType: 'int', effectStatus: 'TO_WIRE', min: 1000, max: 60000, description: 'Thời gian chờ AI trả lời tối đa (mili giây).' },
   { key: 'ai.rate_limit_per_user_per_hour', valueType: 'int', effectStatus: 'TO_WIRE', min: 1, max: 1000, description: 'Số lần hỏi AI tối đa của mỗi người trong một giờ.' },
-  { key: 'payment.mode', valueType: 'enum', effectStatus: 'NOT_IMPLEMENTED', enumValues: ['DEMO', 'LIVE'], description: 'Chế độ thanh toán.' },
+  { key: 'payment.mode', valueType: 'enum', effectStatus: 'ACTIVE', enumValues: ['DEMO', 'LIVE'], description: 'Chế độ thanh toán.' },
 ];
 
 const columns: ConsoleColumn[] = [

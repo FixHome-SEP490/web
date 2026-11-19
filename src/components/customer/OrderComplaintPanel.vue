@@ -60,7 +60,6 @@ const copy = computed(() =>
       },
 );
 
-const MIN_REASON_LENGTH = 10;
 const evidence = useEvidencePhotos();
 
 const cases = ref<MySupportCase[]>([]);
@@ -122,8 +121,8 @@ async function submit() {
     formError.value = 'Vui lòng chọn loại vấn đề.';
     return;
   }
-  if (trimmed.length < MIN_REASON_LENGTH) {
-    formError.value = `Vui lòng mô tả vấn đề ít nhất ${MIN_REASON_LENGTH} ký tự.`;
+  if (!trimmed) {
+    formError.value = 'Vui lòng mô tả vấn đề.';
     return;
   }
   submitting.value = true;

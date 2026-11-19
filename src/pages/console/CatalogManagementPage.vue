@@ -250,6 +250,7 @@ const openAddService = () => {
   serviceForm.value = {
     categoryId: categories.value[0]?.id ?? '',
     name: '',
+    code: '',
     slug: '',
     basePrice: 150000,
     minPrice: 100000,
@@ -594,7 +595,7 @@ const handleConfirm = async () => {
               <div v-if="serviceForm.pricingMode === 'fixed_price'" class="grid grid-cols-2 gap-3">
                 <label :class="consoleLabel">
                   Giá trọn gói (₫)
-                  <input v-model.number="serviceForm.fixedPrice" type="number" step="10000" inputmode="numeric" :class="consoleField" class="font-num" placeholder="180000" />
+                  <input v-model.number="serviceForm.fixedPrice" type="number" min="0" step="0.01" inputmode="decimal" :class="consoleField" class="font-num" placeholder="180000" />
                 </label>
                 <label :class="consoleLabel">
                   Đơn vị tính
@@ -609,15 +610,15 @@ const handleConfirm = async () => {
               <div v-if="serviceForm.pricingMode === 'inspection_required'" class="grid grid-cols-3 gap-3">
                 <label :class="consoleLabel">
                   Giá thấp nhất (₫)
-                  <input v-model.number="serviceForm.minPrice" type="number" step="10000" inputmode="numeric" :class="consoleField" class="font-num" />
+                  <input v-model.number="serviceForm.minPrice" type="number" min="0" step="0.01" inputmode="decimal" :class="consoleField" class="font-num" />
                 </label>
                 <label :class="consoleLabel">
                   Giá cao nhất (₫)
-                  <input v-model.number="serviceForm.maxPrice" type="number" step="10000" inputmode="numeric" :class="consoleField" class="font-num" />
+                  <input v-model.number="serviceForm.maxPrice" type="number" min="0" step="0.01" inputmode="decimal" :class="consoleField" class="font-num" />
                 </label>
                 <label :class="consoleLabel">
                   Thời lượng (phút)
-                  <input v-model.number="serviceForm.estimatedMinutes" type="number" inputmode="numeric" :class="consoleField" class="font-num" />
+                  <input v-model.number="serviceForm.estimatedMinutes" type="number" min="1" step="1" inputmode="numeric" :class="consoleField" class="font-num" />
                 </label>
               </div>
 

@@ -886,6 +886,7 @@ async function payWithVnpay() {
     busy.value = false;
   }
 }
+const cashDisputeReason = ref('');
 async function answerCash(agreed: boolean) {
   if (voucherCollectionBlocked.value) return;
   if (voucherReconciliationRequired.value || checkoutError.value || loadError.value || activeFundedVoucher.value?.preview.customerDueVnd === 0) return;
@@ -898,13 +899,15 @@ async function answerCash(agreed: boolean) {
     message.value = { type: 'error', text: 'Mã giữ voucher không khớp với lượt này. Chưa gửi xác nhận tiền mặt.' };
     return;
   }
+  const disputeText = cashDisputeReason.value.trim() || 'Số tiền mặt chưa đúng';
   try {
     if (held) await fundedCheckoutApi.confirmCash({ kind: 'VISIT_GROUP', id: groupId }, held.id, agreed
       ? { agreed: true }
-      : { agreed: false, disputeReason: 'Số tiền mặt chưa đúng' });
-    else await visitGroupsApi.confirmCash(groupId, agreed, agreed ? undefined : 'Số tiền mặt chưa đúng');
+      : { agreed: false, disputeReason: disputeText });
+    else await visitGroupsApi.confirmCash(groupId, agreed, agreed ? undefined : disputeText);
     if (disposed || groupId !== visitId.value) return;
     if (held && agreed) clearFundedVoucher();
+    cashDisputeReason.value = '';
     message.value = agreed
       ? { type: 'success', text: 'Đã xác nhận trả tiền mặt.' }
       : { type: 'success', text: 'Đã báo FixHome kiểm tra lại số tiền mặt.' };
@@ -1381,6 +1384,17 @@ async function answerCash(agreed: boolean) {
             <template v-else-if="checkoutState === 'pending_cash'">
               <div v-if="checkout.pendingCash" class="space-y-3 text-ink-700" data-testid="visit-cash-pending">
                 <p>Thợ báo đã nhận <strong class="font-num"><FhMoney :amount="checkout.pendingCash.amount" /></strong> tiền mặt cho {{ checkout.devices.length }} thiết bị. Bạn xác nhận đúng số tiền đã trả.</p>
+                <label class="block text-xs">
+                  <span class="mb-1 block font-medium text-ink-600">Ghi chú nếu số tiền chưa đúng (tuỳ chọn)</span>
+                  <input
+                    v-model="cashDisputeReason"
+                    type="text"
+                    maxlength="2000"
+                    placeholder="Ví dụ: Tôi chỉ trả 200.000 ₫ tiền mặt"
+                    data-testid="visit-cash-dispute-reason"
+                    class="w-full h-10 px-3 bg-white border border-ink-200 rounded-xl text-sm text-ink-900 focus:outline-none focus:border-brand-600"
+                  />
+                </label>
                 <div class="flex flex-wrap gap-2">
                   <FhButton size="md" :loading="busy" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-confirm" @click="answerCash(true)">Đúng, tôi đã trả</FhButton>
                   <FhButton variant="secondary" size="md" :disabled="voucherCollectionBlocked || busy || checkoutLoading" data-testid="visit-cash-dispute" @click="answerCash(false)">Chưa đúng</FhButton>

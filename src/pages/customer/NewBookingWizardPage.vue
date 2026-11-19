@@ -2975,7 +2975,7 @@ async function createAndFindTech() {
               <div v-if="isFixedPrice && selectedFixedPrice !== null && !visitGrouping" class="flex items-center gap-1" role="group" aria-label="Số lượng thiết bị">
                 <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity <= 1" aria-label="Giảm số lượng" data-testid="booking-quantity-decrease" @click="setQuantity(quantity - 1)"><Minus :size="15" aria-hidden="true" /></button>
                 <span class="w-8 text-center font-semibold font-num" data-testid="booking-quantity">{{ quantity }}</span>
-                <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity >= 99" aria-label="Tăng số lượng" data-testid="booking-quantity-increase" @click="setQuantity(quantity + 1)"><Plus :size="15" aria-hidden="true" /></button>
+                <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl border border-ink-200 text-ink-700 disabled:opacity-40" :disabled="quantity >= 1000" aria-label="Tăng số lượng" data-testid="booking-quantity-increase" @click="setQuantity(quantity + 1)"><Plus :size="15" aria-hidden="true" /></button>
               </div>
               <div class="flex items-center gap-1">
                 <button type="button" class="min-h-11 px-2 text-sm font-semibold text-brand-700 hover:underline" data-testid="recap-change" @click="changeService">Đổi</button>
