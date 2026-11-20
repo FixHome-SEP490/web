@@ -588,7 +588,7 @@ function cancelStale() {
 </script>
 
 <template>
-  <div class="w-full space-y-5 pb-12">
+  <div class="w-full max-w-4xl mx-auto space-y-5 pb-12">
     <header class="relative overflow-hidden rounded-2xl border border-ink-200/85 bg-white px-5 py-5 sm:px-6 sm:py-6 min-h-[7rem] flex items-center animate-slide-up">
       <div
         class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
@@ -870,7 +870,7 @@ function cancelStale() {
                 </span>
               </li>
             </ul>
-            <div class="flex justify-end gap-1 border-t border-ink-100 pt-2.5">
+            <div class="flex flex-wrap items-center justify-end sm:justify-start gap-2 border-t border-ink-100 pt-2.5">
               <button
                 v-if="canCancelVisit(group.status)"
                 type="button"
@@ -1007,29 +1007,27 @@ function cancelStale() {
                   </div>
 
                   <div class="min-w-0 flex-1 space-y-2">
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                      <div class="min-w-0 flex-1 space-y-0.5">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
-                            {{ booking.serviceName }}
-                          </h3>
-                          <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
-                            ×{{ booking.quantity }}
-                          </span>
-                        </div>
-                        <p class="flex items-center gap-1.5 font-num text-xs text-ink-500">
-                          <Clock :size="13" class="text-ink-400 shrink-0" />
-                          <span>Đặt {{ vnDateString(booking.createdAt) }}</span>
-                        </p>
+                    <div class="space-y-1">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors truncate">
+                          {{ booking.serviceName }}
+                        </h3>
+                        <span v-if="booking.quantity && booking.quantity > 1" class="shrink-0 rounded-md bg-ink-100 px-2 py-0.5 text-xs text-ink-700 font-num font-semibold">
+                          ×{{ booking.quantity }}
+                        </span>
+                        <FhStatusPill
+                          :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
+                          :label="pendingLabel(booking)"
+                          class="shrink-0"
+                        />
                       </div>
-                      <FhStatusPill
-                        :status="booking.status === 'CANCELLED' ? 'CANCELLED' : isOverdue(booking) ? 'PENDING_APPROVAL' : 'PENDING'"
-                        :label="pendingLabel(booking)"
-                        class="shrink-0"
-                      />
+                      <p class="flex items-center gap-1.5 font-num text-xs text-ink-500">
+                        <Clock :size="13" class="text-ink-400 shrink-0" />
+                        <span>Đặt {{ vnDateString(booking.createdAt) }}</span>
+                      </p>
                     </div>
 
-                    <div v-if="booking.preferredAt || booking.addressSummary" class="rounded-xl bg-ink-50/75 px-3 py-2 space-y-0.5 text-xs sm:text-sm">
+                    <div v-if="booking.preferredAt || booking.addressSummary" class="w-fit max-w-full rounded-xl bg-ink-50/80 px-3 py-2 space-y-0.5 text-xs sm:text-sm">
                       <p v-if="booking.preferredAt" class="font-num font-medium text-ink-800">
                         <span class="text-ink-400 font-normal">Lịch hẹn:</span> {{ vnDateTimeString(booking.preferredAt) }}
                       </p>
@@ -1043,7 +1041,7 @@ function cancelStale() {
                 <!-- Quiet bottom actions row -->
                 <div
                   v-if="canCancel(booking) || booking.status === 'CANCELLED'"
-                  class="mt-3 pt-2.5 border-t border-ink-100 flex items-center justify-end gap-2.5"
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex flex-wrap items-center justify-end sm:justify-start gap-2.5"
                 >
                   <button
                     v-if="canCancel(booking)"
@@ -1132,28 +1130,27 @@ function cancelStale() {
                   </div>
 
                   <div class="min-w-0 flex-1 space-y-2">
-                    <div class="flex items-start justify-between gap-2.5">
-                      <div class="min-w-0 flex-1 space-y-0.5">
+                    <div class="space-y-1">
+                      <div class="flex flex-wrap items-center gap-2">
                         <h3 class="text-base sm:text-[17px] font-semibold text-ink-900 group-hover:text-brand-600 transition-colors text-pretty leading-snug">
                           {{ order.serviceName }}
                         </h3>
-                        <p class="font-num text-xs font-medium text-ink-500 whitespace-nowrap truncate">
-                          #{{ order.code || order.id.slice(0, 8) }}
-                        </p>
-                        <p class="flex items-center gap-1.5 font-num text-xs text-ink-500 whitespace-nowrap">
+                        <FhStatusPill
+                          :status="orderPill(order).status"
+                          :label="orderPill(order).label"
+                          class="shrink-0"
+                        />
+                      </div>
+                      <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-num text-xs text-ink-500">
+                        <span class="font-medium whitespace-nowrap truncate">#{{ order.code || order.id.slice(0, 8) }}</span>
+                        <span class="inline-flex items-center gap-1 whitespace-nowrap">
                           <Clock :size="13" class="text-ink-400 shrink-0" />
                           <span>{{ vnDateString(order.createdAt) }}</span>
-                        </p>
+                        </span>
                       </div>
-
-                      <FhStatusPill
-                        :status="orderPill(order).status"
-                        :label="orderPill(order).label"
-                        class="shrink-0"
-                      />
                     </div>
 
-                    <div class="flex items-center gap-2.5 rounded-xl bg-ink-50/75 px-3 py-2 text-xs sm:text-sm">
+                    <div class="inline-flex max-w-full items-center gap-2 rounded-xl bg-ink-50/80 px-3 py-1.5 text-xs sm:text-sm">
                       <template v-if="order.technician">
                         <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white">
                           {{ order.technician.fullName.charAt(0) }}
@@ -1167,9 +1164,9 @@ function cancelStale() {
                   </div>
                 </div>
 
-                <!-- Price + Actions bar -->
+                <!-- Price + Actions bar grouped together on desktop to avoid far-right pointer travel -->
                 <div
-                  class="mt-3 pt-2.5 border-t border-ink-100 flex flex-wrap items-center justify-between gap-2.5"
+                  class="mt-3 pt-2.5 border-t border-ink-100 flex flex-wrap items-center justify-between sm:justify-start gap-2.5 sm:gap-4"
                 >
                   <div class="shrink-0">
                     <span v-if="Number(order.grandTotal) > 0" class="whitespace-nowrap font-num text-base sm:text-[17px] font-bold text-brand-600">
@@ -1178,7 +1175,7 @@ function cancelStale() {
                     <span v-else class="text-xs font-medium text-ink-400 whitespace-nowrap">Chờ báo giá</span>
                   </div>
 
-                  <div class="flex flex-wrap items-center gap-2 ml-auto">
+                  <div class="flex flex-wrap items-center gap-2 sm:pl-4 sm:border-l sm:border-ink-200/80">
                     <button
                       v-if="order.technician"
                       type="button"

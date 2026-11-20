@@ -146,7 +146,6 @@ describe('customer responsive header navigation', () => {
     expect(destinations).toEqual([
       '/app',
       '/app/orders',
-      '/services',
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
@@ -185,7 +184,6 @@ describe('customer responsive header navigation', () => {
     expect(nav.findAll('a').map((link) => link.attributes('href'))).toEqual([
       '/app',
       '/app/orders',
-      '/services',
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',

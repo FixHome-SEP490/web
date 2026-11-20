@@ -2,14 +2,15 @@
 import { onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import { MoreHorizontal } from 'lucide-vue-next';
 
-// The "⋯" menu that holds secondary actions. The panel stays in the DOM
-// (v-show) so its items keep their order for keyboard users, and it is placed
-// with fixed coordinates so a table's scroll box never clips it.
+// The "⋯" menu that holds secondary actions. The panel is teleported to body
+// with fixed viewport coordinates so transformed ancestors (.animate-slide-up)
+// and overflow-hidden table wrappers never offset or clip it.
 withDefaults(defineProps<{ label?: string }>(), { label: 'Thao tác khác' });
 
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const trigger = ref<HTMLButtonElement | null>(null);
+const panel = ref<HTMLElement | null>(null);
 const panelStyle = ref<Record<string, string>>({});
 const panelId = useId();
 
@@ -34,7 +35,9 @@ function close(restoreFocus = false) {
   if (restoreFocus) trigger.value?.focus();
 }
 function onOutside(event: PointerEvent) {
-  if (open.value && event.target instanceof Node && !root.value?.contains(event.target)) close();
+  if (!open.value || !(event.target instanceof Node)) return;
+  if (root.value?.contains(event.target) || panel.value?.contains(event.target)) return;
+  close();
 }
 function onViewportChange() {
   if (open.value) close();
@@ -66,15 +69,19 @@ onBeforeUnmount(() => {
     >
       <MoreHorizontal :size="18" aria-hidden="true" />
     </button>
-    <div
-      v-show="open"
-      :id="panelId"
-      role="menu"
-      class="z-50 min-w-52 rounded-xl border border-ink-200 bg-white p-1 text-left shadow-[var(--shadow-e3)]"
-      :style="panelStyle"
-      @click="close()"
-    >
-      <slot />
-    </div>
+    <Teleport to="body">
+      <div
+        v-show="open"
+        :id="panelId"
+        ref="panel"
+        role="menu"
+        class="z-[70] min-w-52 rounded-xl border border-ink-200 bg-white p-1 text-left shadow-[var(--shadow-e3)]"
+        :style="panelStyle"
+        @click="close()"
+        @keydown.esc.stop="close(true)"
+      >
+        <slot />
+      </div>
+    </Teleport>
   </div>
 </template>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
+import { flushPromises, DOMWrapper, mount, RouterLinkStub } from '@vue/test-utils';
 import router from '../src/router';
 import { consoleNavigation } from '../src/components/console/console-navigation';
 import ConsoleTable from '../src/components/console/ConsoleTable.vue';
@@ -104,16 +104,39 @@ describe('Console building blocks', () => {
       methods: { pick: onPick },
     }, { attachTo: document.body });
     const trigger = w.get('button[aria-haspopup="menu"]');
+    const panelId = trigger.attributes('aria-controls');
     expect(trigger.attributes('aria-label')).toBe('Thao tác khác');
-    expect(w.get('[role="menu"]').isVisible()).toBe(false);
+    const menuEl = document.getElementById(panelId!)!;
+    expect(menuEl).toBeTruthy();
+    expect(menuEl.parentElement).toBe(document.body);
+    const menu = new DOMWrapper(menuEl);
+    expect(menu.isVisible()).toBe(false);
     await trigger.trigger('click');
     expect(trigger.attributes('aria-expanded')).toBe('true');
-    await w.get('[role="menuitem"]').trigger('click');
+    expect(menu.isVisible()).toBe(true);
+    await menu.get('[role="menuitem"]').trigger('click');
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(trigger.attributes('aria-expanded')).toBe('false');
     await trigger.trigger('click');
-    await w.get('[role="menu"]').trigger('keydown', { key: 'Escape' });
+    await menu.trigger('keydown', { key: 'Escape' });
     expect(trigger.attributes('aria-expanded')).toBe('false');
+    w.unmount();
+  });
+
+  it('teleports the "⋯" menu out of transformed ancestors and keeps viewport coordinates accurate', async () => {
+    const w = mount({
+      components: { ConsoleMoreMenu, ConsoleMenuItem },
+      template: '<div class="animate-slide-up-delay-2" style="transform: translateY(0)"><ConsoleMoreMenu><ConsoleMenuItem>Xem chi tiết</ConsoleMenuItem></ConsoleMoreMenu></div>',
+    }, { attachTo: document.body });
+    const trigger = w.get('button[aria-haspopup="menu"]');
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      top: 96, bottom: 132, left: 900, right: 936, width: 36, height: 36, x: 900, y: 96, toJSON: () => ({}),
+    });
+    await trigger.trigger('click');
+    const menuEl = document.getElementById(trigger.attributes('aria-controls')!)!;
+    expect(menuEl.parentElement).toBe(document.body);
+    expect(menuEl.style.position).toBe('fixed');
+    expect(menuEl.style.top).toBe('136px');
     w.unmount();
   });
 
