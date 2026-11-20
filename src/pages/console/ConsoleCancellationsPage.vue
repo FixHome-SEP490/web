@@ -5,7 +5,7 @@ import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
-import { orderStatusLabel, roleLabel } from '../../components/console/console-labels';
+import { cancelReasonLabel, orderStatusLabel, roleLabel } from '../../components/console/console-labels';
 import { ordersApi, type CancellationRecord } from '../../api/orders.api';
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
@@ -113,7 +113,7 @@ async function handleGrantBoost(row: CancellationRow) {
         </template>
 
         <template #cell-reason="{ row }">
-          <span class="line-clamp-2 block max-w-64 text-ink-700" :title="row.reason">{{ row.reason }}</span>
+          <span class="line-clamp-2 block max-w-64 text-ink-700" :title="cancelReasonLabel(row.reason)">{{ cancelReasonLabel(row.reason) }}</span>
         </template>
 
         <template #cell-remedy="{ row }">

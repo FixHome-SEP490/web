@@ -96,3 +96,13 @@ export function moneyTone(value: unknown): string {
   if (v === 'refunded' || v === 'cancelled') return 'CANCELLED';
   return 'PENDING';
 }
+
+/** Reasons the server writes itself in English when it closes an order; the console shows them in Vietnamese. */
+const SYSTEM_CANCEL_REASONS: Record<string, string> = {
+  'Official quotation rejected; no agreement': 'Khách từ chối báo giá, không thống nhất được giá',
+};
+
+export function cancelReasonLabel(reason: string | null | undefined): string {
+  const text = (reason ?? '').trim();
+  return SYSTEM_CANCEL_REASONS[text] ?? text;
+}
