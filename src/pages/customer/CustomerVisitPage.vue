@@ -12,7 +12,25 @@ import { queryKeys } from '../../lib/query-keys';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { useAuthStore } from '../../stores/auth';
-import { Banknote, ChevronDown, ChevronRight, Wallet, X } from 'lucide-vue-next';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Banknote,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
+  Info,
+  MapPin,
+  Package,
+  Phone,
+  Receipt,
+  Trash2,
+  User,
+  UserCheck,
+  Wallet,
+  X,
+} from 'lucide-vue-next';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { BookingMediaViewer, FhBackLink, FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingSessionPicker from '../../components/customer/BookingSessionPicker.vue';
 import VisitOrderDetails from '../../components/customer/VisitOrderDetails.vue';
@@ -937,35 +955,30 @@ async function answerCash(agreed: boolean) {
       <div class="rounded-2xl border border-ink-200/85 bg-white p-5 sm:p-6 shadow-2xs space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0 flex-1 space-y-2">
-            <FhSkeleton width="55%" height="28px" />
-            <FhSkeleton width="78%" height="14px" />
+            <FhSkeleton width="45%" height="28px" />
+            <FhSkeleton width="70%" height="14px" />
           </div>
           <div class="w-36 shrink-0">
             <FhSkeleton width="100%" height="28px" rounded="full" />
           </div>
         </div>
 
-        <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0 flex-1 space-y-1.5">
-              <FhSkeleton width="140px" height="12px" />
-              <FhSkeleton width="180px" height="18px" />
-              <FhSkeleton width="220px" height="14px" />
-            </div>
-            <div class="w-28 shrink-0">
-              <FhSkeleton width="100%" height="40px" rounded="md" />
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-2">
+          <div v-for="i in 3" :key="i" class="rounded-xl border border-ink-100 bg-ink-50/60 p-3.5 flex items-start gap-3">
+            <FhSkeleton width="40px" height="40px" rounded="full" class="shrink-0" />
+            <div class="min-w-0 flex-1 space-y-2">
+              <FhSkeleton width="60%" height="12px" />
+              <FhSkeleton width="85%" height="16px" />
+              <FhSkeleton width="50%" height="12px" />
             </div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
-            <div class="space-y-1.5">
-              <FhSkeleton width="88px" height="12px" />
-              <FhSkeleton width="80%" height="16px" />
-            </div>
-            <div class="space-y-1.5">
-              <FhSkeleton width="76px" height="12px" />
-              <FhSkeleton width="90%" height="16px" />
-            </div>
-          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 pt-3 border-t border-ink-100/70">
+          <FhSkeleton width="180px" height="42px" rounded="md" />
+          <FhSkeleton width="120px" height="42px" rounded="md" />
+          <FhSkeleton width="120px" height="42px" rounded="md" />
+          <FhSkeleton width="220px" height="36px" rounded="md" />
         </div>
       </div>
 
@@ -1081,7 +1094,7 @@ async function answerCash(agreed: boolean) {
             </div>
             <span
               v-if="outcomeProgress"
-              class="inline-flex items-center rounded-full bg-ink-100 px-3 py-1 text-xs font-semibold text-ink-700 font-num whitespace-nowrap shrink-0"
+              class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 font-num whitespace-nowrap shrink-0"
               data-testid="visit-outcome-progress"
             >
               Kết quả {{ outcomeProgress.resolved }}/{{ outcomeProgress.total }} thiết bị
@@ -1090,28 +1103,119 @@ async function answerCash(agreed: boolean) {
         </div>
 
         <div class="p-5 sm:p-6 space-y-4 bg-white">
-          <div class="rounded-xl bg-ink-50/80 p-3.5 sm:p-4 space-y-3 text-sm">
-            <div class="flex flex-wrap items-center justify-between gap-2" data-testid="visit-shared-technician">
-              <div class="min-w-0 flex-1 basis-48 space-y-0.5">
-                <h2 class="text-xs font-medium text-ink-500">Kỹ thuật viên phụ trách cả lượt</h2>
-                <p v-if="sharedTechnician" class="break-words text-sm sm:text-base font-semibold text-ink-900">{{ sharedTechnician.fullName }}</p>
-                <p class="text-xs sm:text-sm text-ink-600" role="status">{{ technicianProgress }}</p>
+          <!-- 3 Hộp thông tin tổng quan -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <!-- Box 1: Kỹ thuật viên -->
+            <div class="rounded-xl border border-ink-100 bg-ink-50/70 p-3.5 flex items-start gap-3 transition-colors hover:bg-ink-50" data-testid="visit-shared-technician">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 ring-4 ring-brand-50/50" aria-hidden="true">
+                <User :size="20" />
               </div>
-              <a v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" :href="`tel:${sharedTechnician.phoneNumber}`" class="inline-flex min-h-10 items-center rounded-xl border border-ink-200 bg-white px-3 text-xs sm:text-sm font-semibold text-brand-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Gọi {{ sharedTechnician.phoneNumber }}</a>
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <span class="block text-xs font-medium text-ink-500">Kỹ thuật viên phụ trách cả lượt</span>
+                <p v-if="sharedTechnician" class="truncate text-sm sm:text-base font-semibold text-ink-900">
+                  {{ sharedTechnician.fullName }}
+                </p>
+                <p class="text-xs sm:text-sm" :class="sharedTechnician ? 'text-ink-600' : 'font-medium text-ink-700'" role="status">
+                  {{ technicianProgress }}
+                </p>
+                <div v-if="sharedTechnician?.phoneNumber && /^[+\d\s()-]+$/.test(sharedTechnician.phoneNumber)" class="pt-1">
+                  <a
+                    :href="`tel:${sharedTechnician.phoneNumber}`"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-2.5 py-1 text-xs font-semibold text-brand-700 shadow-2xs hover:bg-brand-50 hover:border-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+                  >
+                    <Phone :size="12" />
+                    Gọi {{ sharedTechnician.phoneNumber }}
+                  </a>
+                </div>
+              </div>
             </div>
-            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-ink-200/60">
-              <div class="space-y-0.5"><dt class="text-xs text-ink-500">Lịch hẹn chung</dt><dd class="font-medium text-ink-900">{{ sessionText }}<template v-if="cancelled"> · Đã huỷ</template></dd></div>
-              <div v-if="sharedAddress" class="space-y-0.5"><dt class="text-xs text-ink-500">Địa chỉ chung</dt><dd class="break-words font-medium text-ink-900" data-testid="visit-shared-address">{{ sharedAddress }}</dd></div>
-            </dl>
+
+            <!-- Box 2: Lịch hẹn chung -->
+            <div class="rounded-xl border border-ink-100 bg-ink-50/70 p-3.5 flex items-start gap-3 transition-colors hover:bg-ink-50">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 ring-4 ring-brand-50/50" aria-hidden="true">
+                <Calendar :size="20" />
+              </div>
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <span class="block text-xs font-medium text-ink-500">Lịch hẹn chung</span>
+                <p class="text-sm sm:text-base font-semibold text-ink-900">
+                  {{ sessionText }}
+                  <span v-if="cancelled" class="text-xs font-medium text-danger-600"> · Đã huỷ</span>
+                </p>
+                <p class="text-xs text-ink-500">Áp dụng cho mọi thiết bị trong lượt</p>
+              </div>
+            </div>
+
+            <!-- Box 3: Địa chỉ chung -->
+            <div class="rounded-xl border border-ink-100 bg-ink-50/70 p-3.5 flex items-start gap-3 transition-colors hover:bg-ink-50">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 ring-4 ring-brand-50/50" aria-hidden="true">
+                <MapPin :size="20" />
+              </div>
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <span class="block text-xs font-medium text-ink-500">Địa chỉ chung</span>
+                <p v-if="sharedAddress" class="text-sm sm:text-base font-medium text-ink-900 line-clamp-2" data-testid="visit-shared-address">
+                  {{ sharedAddress }}
+                </p>
+                <p v-else class="text-xs text-ink-500">Chưa có thông tin địa chỉ</p>
+              </div>
+            </div>
           </div>
 
-          <div v-if="!cancelled && (canChooseTechnician || canReschedule || (rescheduled && !repairStarted) || canCancel)" class="flex flex-wrap items-center gap-2 pt-1">
-            <FhButton v-if="canChooseTechnician" variant="primary" size="md" data-testid="visit-choose-technician" @click="router.push(`/app/visits/${visitId}/candidates`)">
-              {{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}
+          <!-- Hàng nút thao tác (Action Bar) -->
+          <div v-if="!cancelled && (canChooseTechnician || canReschedule || (rescheduled && !repairStarted) || canCancel)" class="flex flex-wrap items-center gap-3 pt-3 border-t border-ink-100/70">
+            <!-- Nút 1: Chọn kỹ thuật viên (Primary Blue) -->
+            <FhButton
+              v-if="canChooseTechnician"
+              variant="primary"
+              size="md"
+              data-testid="visit-choose-technician"
+              @click="router.push(`/app/visits/${visitId}/candidates`)"
+            >
+              <UserCheck :size="18" aria-hidden="true" />
+              <span>{{ matchingState === 'CLOSED' ? 'Chọn kỹ thuật viên khác cho cả lượt' : `Chọn 1 kỹ thuật viên sửa cả ${visit.items.length} thiết bị` }}</span>
             </FhButton>
-            <FhButton v-if="canReschedule" variant="secondary" size="sm" data-testid="visit-reschedule" @click="openReschedule">Đổi lịch hẹn</FhButton>
-            <FhButton v-else-if="rescheduled && !repairStarted" variant="secondary" size="sm" disabled data-testid="visit-reschedule-used">Đã đổi lịch một lần</FhButton>
-            <FhButton v-if="canCancel" variant="ghost" size="sm" class="text-danger-700 ml-auto" data-testid="visit-cancel" @click="cancelOpen = true">Huỷ lượt sửa</FhButton>
+
+            <!-- Nút 2: Đổi lịch hẹn (Secondary) -->
+            <FhButton
+              v-if="canReschedule"
+              variant="secondary"
+              size="md"
+              data-testid="visit-reschedule"
+              @click="openReschedule"
+            >
+              <Calendar :size="17" class="text-ink-500" aria-hidden="true" />
+              <span>Đổi lịch hẹn</span>
+            </FhButton>
+            <FhButton
+              v-else-if="rescheduled && !repairStarted"
+              variant="secondary"
+              size="md"
+              disabled
+              data-testid="visit-reschedule-used"
+            >
+              <Calendar :size="17" class="text-ink-400" aria-hidden="true" />
+              <span>Đã đổi lịch một lần</span>
+            </FhButton>
+
+            <!-- Nút 3: Hủy lượt sửa (Danger Red) -->
+            <FhButton
+              v-if="canCancel"
+              variant="danger"
+              size="md"
+              data-testid="visit-cancel"
+              @click="cancelOpen = true"
+            >
+              <Trash2 :size="17" aria-hidden="true" />
+              <span>Hủy lượt sửa</span>
+            </FhButton>
+
+            <!-- Cảnh báo cạnh nút hủy -->
+            <div
+              v-if="canCancel"
+              class="inline-flex items-center gap-2 rounded-xl border border-danger-200/80 bg-danger-50 px-3.5 py-2 text-xs sm:text-sm text-danger-800"
+            >
+              <AlertTriangle :size="15" class="text-danger-600 shrink-0" aria-hidden="true" />
+              <span>{{ held ? `Hủy lượt sửa sẽ ảnh hưởng cả ${visit.items.length} thiết bị và trừ điểm uy tín.` : `Hủy lượt sửa sẽ dừng tìm thợ cho cả ${visit.items.length} thiết bị.` }}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -1150,7 +1254,10 @@ async function answerCash(agreed: boolean) {
 
           <section class="space-y-3 animate-slide-up-delay-2" data-testid="visit-device-list">
             <div class="flex items-center justify-between gap-2">
-              <h2 class="text-base font-semibold text-ink-900">Dịch vụ từng máy</h2>
+              <h2 class="text-base sm:text-lg font-bold text-ink-900 flex items-center gap-2">
+                <Package :size="20" class="text-brand-600" aria-hidden="true" />
+                <span>Dịch vụ từng máy</span>
+              </h2>
               <span class="text-xs text-ink-500 sm:hidden">Vuốt hoặc chọn máy</span>
             </div>
             <div v-if="interruptedDevices.length" class="rounded-xl bg-ink-50/80 p-3 text-sm text-ink-700" data-testid="visit-interrupted">
@@ -1164,14 +1271,14 @@ async function answerCash(agreed: boolean) {
               @click="router.push({ path: '/app/bookings/new', query: { repairFailure: failedBookingIds.join(',') } })"
             >Đặt lại {{ failedBookingIds.length }} máy không sửa được</FhButton>
 
-            <!-- Sleek Device Selector: scrollable cards on mobile, clean grid on sm+ -->
-            <div class="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none sm:grid sm:grid-cols-2 md:grid-cols-3 sm:overflow-visible sm:pb-0" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
+            <!-- Sleek Device Selector: horizontal cards with service artwork -->
+            <div class="flex gap-3 overflow-x-auto pb-1 scrollbar-none sm:grid sm:grid-cols-2 md:grid-cols-3 sm:overflow-visible sm:pb-0" role="group" aria-label="Chọn thiết bị trong lượt" data-testid="visit-device-selector">
               <button
                 v-for="item in visit.items"
                 :key="item.id"
                 type="button"
-                class="visit-device flex min-h-11 min-w-[10.5rem] sm:min-w-0 shrink-0 flex-col justify-between rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 cursor-pointer"
-                :class="selectedVisitItem?.id === item.id ? 'border-brand-600 bg-brand-50/75 ring-1 ring-brand-500/20 shadow-2xs' : 'border-ink-200/90 bg-white hover:border-brand-300'"
+                class="visit-device flex min-h-[4.5rem] min-w-[12rem] sm:min-w-0 shrink-0 items-center gap-3 rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 cursor-pointer"
+                :class="selectedVisitItem?.id === item.id ? 'border-2 border-brand-600 bg-brand-50/50 shadow-xs ring-2 ring-brand-500/20' : 'border border-ink-200/90 bg-white hover:border-brand-300 hover:bg-ink-50/40'"
                 :aria-pressed="selectedVisitItem?.id === item.id"
                 :aria-controls="selectedVisitItem?.id === item.id ? `visit-device-panel-${item.sequence}` : undefined"
                 :aria-label="`Chọn máy ${item.sequence}${item.booking?.serviceName ? `: ${item.booking.serviceName}` : ''}, ${statusText(item)}`"
@@ -1179,44 +1286,78 @@ async function answerCash(agreed: boolean) {
                 :data-testid="`visit-device-select-${item.sequence}`"
                 @click="selectedVisitItemId = item.id"
               >
-                <div class="w-full space-y-1">
-                  <div class="flex items-center justify-between gap-1.5">
-                    <span class="text-xs font-bold uppercase tracking-wide font-num" :class="selectedVisitItem?.id === item.id ? 'text-brand-700' : 'text-ink-500'">
+                <!-- Icon thiết bị -->
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-ink-100 bg-white p-1.5 shadow-2xs overflow-hidden" aria-hidden="true">
+                  <img
+                    :src="getServiceArtworkUrl({ name: item.booking?.serviceName || item.deviceLabel })"
+                    alt=""
+                    class="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+                <div class="min-w-0 flex-1 space-y-0.5">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="text-[11px] font-bold uppercase tracking-wider font-num" :class="selectedVisitItem?.id === item.id ? 'text-brand-700' : 'text-ink-400'">
                       Máy {{ item.sequence }}
                     </span>
                     <span v-if="quotationOrderId(item) || pendingCosts(item)" class="inline-flex items-center rounded-full bg-warning-100 px-1.5 py-0.5 text-[10px] font-semibold text-warning-800" aria-label="Cần duyệt báo giá">
                       Cần duyệt
                     </span>
                   </div>
-                  <span class="block line-clamp-2 text-sm font-semibold text-ink-900">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
+                  <span class="block truncate text-sm font-bold text-ink-900">{{ item.booking?.serviceName || item.deviceLabel || 'Thiết bị' }}</span>
+                  <span class="block truncate text-xs" :class="quotationOrderId(item) ? 'font-semibold text-warning-700' : 'text-ink-500'">{{ chipStatusText(item) }}</span>
                 </div>
-                <span class="mt-2 block text-xs leading-snug" :class="quotationOrderId(item) ? 'font-medium text-warning-800' : 'text-ink-500'">{{ chipStatusText(item) }}</span>
               </button>
             </div>
 
+            <!-- Thẻ chi tiết thiết bị đang chọn -->
             <div
               v-if="selectedVisitItem"
               :id="`visit-device-panel-${selectedVisitItem.sequence}`"
-              class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-3"
+              class="rounded-2xl border border-ink-200/85 bg-white p-4 sm:p-5 shadow-2xs space-y-4"
               role="region"
               :aria-labelledby="`visit-device-select-${selectedVisitItem.sequence}`"
               :data-testid="`visit-device-panel-${selectedVisitItem.sequence}`"
             >
-              <div class="rounded-xl bg-ink-50/75 px-3.5 py-2.5 flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <div class="min-w-0 flex-[1_1_12rem]">
-                  <p class="break-words text-sm font-semibold text-ink-900 sm:text-base">
-                    Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
-                  </p>
-                  <p class="break-words text-xs sm:text-sm text-ink-600"><template v-if="selectedVisitItem.deviceLabel">{{ selectedVisitItem.deviceLabel }} · </template>{{ statusText(selectedVisitItem) }}</p>
+              <div class="flex items-center gap-3.5 rounded-xl bg-ink-50/75 p-3.5 sm:p-4">
+                <div class="flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-white p-2 shadow-2xs overflow-hidden">
+                  <img
+                    :src="getServiceArtworkUrl({ name: selectedVisitItem.booking?.serviceName || selectedVisitItem.deviceLabel })"
+                    alt=""
+                    class="h-full w-full object-contain"
+                    loading="lazy"
+                  />
                 </div>
-                <span v-if="deviceOf(selectedVisitItem.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm font-bold text-ink-900 font-num"><FhMoney :amount="deviceOf(selectedVisitItem.booking?.id)!.amount" /></span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="break-words text-base sm:text-lg font-bold text-ink-900">
+                      Máy {{ selectedVisitItem.sequence }}<template v-if="selectedVisitItem.booking?.serviceName">: {{ selectedVisitItem.booking.serviceName }}</template>
+                    </p>
+                    <span v-if="deviceOf(selectedVisitItem.booking?.id)?.state === 'succeeded'" class="whitespace-nowrap text-sm sm:text-base font-bold text-brand-700 font-num">
+                      <FhMoney :amount="deviceOf(selectedVisitItem.booking?.id)!.amount" />
+                    </span>
+                  </div>
+                  <p class="mt-0.5 break-words text-xs sm:text-sm text-ink-600">
+                    <template v-if="selectedVisitItem.deviceLabel">{{ selectedVisitItem.deviceLabel }} · </template>{{ statusText(selectedVisitItem) }}
+                  </p>
+                </div>
               </div>
-              <p v-if="quotationOrderId(selectedVisitItem)" class="text-sm font-medium text-warning-800" :data-testid="`visit-device-quotation-status-${selectedVisitItem.sequence}`">
-                Báo giá đang chờ bạn duyệt
+
+              <p v-if="quotationOrderId(selectedVisitItem)" class="text-sm font-semibold text-warning-800 flex items-center gap-1.5" :data-testid="`visit-device-quotation-status-${selectedVisitItem.sequence}`">
+                <AlertCircle :size="16" class="text-warning-600 shrink-0" aria-hidden="true" />
+                <span>Báo giá đang chờ bạn duyệt</span>
               </p>
-              <div v-if="hasDeviceDetails(selectedVisitItem)" class="space-y-2.5">
+
+              <!-- Lỗi / Vấn đề -->
+              <div v-if="hasDeviceDetails(selectedVisitItem)" class="space-y-2 rounded-xl border border-ink-100 bg-ink-50/40 p-3.5 sm:p-4">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold uppercase tracking-wider text-ink-400">Lỗi / Vấn đề</span>
+                  <span v-if="selectedVisitItem.booking?.media?.length" class="text-xs text-ink-500 font-medium" :data-testid="`visit-device-media-count-${selectedVisitItem.sequence}`">
+                    {{ selectedVisitItem.booking.media.length }} ảnh/video
+                  </span>
+                </div>
                 <div :id="`visit-device-details-${selectedVisitItem.sequence}`" class="space-y-3">
-                  <p v-if="selectedVisitItem.booking?.description?.trim()" class="break-words text-pretty text-sm text-ink-700 whitespace-pre-line" :class="isDeviceExpanded(selectedVisitItem.id) ? '' : 'line-clamp-2'" :data-testid="`visit-device-description-${selectedVisitItem.sequence}`">
+                  <p v-if="selectedVisitItem.booking?.description?.trim()" class="break-words text-pretty text-sm text-ink-800 whitespace-pre-line" :class="isDeviceExpanded(selectedVisitItem.id) ? '' : 'line-clamp-2'" :data-testid="`visit-device-description-${selectedVisitItem.sequence}`">
                     {{ selectedVisitItem.booking.description }}
                   </p>
                   <BookingMediaViewer
@@ -1226,22 +1367,22 @@ async function answerCash(agreed: boolean) {
                     embedded
                   />
                 </div>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span v-if="selectedVisitItem.booking?.media?.length" class="text-xs text-ink-600" :data-testid="`visit-device-media-count-${selectedVisitItem.sequence}`">
-                    {{ selectedVisitItem.booking.media.length }} ảnh/video
-                  </span>
-                  <FhButton
-                    variant="ghost"
-                    size="md"
+                <div class="flex justify-end pt-1">
+                  <button
+                    type="button"
                     :aria-expanded="isDeviceExpanded(selectedVisitItem.id)"
                     :aria-controls="`visit-device-details-${selectedVisitItem.sequence}`"
                     :aria-label="`${isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm'} chi tiết máy ${selectedVisitItem.sequence}`"
-                    class="ml-auto"
+                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 rounded-md py-1 px-2 cursor-pointer transition-colors"
                     :data-testid="`visit-device-expand-${selectedVisitItem.sequence}`"
                     @click="toggleDeviceDetails(selectedVisitItem.id)"
-                  >{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}<ChevronDown :size="16" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" /></FhButton>
+                  >
+                    <span>{{ isDeviceExpanded(selectedVisitItem.id) ? 'Thu gọn' : 'Xem thêm' }}</span>
+                    <ChevronDown :size="15" class="transition-transform motion-reduce:transition-none" :class="{ 'rotate-180': isDeviceExpanded(selectedVisitItem.id) }" aria-hidden="true" />
+                  </button>
                 </div>
               </div>
+
               <p v-if="childFeedback && childFeedback.orderId === selectedOrderId" ref="quotationFeedbackElement" tabindex="-1" data-testid="quotation-feedback" :role="childFeedback.error ? 'alert' : 'status'" class="text-sm" :class="childFeedback.error ? 'text-danger-700' : 'text-success-700'">{{ childFeedback.text }}</p>
               <p v-if="approvingOrderId && approvingOrderId === selectedOrderId" role="status" class="text-sm text-ink-600">Đang duyệt báo giá và kiểm tra trạng thái…</p>
               <FhButton v-if="selectedOrderId && quotationChecks[selectedOrderId] && approvingOrderId !== selectedOrderId" variant="secondary" size="md" :disabled="childDeciding || checkoutLoading" data-testid="quotation-check-status" @click="checkChildQuotation">Kiểm tra trạng thái</FhButton>
@@ -1302,8 +1443,15 @@ async function answerCash(agreed: boolean) {
                 />
               </div>
               <div class="relative z-10 pr-20 sm:pr-28">
-                <h2 id="visit-invoice-summary-title" class="text-base font-semibold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
-                <p class="mt-0.5 text-xs text-ink-500">Chi phí từng thiết bị và tổng cộng</p>
+                <div class="flex items-center gap-2">
+                  <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600" aria-hidden="true">
+                    <Receipt :size="18" />
+                  </div>
+                  <div>
+                    <h2 id="visit-invoice-summary-title" class="text-base font-bold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
+                    <p class="text-xs text-ink-500">Chi phí từng thiết bị và tổng cộng</p>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="p-4 sm:p-5 space-y-3.5 bg-white">
@@ -1312,14 +1460,14 @@ async function answerCash(agreed: boolean) {
               <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-2.5 first:pt-0 last:pb-0" :data-testid="`visit-invoice-row-${row.item.sequence}`">
                 <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                   <div class="min-w-0 flex-1 basis-36">
-                    <p class="break-words font-medium text-ink-900">Máy {{ row.item.sequence }}<template v-if="row.item.booking?.serviceName"> · {{ row.item.booking.serviceName }}</template></p>
+                    <p class="break-words font-semibold text-ink-900 text-sm">Máy {{ row.item.sequence }}<template v-if="row.item.booking?.serviceName"> · {{ row.item.booking.serviceName }}</template></p>
                     <p class="mt-0.5 text-xs text-ink-500">{{ row.status }}</p>
                   </div>
                   <FhMoney v-if="row.amount !== null" :amount="row.amount" class="shrink-0 whitespace-nowrap font-semibold" data-testid="visit-invoice-amount" />
-                  <span v-else class="text-ink-500">Chưa xác định</span>
+                  <span v-else class="text-ink-500 font-medium text-sm">Chưa xác định</span>
                 </div>
-                <details v-if="row.lines.length || row.fees.length" class="group mt-1 text-ink-600">
-                  <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg text-xs font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"><span>Chi tiết hóa đơn máy {{ row.item.sequence }}</span><ChevronDown :size="15" class="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" /></summary>
+                <details v-if="row.lines.length || row.fees.length" class="group mt-1.5 text-ink-600">
+                  <summary class="flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-lg text-xs font-medium text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"><span>Chi tiết hóa đơn máy {{ row.item.sequence }}</span><ChevronDown :size="15" class="shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" /></summary>
                   <ul class="mt-1 space-y-1.5 rounded-xl bg-ink-50/80 p-2.5 text-xs">
                     <li v-for="line in row.lines" :key="line.id" class="flex flex-wrap justify-between gap-x-3 gap-y-1">
                       <span class="min-w-0 flex-1 basis-36 break-words">{{ line.description }}<span class="block text-ink-500">{{ line.quantity }} × <FhMoney :amount="line.unitPrice" /></span></span>
@@ -1330,17 +1478,20 @@ async function answerCash(agreed: boolean) {
                 </details>
               </li>
             </ul>
-            <dl class="rounded-xl bg-ink-50/85 p-3.5 space-y-2">
-              <div class="flex flex-wrap items-baseline justify-between gap-2 font-semibold text-ink-900">
+            <dl class="rounded-xl bg-ink-50/85 border border-ink-100 p-3.5 space-y-2">
+              <div class="flex flex-wrap items-baseline justify-between gap-2 font-bold text-ink-900">
                 <dt>{{ invoiceSummary.pending ? 'Tổng hóa đơn đã chốt' : 'Tổng hóa đơn gốc' }}</dt>
                 <dd><FhMoney v-if="invoiceSummary.gross !== null" :amount="invoiceSummary.gross" emphasis data-testid="visit-invoice-gross" /><span v-else class="font-normal text-ink-600">Chưa xác định</span></dd>
               </div>
               <div class="flex flex-wrap items-baseline justify-between gap-2 text-xs sm:text-sm text-ink-600">
                 <dt>Hóa đơn gốc chưa thanh toán</dt>
-                <dd><FhMoney v-if="invoiceSummary.unpaid !== null" :amount="invoiceSummary.unpaid" data-testid="visit-invoice-unpaid" /><span v-else>Chưa xác định</span></dd>
+                <dd><FhMoney v-if="invoiceSummary.unpaid !== null" :amount="invoiceSummary.unpaid" data-testid="visit-invoice-unpaid" /><span v-else class="font-num font-medium text-ink-800">0 ₫</span></dd>
               </div>
             </dl>
-            <p v-if="invoiceSummary.pending" class="text-xs text-ink-500">Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</p>
+            <p v-if="invoiceSummary.pending" class="flex items-center gap-1.5 text-xs text-ink-500">
+              <Info :size="14" class="text-ink-400 shrink-0" aria-hidden="true" />
+              <span>Còn {{ invoiceSummary.pending }} máy chưa xác định. Chưa phải tổng cả {{ invoiceSummary.rows.length }} máy.</span>
+            </p>
             </div>
           </section>
 
@@ -1492,30 +1643,73 @@ async function answerCash(agreed: boolean) {
       </div>
     </template>
 
-    <!-- Reschedule -->
+    <!-- Reschedule Modal -->
     <Transition name="fh-modal">
-      <div v-if="rescheduleOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs sm:p-4" @click.self="rescheduleOpen = false">
-        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-lg space-y-4 overflow-y-auto rounded-t-[20px] sm:rounded-[20px] bg-white p-5 sm:p-6 shadow-(--shadow-e3)" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
+      <div v-if="rescheduleOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs p-0 sm:p-4" @click.self="rescheduleOpen = false">
+        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-lg space-y-4 overflow-y-auto rounded-t-[24px] sm:rounded-2xl bg-white p-5 sm:p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
           <div class="flex items-start justify-between gap-3">
-            <h2 id="visit-reschedule-title" class="text-lg font-semibold text-ink-900">Đổi lịch cho cả lượt</h2>
-            <button type="button" class="flex h-11 w-11 items-center justify-center rounded-xl text-ink-600 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng" @click="rescheduleOpen = false"><X :size="18" /></button>
+            <h2 id="visit-reschedule-title" class="text-lg font-bold text-ink-900">Đổi lịch cho cả lượt</h2>
+            <button type="button" class="flex h-9 w-9 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng" @click="rescheduleOpen = false"><X :size="18" /></button>
           </div>
-          <p class="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800">Mỗi lượt sửa chỉ đổi lịch được một lần, mọi thiết bị đổi cùng nhau.</p>
+          <p class="rounded-xl border border-warning-200 bg-warning-50 px-3.5 py-2.5 text-sm text-warning-800">Mỗi lượt sửa chỉ đổi lịch được một lần, mọi thiết bị đổi cùng nhau.</p>
           <BookingSessionPicker v-model="chosenSession" :sessions="sessions" busy-hint="Thợ đã có lịch buổi này" />
           <FhButton class="w-full" size="lg" :disabled="!chosenSession || busy" :loading="busy" data-testid="visit-reschedule-save" @click="saveReschedule">Lưu lịch mới</FhButton>
         </div>
       </div>
     </Transition>
 
-    <!-- Cancel -->
+    <!-- Cancel Confirmation Modal (Professional UI according to UX/UI specification) -->
     <Transition name="fh-modal">
-      <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs sm:p-4" @click.self="cancelOpen = false">
-        <div class="fh-modal-panel fh-modal-panel--sheet w-full sm:max-w-md space-y-4 rounded-t-[20px] sm:rounded-[20px] bg-white p-5 sm:p-6 shadow-(--shadow-e3)" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
-          <h2 id="visit-cancel-title" class="text-lg font-semibold text-ink-900">Huỷ cả lượt sửa?</h2>
-          <p class="text-sm text-ink-600 text-pretty">Mọi thiết bị trong lượt đều huỷ.<template v-if="held"> Thợ đã nhận lượt này nên bạn bị trừ điểm uy tín như huỷ một đơn đã có thợ.</template></p>
-          <div class="flex justify-end gap-2.5">
-            <FhButton variant="secondary" size="md" :disabled="busy" @click="cancelOpen = false">Không</FhButton>
-            <FhButton variant="danger" size="md" :loading="busy" data-testid="visit-cancel-confirm" @click="confirmCancel">Huỷ lượt sửa</FhButton>
+      <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs p-0 sm:p-4" @click.self="cancelOpen = false">
+        <div class="fh-modal-panel fh-modal-panel--sheet w-full sm:max-w-lg space-y-5 rounded-t-[24px] sm:rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
+          <div class="flex items-start gap-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-danger-100 text-danger-600 ring-8 ring-danger-50" aria-hidden="true">
+              <AlertTriangle :size="24" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h2 id="visit-cancel-title" class="text-lg sm:text-xl font-bold text-ink-900">
+                Xác nhận hủy cả lượt sửa?
+              </h2>
+              <p class="mt-1 text-sm text-ink-600">
+                Lượt sửa này gồm <strong class="font-semibold text-ink-900">{{ visit?.items.length }} thiết bị</strong>. Hành động này sẽ áp dụng cho toàn bộ các thiết bị trong lượt.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              aria-label="Đóng"
+              @click="cancelOpen = false"
+            >
+              <X :size="18" />
+            </button>
+          </div>
+
+          <!-- Thông tin hậu quả -->
+          <div class="space-y-2.5 rounded-xl border p-4 text-sm" :class="held ? 'border-danger-200 bg-danger-50/70 text-danger-900' : 'border-amber-200 bg-amber-50/70 text-amber-900'">
+            <div class="flex items-center gap-2 font-semibold">
+              <AlertCircle :size="17" class="shrink-0" :class="held ? 'text-danger-600' : 'text-amber-600'" />
+              <span>Lưu ý quan trọng khi hủy:</span>
+            </div>
+            <ul class="list-disc list-inside space-y-1.5 text-xs sm:text-sm pl-1 opacity-90 leading-relaxed">
+              <li>Mọi thiết bị trong lượt sửa đều sẽ bị hủy cùng lúc.</li>
+              <li v-if="held">
+                <strong>Trừ điểm uy tín:</strong> Kỹ thuật viên đã nhận lịch cho lượt này. Việc hủy từ phía bạn sẽ bị trừ điểm uy tín tài khoản theo quy định của FixHome.
+              </li>
+              <li v-else>
+                Hệ thống sẽ dừng tìm kiếm kỹ thuật viên cho cả {{ visit?.items.length }} thiết bị trong lượt.
+              </li>
+              <li>Dữ liệu lượt sửa không bị xóa cứng, bạn có thể xem lại trong lịch sử đơn.</li>
+            </ul>
+          </div>
+
+          <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+            <FhButton variant="secondary" size="md" :disabled="busy" @click="cancelOpen = false">
+              Giữ lượt sửa
+            </FhButton>
+            <FhButton variant="danger" size="md" :loading="busy" data-testid="visit-cancel-confirm" @click="confirmCancel">
+              <Trash2 v-if="!busy" :size="17" class="mr-1.5" aria-hidden="true" />
+              Xác nhận hủy
+            </FhButton>
           </div>
         </div>
       </div>
@@ -1525,9 +1719,8 @@ async function answerCash(agreed: boolean) {
 
 <style scoped>
 @media (max-width: 639px) {
-  .visit-device { display: grid; grid-template-columns: 4rem minmax(0, 1fr); column-gap: 12px; }
-  .visit-device > :first-child { grid-row: 1 / span 2; align-self: start; white-space: nowrap; }
-  .visit-device > :not(:first-child) { grid-column: 2; margin-top: 0; font-size: 14px; line-height: 20px; }
-  .visit-device > :last-child { margin-top: 4px; }
+  .visit-device {
+    min-width: 13rem;
+  }
 }
 </style>
