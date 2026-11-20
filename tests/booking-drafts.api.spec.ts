@@ -52,6 +52,22 @@ describe('bookingDraftsApi', () => {
     expect(put).toHaveBeenCalledWith('/booking-drafts/current', { snapshot, expectedVersion: null });
   });
 
+  it('sends urgency in the backend values, which reject the wizard label NORMAL', async () => {
+    put.mockResolvedValue({ data: { data: { id: 'draft-3', version: 1, expiresAt: '2026-12-05T00:00:00.000Z', snapshot } } });
+    post.mockResolvedValue({ data: { data: { kind: 'booking', bookingId: 'booking-1', visitGroupId: null } } });
+
+    await bookingDraftsApi.save({ ...snapshot, urgency: 'NORMAL' }, null);
+    expect(put).toHaveBeenCalledWith('/booking-drafts/current', { snapshot: { ...snapshot, urgency: 'medium' }, expectedVersion: null });
+
+    const data = { serviceId: 'service-1', urgency: 'EMERGENCY' };
+    await bookingDraftsApi.submit('draft-3', { expectedVersion: 1, operationKey: 'operation-2', request: { kind: 'booking', data } as never });
+    expect(post).toHaveBeenLastCalledWith('/booking-drafts/draft-3/submit', {
+      expectedVersion: 1,
+      operationKey: 'operation-2',
+      request: { kind: 'booking', data: { serviceId: 'service-1', urgency: 'critical' } },
+    });
+  });
+
   it('discards the active draft only when explicitly called', async () => {
     deleteRequest.mockResolvedValue({ data: { data: { deleted: true } } });
 
