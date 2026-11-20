@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-19 14:44 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
+> Cập nhật lần cuối: 2026-11-20 23:41 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -299,6 +299,7 @@ V5.3 bổ sung linh kiện: detail kỹ thuật viên dùng ledger theo PartRequ
 
 - Cả quản lý dịch vụ và admin: tổng quan, đơn, booking (gán thợ thủ công), yêu cầu linh kiện, ví và rút tiền, khu vực phục vụ.
 - Chỉ quản lý dịch vụ thao tác: huỷ đơn, vi phạm, xử lý hỗ trợ và tranh chấp (kể cả tiền mặt), bảo hành (duyệt, từ chối, đóng, xét việc thợ từ chối hoặc không đến). Admin được đọc hàng đợi/chi tiết hỗ trợ; không có quyền xử lý qua giao diện này.
+- Xác nhận khuôn mặt check-in (PO 20/11/2026, `/console/checkin-faces`, quản lý dịch vụ và admin, mục menu "Xác nhận khuôn mặt"): danh sách khuôn mặt thợ lệch ảnh đăng ký (lọc chờ, đã xác nhận, đã từ chối) và drawer so ảnh check-in với ảnh khuôn mặt đã đăng ký cùng điểm khớp; "Duyệt ảnh check-in" không cần lý do, "Từ chối ảnh check-in" cần lý do từ 5 ký tự và thợ phải chụp lại. Thông báo `CHECKIN_FACE_FLAGGED`, `CHECKIN_FACE_REVIEW_REQUIRED`, `CHECKIN_FACE_REVIEW_OVERDUE` mở trang này. Chưa có chip chờ duyệt ở chi tiết đơn, cột trong danh sách đơn hay số đếm trên menu. Chạy thật với backend CHƯA KIỂM CHỨNG.
 - Chỉ admin: kỹ thuật viên, duyệt xác minh danh tính (kỹ thuật viên và khách hàng), danh mục dịch vụ, duyệt kỹ năng, người dùng, cấu hình hệ thống, linh kiện, công nợ nền tảng, nhật ký audit.
 
 ### Giao diện console làm lại (10/10/2026, nhánh `feat/console-ui-redesign`)
@@ -507,6 +508,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - AI chỉ qua `POST /ai/diagnoses`, `POST /ai/chat/ask`, `GET /ai/chat/acknowledgements` của `backend`; mô tả tối đa 2000 ký tự, câu hỏi 1000, tối đa 3 ảnh.
 - Thông báo đọc qua REST, đếm chưa đọc mỗi 30 giây khi tab đang mở.
 - Ảnh hiện trường `POST /service-orders/:id/evidence` (multipart `file`, `type`, `note`): `type` là `before`, `after`, `additional` hoặc `checkin_face`. `backend` từ chối ảnh `before` khi chưa có ảnh `checkin_face`; `checkin_face` chỉ nhận khi đơn `EN_ROUTE` và đã check-in hợp lệ. `POST /service-orders/:id/check-in` gửi `{lat, lng, accuracyMeters}`, kết quả `valid`, `out_of_geofence`, `low_accuracy` hoặc `failed`.
+- Duyệt khuôn mặt check-in (cờ `FACE_CHECKIN_REVIEW_ENABLED` của `backend`): `GET /service-manager/checkin-face-reviews?status=&page=&limit=`, `GET .../:id` (`checkinPhotoUrl`, `registeredPhotoUrl` là URL ký tạm, `retakeCount`, `similarity`) và `POST .../:id/review` `{ approve, note }` (từ chối cần `note` từ 5 ký tự, 409 nếu đã xử lý); web chỉ đọc và quyết định, mọi quyền do `backend` kiểm.
 - Khách rút ví (backend nhánh `feat/customer-withdrawal-kyc`): `GET /customer/verification`, `POST /customer/verification/upload-url`, `POST /customer/verification`, `GET /customer/verification/documents/:id/access`, `GET /customer/wallet/withdrawal-info`, `GET /customer/wallet/banks`, `GET|PUT /customer/wallet/bank-account`, `POST|GET /customer/wallet/withdrawals` (`page`, `limit`); admin `GET /admin/customer-verifications` (`status` `pending|verified|rejected`, `search`, `page`, `limit`), `GET /admin/customer-verifications/:id`, `.../documents/:documentId/access`, `PATCH .../approve`, `PATCH .../reject` (`rejectionReason`). Loại giao dịch ví khách thêm `withdrawal`, `withdrawal_refund`. CHƯA KIỂM CHỨNG với `backend` thật.
 - Quản lý xem lệnh rút của khách (quản lý dịch vụ và admin, `backend` làm song song): `GET /service-manager/customer-withdrawals` (`page`, `limit`, `status` `PROCESSING|SUCCESS|FAILED`, `search`) trả lệnh kèm `customer {id, fullName, email, phoneNumber}` và số tài khoản đã che; `GET /service-manager/customer-withdrawals/payout-overview` (tổng của khách, `sourceBalance` là ví nguồn chung với kỹ thuật viên); `POST /service-manager/customer-withdrawals/:id/reconcile` trả lệnh kèm `message`. CHƯA KIỂM CHỨNG với `backend` thật.
 - Hoàn trả linh kiện FixHome (P1, owner lock 19/10/2026): `GET /service-orders/:orderId/part-returns` và `GET /part-returns/pending` trả `{partRequestId, partRequestItemId, partNameSnapshot, issuedQty, usedQty, declaredQty, managerAcceptedQty, outstandingQty, version}` (bản chờ trả có thể kèm `orderId`, `technicianId`, `technicianName`); `POST /part-requests/:requestId/items/:itemId/declare-return` và `.../accept-return` nhận `{quantity, expectedVersion, idempotencyKey}`. `idempotencyKey` khớp `^[A-Za-z0-9._:-]{8,128}$`, `quantity` nguyên 1..100; chỉ kỹ thuật viên giữ linh kiện được khai trả, chỉ quản lý dịch vụ được nhận thực tế. HTTP contract đã có ở Web; runtime với Backend tích hợp CHƯA KIỂM CHỨNG.
@@ -621,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
 - 2026-11-19 14:44 (UTC+7) | Lạc Vỹ | LacVy | Gỡ ràng buộc UI lệch Backend: chuẩn hóa ô tiền/min/max/regex khớp DTO và bỏ chặn cứng theo client (OTP, địa chỉ, số dư, hủy đơn, trần bảo hành).
 - 2026-11-17 19:47 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 3–4 (21 trang Admin/SM): chuẩn hóa toolbar, transition modal/drawer, animation và chuyển duyệt hồ sơ (AdminProfileReviewsPage.vue) sang drawer + lưới ảnh CCCD.
 - 2026-11-17 18:44 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 1–2 (19 file): chuẩn hóa console-ui.ts, drawers/modals/panels và các trang điểm nóng (khử raw colors, đồng bộ bảng/toolbar).
@@ -660,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.
 - 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
 - 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ
-- 2026-11-07 11:20 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Gộp dev (W3 thanh toán) vào nhánh nút trả lời nhanh, chỉ xung đột nhật ký CONTEXT, giữ cả hai bên
