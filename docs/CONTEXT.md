@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 00:38 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/visit-device-links-181-182
+> Cập nhật lần cuối: 2026-11-21 02:39 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-retest-2111
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 02:39 (UTC+7) | ToanAltF4 | fix/web-retest-2111 | Bản nháp đặt lịch gửi mức khẩn cấp đúng giá trị backend (medium), trước đây Lưu bản nháp luôn báo Nội dung bản nháp không hợp lệ
 - 2026-11-21 00:38 (UTC+7) | ToanAltF4 | fix/visit-device-links-181-182 | Bug 181/182: trang chủ khách mở thiết bị của lượt nhiều máy về trang lượt, ghi Kỹ thuật viên đã đến khi đã check-in; nút quay lại ở chi tiết đơn của lượt về trang lượt
 - 2026-11-21 00:33 (UTC+7) | ToanAltF4 | fix/bug184-part-return-cancelled | BUG 184: trang công việc của thợ hiện linh kiện cần trả và nút báo đã trả khi đơn (máy trong lượt nhiều máy) đã huỷ, kể cả khi thợ không còn phụ trách đơn
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-08 21:27 (UTC+7) | ToanAltF4 | fix/ai-new-session-service | Phiên mới trên trang Phân tích cùng AI nhận lại dịch vụ AI gợi ý (đặt lại cờ chọn tay sau khi xoá dịch vụ)
 - 2026-11-08 21:09 (UTC+7) | ToanAltF4 | fix/ai-chat-new-session-smooth | Khung chat AI: phiên mới là mới hoàn toàn (bỏ trả lời về muộn của phiên cũ, trang Phân tích cùng AI về bước 1 trống, sửa mô tả thì phân tích lại), trả lời thay chỗ dòng chờ, chữ hiện mịn, chi tiết mờ dần
 - 2026-11-08 18:03 (UTC+7) | ToanAltF4 | fix/warehouse-handover-reissue | Sửa nút Đã giao thực tế ở mục Lấy hàng tại kho: mã cấp lại sau bàn giao đặt đúng ô mã nhận, nút giao chỉ hiện khi phiếu ready, không thoát im lặng, lỗi báo bằng toast
-- 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.

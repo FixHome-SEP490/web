@@ -54,6 +54,14 @@ export interface BookingDraftSubmitCommand {
   request: BookingDraftSubmitRequest;
 }
 
+/** The wizard labels urgency LOW/NORMAL/HIGH/EMERGENCY; the backend only knows low/medium/high/critical. */
+const URGENCY: Record<string, string> = { LOW: 'low', NORMAL: 'medium', HIGH: 'high', EMERGENCY: 'critical' };
+
+function withBackendUrgency<T extends object>(value: T): T {
+  const urgency = (value as { urgency?: unknown }).urgency;
+  return typeof urgency === 'string' && URGENCY[urgency] ? { ...value, urgency: URGENCY[urgency] } : value;
+}
+
 export const bookingDraftsApi = {
   async current(): Promise<BookingDraft | null> {
     const response = await apiClient.get<{ data: BookingDraft | null }>('/booking-drafts/current');
@@ -62,7 +70,7 @@ export const bookingDraftsApi = {
 
   async save(snapshot: SafeDraftSnapshot, expectedVersion: number | null): Promise<BookingDraft> {
     const response = await apiClient.put<{ data: BookingDraft }>('/booking-drafts/current', {
-      snapshot,
+      snapshot: withBackendUrgency(snapshot),
       expectedVersion,
     });
     return response.data.data;
@@ -76,7 +84,7 @@ export const bookingDraftsApi = {
   async submit(draftId: string, command: BookingDraftSubmitCommand): Promise<BookingDraftSubmitResult> {
     const response = await apiClient.post<{ data: BookingDraftSubmitResult }>(
       `/booking-drafts/${encodeURIComponent(draftId)}/submit`,
-      command,
+      { ...command, request: { ...command.request, data: withBackendUrgency(command.request.data) } },
     );
     return response.data.data;
   },
