@@ -216,7 +216,6 @@ describe('public header', () => {
     expect(topNav.findAll('a').map((a) => a.attributes('href'))).toEqual([
       '/app',
       '/app/orders',
-      '/services',
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
@@ -282,7 +281,6 @@ describe('customer header', () => {
     expect(topNav.findAll('a').map((a) => a.attributes('href'))).toEqual([
       '/app',
       '/app/orders',
-      '/services',
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
