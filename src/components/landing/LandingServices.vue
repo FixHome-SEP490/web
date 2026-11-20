@@ -26,15 +26,15 @@ function isFeaturedCategory(category: ServiceCategory): boolean {
   return Boolean(item.isPopular || item.isFeatured || item.popular || item.featured);
 }
 
-function cardAppearanceClass(index: number, category: ServiceCategory): string {
-  if (index === 0 || isFeaturedCategory(category)) {
+function cardAppearanceClass(_index: number, category: ServiceCategory): string {
+  if (isFeaturedCategory(category)) {
     return 'card-featured bg-gradient-to-br from-[#EEF5FF] via-[#F4F9FF] to-white border border-blue-200/90 shadow-[0_4px_16px_rgba(37,99,235,0.06)] hover:border-brand-400';
   }
   return 'card-standard bg-white border border-[#E1E9F5] shadow-[0_2px_12px_rgba(37,99,235,0.04)] hover:border-brand-300';
 }
 
-function buttonAppearanceClass(index: number, category: ServiceCategory): string {
-  if (index === 0 || isFeaturedCategory(category)) {
+function buttonAppearanceClass(_index: number, category: ServiceCategory): string {
+  if (isFeaturedCategory(category)) {
     return 'bg-brand-600 text-white shadow-xs group-hover:bg-brand-700';
   }
   return 'bg-[#EFF6FF] text-brand-600 group-hover:bg-brand-600 group-hover:text-white';

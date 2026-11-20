@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
 import { useAuthStore } from '../src/stores/auth';
@@ -104,7 +104,15 @@ describe('supportCasesApi manager additions', () => {
 });
 
 describe('SupportDetailPage for a complaint', () => {
-  beforeEach(() => vi.clearAllMocks());
+  const mounted: Array<{ unmount: () => void }> = [];
+  beforeEach(() => {
+    vi.resetAllMocks();
+    document.body.replaceChildren();
+  });
+  afterEach(() => {
+    for (const w of mounted.splice(0)) w.unmount();
+    document.body.replaceChildren();
+  });
 
   const mountPage = async (data = baseCase()) => {
     const router = createRouter({
@@ -118,12 +126,17 @@ describe('SupportDetailPage for a complaint', () => {
     apiClientMock.get.mockResolvedValueOnce(envelope(data));
     await router.push('/console/support/case-1');
     const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] }, attachTo: document.body });
+    mounted.push(wrapper);
     await router.isReady();
     await flushPromises();
     return wrapper;
   };
-  const button = (wrapper: Awaited<ReturnType<typeof mountPage>>, label: string) =>
-    wrapper.findAll('button').find((b) => b.text() === label);
+  const button = (wrapper: Awaited<ReturnType<typeof mountPage>>, label: string) => {
+    const inWrapper = wrapper.findAll('button').find((b) => b.text() === label);
+    if (inWrapper) return inWrapper;
+    const inBody = Array.from(document.body.querySelectorAll('button')).find((b) => b.textContent?.trim() === label);
+    return inBody ? new DOMWrapper(inBody) : undefined;
+  };
 
   it('keeps system technician_delay read-only even for a manager with resolve permission', async () => {
     const wrapper = await mountPage(baseCase({ caseType: 'technician_delay' }));
@@ -271,7 +284,8 @@ describe('SupportDetailPage for a complaint', () => {
     expect(text).toContain('Cần xử lý ngay');
     expect(text).toContain('Quá hạn phản hồi');
     expect(text).toContain('Nhận xử lý case này');
-    expect(text).toContain('Giữ đơn không tự hoàn tất');
+    await wrapper.get('button[aria-haspopup="menu"]').trigger('click');
+    expect(document.body.textContent).toContain('Giữ đơn không tự hoàn tất');
     wrapper.unmount();
   });
 
@@ -284,17 +298,19 @@ describe('SupportDetailPage for a complaint', () => {
     expect(wrapper.text()).toContain('Bạn đã nhận xử lý case này');
     expect(button(wrapper, 'Nhận xử lý case này')).toBeUndefined();
 
+    await wrapper.get('button[aria-haspopup="menu"]').trigger('click');
     apiClientMock.post.mockResolvedValueOnce(envelope(baseCase({ status: 'in_review', holdCompletion: true })));
     await button(wrapper, 'Giữ đơn không tự hoàn tất')!.trigger('click');
     await flushPromises();
     expect(apiClientMock.post).toHaveBeenLastCalledWith('/support/cases/case-1/hold', { hold: true });
-    expect(wrapper.text()).toContain('Bỏ giữ hoàn tất đơn');
+    expect(document.body.textContent).toContain('Bỏ giữ hoàn tất đơn');
     expect(button(wrapper, 'Kiểm tra lại hoàn tất đơn')).toBeUndefined();
     wrapper.unmount();
   });
 
   it('asks the Backend to re-check completion after a release', async () => {
     const wrapper = await mountPage();
+    await wrapper.get('button[aria-haspopup="menu"]').trigger('click');
     apiClientMock.post.mockResolvedValueOnce(envelope({ completed: false, status: 'under_repair' }));
     await button(wrapper, 'Kiểm tra lại hoàn tất đơn')!.trigger('click');
     await flushPromises();

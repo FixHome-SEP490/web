@@ -7,6 +7,7 @@ import {
   PanelLeftOpen,
   LogOut,
   Camera,
+  Globe,
 } from 'lucide-vue-next';
 import AvatarDialog from './account/AvatarDialog.vue';
 import { useRoutePrefetch } from '../composables/useCachedQuery';
@@ -289,6 +290,27 @@ const isActive = (item: NavItem) => {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Quick link back to public website -->
+    <div class="shrink-0 px-2 pb-1">
+      <router-link
+        :to="homePath"
+        class="nav-item group"
+        data-testid="sidebar-public-link"
+        @mouseenter="(e) => showTooltip(e, 'Trang giới thiệu')"
+        @mouseleave="hideTooltip"
+      >
+        <div class="icon-wrapper shrink-0 relative flex items-center justify-center">
+          <Globe :size="19" stroke-width="2" />
+        </div>
+        <span
+          class="flex-1 whitespace-nowrap overflow-hidden truncate transition-opacity duration-150"
+          :class="isCollapsed ? 'hidden' : 'opacity-100'"
+        >
+          Trang giới thiệu
+        </span>
+      </router-link>
     </div>
 
     <!-- User profile -->

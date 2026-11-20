@@ -102,34 +102,30 @@ describe('LandingServices Modern Redesign', () => {
       expect(cards[5].find('img').attributes('src')).toBe('/images/services/svc-sua-bep-tu.png');
     });
 
-    it('applies featured card styling to the first card and standard styling to subsequent cards', async () => {
+    it('keeps uniform standard card styling across all cards unless a category is marked featured in data', async () => {
       const { wrapper } = await createWrapper();
       const cards = wrapper.findAll('.service-card');
 
-      // Card 1: featured gradient
-      expect(cards[0].classes()).toContain('card-featured');
-      const btn1 = cards[0].find('span.inline-flex.rounded-full');
-      expect(btn1.classes()).toContain('bg-brand-600');
-      expect(btn1.classes()).toContain('text-white');
-
-      // Card 2+: standard white
-      expect(cards[1].classes()).toContain('card-standard');
-      const btn2 = cards[1].find('span.inline-flex.rounded-full');
-      expect(btn2.classes()).toContain('text-brand-600');
+      for (const card of cards) {
+        expect(card.classes()).toContain('card-standard');
+        expect(card.classes()).not.toContain('card-featured');
+        const btn = card.find('span.inline-flex.rounded-full');
+        expect(btn.classes()).toContain('text-brand-600');
+        expect(btn.classes()).not.toContain('bg-brand-600');
+      }
     });
 
-    it('does NOT render "Dịch vụ phổ biến" badge when not present in business data', async () => {
-      const { wrapper } = await createWrapper();
-      expect(wrapper.text()).not.toContain('Dịch vụ phổ biến');
-    });
-
-    it('renders "Dịch vụ phổ biến" badge when category is marked popular or featured in data', async () => {
+    it('renders "Dịch vụ phổ biến" badge and featured styling when category is marked popular or featured in data', async () => {
       const categoriesWithPopular = [
         { ...mockCategories[0], isPopular: true } as ServiceCategory,
         ...mockCategories.slice(1),
       ];
       const { wrapper } = await createWrapper(categoriesWithPopular);
+      const cards = wrapper.findAll('.service-card');
       expect(wrapper.text()).toContain('Dịch vụ phổ biến');
+      expect(cards[0].classes()).toContain('card-featured');
+      expect(cards[0].find('span.inline-flex.rounded-full.bg-brand-600').exists()).toBe(true);
+      expect(cards[1].classes()).toContain('card-standard');
     });
 
     it('navigates to the correct catalog filtered route when a card is clicked', async () => {
