@@ -29,4 +29,6 @@ export type { TimelineStep } from './FhTimeline.vue';
 export { default as TechnicianPartsSection } from './TechnicianPartsSection.vue';
 export { default as TechnicianProfileModal } from './customer/TechnicianProfileModal.vue';
 export { default as ReviewTechnicianModal } from './customer/ReviewTechnicianModal.vue';
+export { default as BookingNoticeBanner } from './booking/BookingNoticeBanner.vue';
+export type { BannerVariant, BannerAction } from './booking/BookingNoticeBanner.vue';
 

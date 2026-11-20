@@ -23,6 +23,7 @@ import {
   FhPagination,
   FhSkeleton,
   FhStatusPill,
+  BookingNoticeBanner,
 } from '../../components';
 import { toast } from 'vue-sonner';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
@@ -48,6 +49,7 @@ const chatStore = useChatStore();
 type Tab = OrdersTab;
 const TAB_KEYS: readonly Tab[] = ['ALL', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const activeTab = useQueryChoice<Tab>('tab', TAB_KEYS, 'ALL');
+const filterParam = useQueryState<string | null>('filter', (raw) => raw ?? null, (value) => value ?? undefined);
 
 // "Đặt lại thợ" from a completed or cancelled order, or a booking cancelled before any technician accepted.
 const rebookFor = ref<{ bookingId: string; serviceName?: string } | null>(null);
@@ -148,10 +150,24 @@ const listView = computed<ListView>(() => {
   }
   return 'orders';
 });
+const WAITING_REQUEST = new Set(['SUBMITTED', 'MATCHING']);
+const WAITING_VISIT = new Set(['submitted', 'matching']);
+
+const pendingRequests = computed(() =>
+  bookings.value.filter((b) => !b.visitGroupId && WAITING_REQUEST.has(String(b.status).toUpperCase()))
+);
+
+const pendingVisits = computed(() =>
+  visitGroups.value.filter((v) => WAITING_VISIT.has(String(v.status).toLowerCase()))
+);
+
+const totalPendingWaitingCount = computed(() => pendingRequests.value.length + pendingVisits.value.length);
+
 watch(
   [loadingOrders, loadingBookings, loadingVisitGroups, ordersTotal, bookingsTotal, visitGroupsTotal],
   ([ordLoading, reqLoading, visitLoading, ordTotal, reqTotal, visTotal]) => {
-    if (chosenList.value || initialListPicked.value || activeTab.value !== 'ALL' || search.value) return;
+    if (chosenList.value || initialListPicked.value || search.value) return;
+    if (activeTab.value !== 'ALL' && activeTab.value !== 'IN_PROGRESS' && filterParam.value !== 'pending') return;
     const picked = pickInitialList({
       orders: { loading: ordLoading, total: ordTotal },
       requests: { loading: reqLoading, total: reqTotal, statuses: bookings.value.map((b) => String(b.status)) },
@@ -162,9 +178,9 @@ watch(
   { immediate: true },
 );
 const listChoices = computed(() => [
-  { key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa', count: ordersTotal.value, loading: loadingOrders.value },
-  { key: 'requests' as const, label: 'Yêu cầu đặt lịch', shortLabel: 'Đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value },
-  { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị', count: visitGroupsTotal.value, loading: loadingVisitGroups.value },
+  { key: 'orders' as const, label: 'Đơn sửa chữa', shortLabel: 'Đơn sửa', count: ordersTotal.value, loading: loadingOrders.value, pendingCount: 0 },
+  { key: 'requests' as const, label: 'Yêu cầu đặt lịch', shortLabel: 'Đặt lịch', count: bookingsTotal.value, loading: loadingBookings.value, pendingCount: pendingRequests.value.length },
+  { key: 'visits' as const, label: 'Lượt sửa nhiều thiết bị', shortLabel: 'Nhiều thiết bị', count: visitGroupsTotal.value, loading: loadingVisitGroups.value, pendingCount: pendingVisits.value.length },
 ]);
 function switchList(choice: ListView) {
   chosenList.value = choice;
@@ -310,6 +326,9 @@ watch([activeTab, activeListAllCount, listView], () => {
 });
 
 onMounted(() => {
+  if (filterParam.value === 'pending') {
+    activeTab.value = 'IN_PROGRESS';
+  }
   void nextTick(updateTabIndicator);
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateTabIndicator);
@@ -490,7 +509,7 @@ async function confirmVisitCancel(group: VisitGroupPageItem, reason: string) {
     toast.success('Đã huỷ lượt sửa.');
     showCancelDialog.value = false;
     targetVisit.value = null;
-    await retryVisitGroups();
+    await Promise.all([retryVisitGroups(), retryBookings()]);
   } catch {
     toast.error('Chưa huỷ được lượt sửa. Vui lòng thử lại.');
   } finally {
@@ -548,7 +567,7 @@ async function confirmCancel() {
     clearSelection();
     showCancelDialog.value = false;
     targetSingleBooking.value = null;
-    await retryBookings();
+    await Promise.all([retryBookings(), retryVisitGroups()]);
     if (ordersTotal.value > 0) {
       void retryOrders();
     }
@@ -608,6 +627,37 @@ function cancelStale() {
         <p class="text-sm text-ink-600">Theo dõi yêu cầu đặt lịch, đơn sửa chữa đang thực hiện và các lượt nhiều thiết bị.</p>
       </div>
     </header>
+
+    <!-- Pending Visits / Quota Limit Warning Banner -->
+    <BookingNoticeBanner
+      v-if="totalPendingWaitingCount > 0"
+      variant="warning"
+      :title="totalPendingWaitingCount >= 2 ? 'Bạn đã đạt giới hạn yêu cầu đang chờ' : 'Bạn có yêu cầu đang chờ kỹ thuật viên nhận'"
+      :description="`Bạn đang có ${totalPendingWaitingCount} lượt sửa chữa chờ kỹ thuật viên nhận (${pendingRequests.length} yêu cầu đơn lẻ, ${pendingVisits.length} lượt nhiều thiết bị). Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu để đặt tiếp.`"
+      :primary-cta="{ label: 'Quay lại đặt lịch', to: '/app/bookings/new' }"
+      data-testid="orders-pending-waiting-banner"
+    >
+      <div v-if="listView === 'orders' || (pendingRequests.length > 0 && pendingVisits.length > 0)" class="mt-2.5 flex flex-wrap gap-2">
+        <button
+          v-if="pendingRequests.length > 0"
+          type="button"
+          class="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold bg-amber-100/90 text-amber-900 hover:bg-amber-200 transition-colors cursor-pointer"
+          data-testid="switch-to-pending-requests"
+          @click="switchList('requests')"
+        >
+          Xem yêu cầu đơn lẻ ({{ pendingRequests.length }})
+        </button>
+        <button
+          v-if="pendingVisits.length > 0"
+          type="button"
+          class="inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold bg-amber-100/90 text-amber-900 hover:bg-amber-200 transition-colors cursor-pointer"
+          data-testid="switch-to-pending-visits"
+          @click="switchList('visits')"
+        >
+          Xem nhiều thiết bị ({{ pendingVisits.length }})
+        </button>
+      </div>
+    </BookingNoticeBanner>
 
     <div
       v-if="staleReminder"
@@ -670,6 +720,11 @@ function cancelStale() {
           class="shrink-0 rounded-full px-1.5 py-0.5 font-num text-[11px] leading-none transition-colors"
           :class="listView === choice.key ? 'bg-brand-50 text-brand-700' : 'bg-white/80 text-ink-600'"
         >{{ choice.count }}</span>
+        <span
+          v-if="choice.pendingCount && choice.pendingCount > 0"
+          class="shrink-0 rounded-full bg-amber-100 border border-amber-300/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+          :data-testid="`pending-badge-${choice.key}`"
+        >Chờ thợ: {{ choice.pendingCount }}</span>
       </button>
     </div>
 
