@@ -14,6 +14,7 @@ import {
   Package,
   PackageCheck,
   Receipt,
+  ScanFace,
   ScrollText,
   ShieldCheck,
   Sliders,
@@ -52,6 +53,7 @@ const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Bo
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
 const support = item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
+const checkinFaces = item('Xác nhận khuôn mặt', '/console/checkin-faces', ScanFace);
 const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
 const serviceAreas = item('Khu vực phục vụ', '/console/service-areas', MapPinned);
 const warehouses = item('Kho linh kiện', '/console/warehouses', Warehouse);
@@ -63,7 +65,7 @@ const warehouses = item('Kho linh kiện', '/console/warehouses', Warehouse);
 export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
     return [
-      { group: 'Vận hành', items: [overview, orders, warehouses, partRequests, partReturns, payouts, serviceAreas] },
+      { group: 'Vận hành', items: [overview, orders, checkinFaces, warehouses, partRequests, partReturns, payouts, serviceAreas] },
       {
         group: 'Hỗ trợ',
         items: [

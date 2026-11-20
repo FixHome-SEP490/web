@@ -359,6 +359,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Huỷ đơn', roles: ['SERVICE_MANAGER'] },
       },
       {
+        path: 'checkin-faces',
+        name: 'console-checkin-faces',
+        component: () => import('../pages/console/ConsoleCheckinFacesPage.vue'),
+        meta: { title: 'Xác nhận khuôn mặt check-in', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'strikes',
         // Strikes gave way to reputation points (PO 08-09/10/2026).
         redirect: '/console/reputation',

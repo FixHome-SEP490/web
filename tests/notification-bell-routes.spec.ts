@@ -98,4 +98,8 @@ describe('Notification bell role-safe references', () => {
       role === 'TECHNICIAN' ? '/tech/jobs/order-1' : '/app/orders/order-1');
     expect(get).toHaveBeenCalledWith('/part-requests/part-1');
   });
+
+  it.each(['SERVICE_MANAGER', 'ADMIN'])('opens the check-in face review page for %s', async role => {
+    await clickNotice(role, notification({ type: 'CHECKIN_FACE_REVIEW_REQUIRED', referenceType: 'SERVICE_ORDER', referenceId: 'order-1' }), '/console/checkin-faces');
+  });
 });

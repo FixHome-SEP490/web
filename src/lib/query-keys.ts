@@ -97,6 +97,11 @@ export const queryKeys = {
   addresses: ['addresses'] as const,
   /** Console overview (operational counts and orders to watch). */
   consoleDashboard: ['console-dashboard'] as const,
+  /** Technician check-in faces held for a service manager. */
+  checkinFaceReviews: {
+    all: ['checkin-face-reviews'] as const,
+    list: (filter: Filter) => ['checkin-face-reviews', 'list', filter] as const,
+  },
   /** Rarely changing data; read with `REFERENCE_STALE_TIME`. */
   reference: {
     all: ['reference'] as const,
@@ -161,6 +166,7 @@ const NO_CACHED_EFFECT = /^\/(auth|messages|conversations|media|ai|service-order
 const WRITE_EFFECTS: ReadonlyArray<readonly [RegExp, readonly QueryKey[]]> = [
   [/^\/(technician\/wallet|customer\/wallet|invoices)(\/|$)/, [...affectedBy.walletChange, ...affectedBy.orderChange]],
   [/^\/(customer\/verification|admin\/customer-verifications)(\/|$)/, affectedBy.identityChange],
+  [/^\/service-manager\/checkin-face-reviews(\/|$)/, [queryKeys.checkinFaceReviews.all, queryKeys.orders.all, queryKeys.consoleDashboard]],
   // Re-checking a customer payout may refund the customer's wallet.
   [/^\/service-manager\/customer-withdrawals(\/|$)/, affectedBy.walletChange],
   [/^\/(invitations)(\/|$)/, affectedBy.invitationResponse],
