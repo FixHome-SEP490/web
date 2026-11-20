@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-20 23:41 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-21 00:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/bug184-part-return-cancelled
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 00:33 (UTC+7) | ToanAltF4 | fix/bug184-part-return-cancelled | BUG 184: trang công việc của thợ hiện linh kiện cần trả và nút báo đã trả khi đơn (máy trong lượt nhiều máy) đã huỷ, kể cả khi thợ không còn phụ trách đơn
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
 - 2026-11-19 14:44 (UTC+7) | Lạc Vỹ | LacVy | Gỡ ràng buộc UI lệch Backend: chuẩn hóa ô tiền/min/max/regex khớp DTO và bỏ chặn cứng theo client (OTP, địa chỉ, số dư, hủy đơn, trần bảo hành).
 - 2026-11-17 19:47 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 3–4 (21 trang Admin/SM): chuẩn hóa toolbar, transition modal/drawer, animation và chuyển duyệt hồ sơ (AdminProfileReviewsPage.vue) sang drawer + lưới ảnh CCCD.
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-08 18:03 (UTC+7) | ToanAltF4 | fix/warehouse-handover-reissue | Sửa nút Đã giao thực tế ở mục Lấy hàng tại kho: mã cấp lại sau bàn giao đặt đúng ô mã nhận, nút giao chỉ hiện khi phiếu ready, không thoát im lặng, lỗi báo bằng toast
 - 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.
 - 2026-11-07 12:23 (UTC+7) | foxonworld | foxonworld/fixhome-w123-auditfix-web-20261107 | Sửa remount order detail khi đổi orderId và xác minh snapshot 70/30 theo shipment làm tròn riêng; RED→GREEN 22/22, typecheck/lint PASS, chờ review và DEV release.
-- 2026-11-07 11:33 (UTC+7) | ToanAltF4 | feat/ai-quick-replies | Test W3 admin chờ cả phần vòng đời (webcrypto) tải xong trước khi kiểm, CI runner chậm từng đỏ

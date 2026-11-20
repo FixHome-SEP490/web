@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
-vi.mock('../src/api/client', () => ({ default: { get: mockGet } }));
+vi.mock('../src/api/client', () => ({ default: { get: mockGet }, getHttpStatus: (err: unknown) => (err as { response?: { status?: number } } | null)?.response?.status }));
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: 'synthetic-old-order' } }), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('../src/stores/chat.store', () => ({ useChatStore: () => ({ openConversationForBooking: vi.fn(), toggleWidget: vi.fn(), conversations: [] }) }));
 import { ordersApi, isHistoricalOrder } from '../src/api/orders.api';
@@ -59,6 +59,8 @@ describe('historical ServiceOrder Web adapter keeps private-free summary separat
   });
   it('shows historical detail without requesting live job financial, GPS or customer data', async () => {
     mockGet.mockImplementation(async (path: string) => {
+      // BUG DETECTOR 184: the technician's own part-return obligation is the one extra read.
+      if (path === '/service-orders/synthetic-old-order/part-returns') return { data: { data: [] } };
       if (path !== '/service-orders/synthetic-old-order') throw new Error('Unexpected private endpoint ' + path);
       return { data: { data: historical } };
     });
@@ -69,7 +71,7 @@ describe('historical ServiceOrder Web adapter keeps private-free summary separat
     expect(history.text()).toContain('SO-OLD');
     expect(wrapper.text()).not.toContain('Nhắn tin cho khách');
     expect(wrapper.text()).not.toContain('Khai báo đã thu tiền mặt');
-    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockGet.mock.calls.map(([path]) => path).sort()).toEqual(['/service-orders/synthetic-old-order', '/service-orders/synthetic-old-order/part-returns']);
     wrapper.unmount();
   });  it('reads historical detail without manufacturing full order fields', async () => {
     mockGet.mockResolvedValue({ data: { data: historical } });
