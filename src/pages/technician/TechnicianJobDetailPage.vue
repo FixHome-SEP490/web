@@ -47,6 +47,7 @@ import {
   BookingMediaViewer,
   TechnicianPartsSection,
 } from '../../components';
+import CancelledOrderPartReturns from '../../components/CancelledOrderPartReturns.vue';
 import {
   ordersApi,
   historicalPill,
@@ -2736,6 +2737,7 @@ const toggleMore = async () => {
       <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
       <p v-if="historicalJob.workStopped" class="text-sm text-ink-600">Công việc đã dừng và phân công đã được nhả. Nghĩa vụ tiền và linh kiện cũ được đối soát riêng.</p>
       <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>
+      <CancelledOrderPartReturns :order-id="historicalJob.id" />
       <nav class="flex flex-wrap gap-2" aria-label="Tiếp tục công việc">
         <FhButton v-for="sibling in historicalSiblingLinks" :key="sibling.id" size="md" :data-testid="`historical-sibling-${sibling.sequence}`" @click="router.push({ path: `/tech/jobs/${sibling.id}` })">Tiếp tục máy {{ sibling.sequence }}</FhButton>
         <FhButton variant="secondary" size="md" data-testid="historical-jobs" @click="router.push({ path: '/tech/jobs' })">Danh sách công việc</FhButton>
@@ -3561,6 +3563,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
+      <CancelledOrderPartReturns v-if="isCancelled && !visitDeviceFailed" :order-id="job.id" class="order-4 lg:col-start-1" />
       <FhCard v-if="!isCancelled || visitDeviceFailed" padding="none" data-testid="job-details" class="animate-slide-up-delay-2 order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->
