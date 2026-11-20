@@ -147,18 +147,25 @@ function validate(): boolean {
   return Object.keys(next).length === 0 && sides.every((side) => side.file && !side.error);
 }
 
+// Ảnh đã lên Storage thì dùng lại khi nộp lại, tránh để file mồ côi.
+const uploadedSides = new WeakMap<File, SubmitCustomerKycDocument>();
+
 async function uploadSide(side: Side): Promise<SubmitCustomerKycDocument> {
   const file = side.file as File;
+  const cached = uploadedSides.get(file);
+  if (cached) return cached;
   const mimeType = file.type as CustomerKycMimeType;
   const slot = await customerVerificationApi.requestUploadUrl(mimeType);
   await customerVerificationApi.uploadToSignedUrl(slot.uploadUrl, mimeType, file);
-  return {
+  const doc: SubmitCustomerKycDocument = {
     documentType: side.documentType,
     storageObjectPath: slot.storageObjectPath,
     fileName: `${FILE_NAMES[side.key]}.${EXTENSIONS[mimeType]}`,
     fileSize: file.size,
     mimeType,
   };
+  uploadedSides.set(file, doc);
+  return doc;
 }
 
 async function submit() {

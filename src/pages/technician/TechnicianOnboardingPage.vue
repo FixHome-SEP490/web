@@ -339,7 +339,7 @@ const uploadKycDocuments = async (): Promise<boolean> => {
     const uploadPayloads: SubmitDocumentPayload[] = [];
 
     for (const slot of slots.value) {
-      if (slot.file) {
+      if (slot.file && !slot.uploaded) {
         const { mimeType, fileName } = getKycUploadMeta(slot.file, slot.documentType);
 
         // Request short-lived signed upload URL from backend
