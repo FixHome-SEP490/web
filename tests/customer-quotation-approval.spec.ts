@@ -107,6 +107,30 @@ describe.each(['solo', 'visit'] as const)('%s quotation approval', kind => {
     expect(w.find(approveSelector).exists()).toBe(false);
   });
 
+  it('asks before rejecting a solo quotation, which cancels the whole order', async () => {
+    if (kind !== 'solo') return;
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    const w = await open();
+    const reject = w.findAll('[data-testid="order-costs"] button').find(b => b.text().includes('Từ chối báo giá'))!;
+    await reject.trigger('click');
+    await flushPromises();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('huỷ toàn bộ đơn'));
+    expect(http.post).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await reject.trigger('click');
+    await flushPromises();
+    vi.unstubAllGlobals();
+    expect(http.post.mock.calls[0]?.[0]).toBe('/quotations/q-o1/decision');
+  });
+
+  it('says the technician has arrived once the check-in is verified', async () => {
+    if (kind !== 'solo') return;
+    states.o1 = { ...order('o1'), arrivalVerified: true } as ReturnType<typeof order>;
+    const w = await open();
+    expect(w.get('[data-testid="order-status-pill"]').text()).toBe('Đã đến, chờ sửa');
+  });
+
   it('keeps a solo detail and focused control mounted during a socket refresh', async () => {
     if (kind !== 'solo') return;
     const refresh = deferred<ReturnType<typeof envelope>>();
