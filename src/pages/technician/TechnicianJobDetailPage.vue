@@ -37,6 +37,7 @@ import {
   FileText,
   ScanFace,
   Info,
+  PackageCheck,
 } from 'lucide-vue-next';
 import {
   FhButton,
@@ -47,6 +48,7 @@ import {
   BookingMediaViewer,
   TechnicianPartsSection,
 } from '../../components';
+import CancelledOrderPartReturns from '../../components/CancelledOrderPartReturns.vue';
 import {
   ordersApi,
   historicalPill,
@@ -822,7 +824,15 @@ interface NowStep {
 /** What the technician has to do now: one line and at most one primary button. */
 const nowStep = computed<NowStep | null>(() => {
   if (!job.value) return null;
-  if (workStopped.value) return { title: 'Đã dừng công việc', hint: 'Phân công đã được nhả. Báo giá và tiền cũ chỉ để đối soát; chưa xác định khoản phải trả hoặc hoàn tiền.' };
+  if (workStopped.value) return {
+    title: 'Đã dừng công việc',
+    hint: 'Phân công đã được nhả. Báo giá và tiền cũ chỉ để đối soát; chưa xác định khoản phải trả hoặc hoàn tiền.',
+    action: {
+      label: 'Xem linh kiện cần trả',
+      run: () => router.push({ path: '/tech/part-returns', query: { orderId: jobIdRef.value } }),
+      icon: PackageCheck,
+    },
+  };
   if (recordedInterruption.value) return {
     title: 'Đã ghi nhận gián đoạn',
     hint: 'Đơn chưa được hủy. Khai số linh kiện thực trả để quản lý dịch vụ kiểm đếm và nhận thực tế; báo giá và tiền cũ được giữ để đối soát riêng.',
@@ -2736,9 +2746,11 @@ const toggleMore = async () => {
       <p class="text-sm text-ink-600">Ngày ghi nhận: <span class="font-num whitespace-nowrap">{{ vnDateString(historicalJob.createdAt) }}</span></p>
       <p v-if="historicalJob.workStopped" class="text-sm text-ink-600">Công việc đã dừng và phân công đã được nhả. Nghĩa vụ tiền và linh kiện cũ được đối soát riêng.</p>
       <p class="text-sm text-ink-600">Bạn không còn phụ trách đơn này nên không xem được thông tin của khách.</p>
+      <CancelledOrderPartReturns :order-id="historicalJob.id" />
       <nav class="flex flex-wrap gap-2" aria-label="Tiếp tục công việc">
         <FhButton v-for="sibling in historicalSiblingLinks" :key="sibling.id" size="md" :data-testid="`historical-sibling-${sibling.sequence}`" @click="router.push({ path: `/tech/jobs/${sibling.id}` })">Tiếp tục máy {{ sibling.sequence }}</FhButton>
         <FhButton variant="secondary" size="md" data-testid="historical-jobs" @click="router.push({ path: '/tech/jobs' })">Danh sách công việc</FhButton>
+        <FhButton variant="secondary" size="md" data-testid="historical-part-returns" @click="router.push({ path: '/tech/part-returns', query: { orderId: historicalJob.id } })"><PackageCheck :size="16" class="mr-1.5" />Xem linh kiện cần trả</FhButton>
       </nav>
     </div>
 
@@ -3079,7 +3091,10 @@ const toggleMore = async () => {
         <p class="font-semibold">{{ !partsReturnsKnown ? 'Chưa xác nhận được tình trạng hoàn trả linh kiện.' : returnsToDeclare > 0 ? `Còn ${returnsToDeclare} linh kiện cần trả kho` : `${returnsAwaitingManager} linh kiện đã khai, chờ Quản lý Dịch vụ xác nhận` }}</p>
         <p v-if="partsReturnsKnown && returnsToDeclare > 0 && returnsAwaitingManager > 0">{{ returnsAwaitingManager }} đã khai, chờ Quản lý Dịch vụ xác nhận đã nhận thực tế.</p>
         <p v-else-if="!partsReturnsKnown && pendingPartsReturns > 0">Đã ghi nhận {{ pendingPartsReturns }} linh kiện còn nghĩa vụ trả kho.</p>
-        <button type="button" class="mt-1 min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
+        <div class="mt-1 flex flex-wrap gap-2">
+          <button type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" @click="revealParts">Xem linh kiện</button>
+          <router-link :to="{ path: '/tech/part-returns', query: { orderId: job.id } }" class="inline-flex min-h-11 items-center rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" data-testid="open-part-returns-page">Xem linh kiện cần trả</router-link>
+        </div>
       </div>
       <FhCard v-if="nowStep" data-testid="job-now" class="animate-slide-up order-1 lg:col-start-1">
         <div v-if="!isCancelled" class="mb-4 pb-3.5 border-b border-ink-100">
@@ -3561,6 +3576,7 @@ const toggleMore = async () => {
       </FhCard>
 
       <!-- 4. Details needed only sometimes: one surface, collapsed rows -->
+      <CancelledOrderPartReturns v-if="isCancelled && !visitDeviceFailed" :order-id="job.id" class="order-4 lg:col-start-1" />
       <FhCard v-if="!isCancelled || visitDeviceFailed" padding="none" data-testid="job-details" class="animate-slide-up-delay-2 order-4 lg:col-start-1">
         <div class="divide-y divide-ink-100">
           <!-- Photos -->

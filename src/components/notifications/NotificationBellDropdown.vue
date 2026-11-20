@@ -148,6 +148,10 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/console/warranty');
       return;
     }
+    if (itemType.startsWith('CHECKIN_FACE_')) {
+      router.push('/console/checkin-faces');
+      return;
+    }
     if (role === 'SERVICE_MANAGER' && itemType === 'PART_RETURN_DECLARED') {
       router.push('/console/part-returns');
       return;

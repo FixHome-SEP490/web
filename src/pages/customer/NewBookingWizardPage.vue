@@ -27,6 +27,7 @@ import { FhButton, FhMoney, FhSkeleton } from '../../components';
 import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
 import BookingStepDock from '../../components/booking/BookingStepDock.vue';
 import BookingSummary, { type SummaryDevice } from '../../components/booking/BookingSummary.vue';
+import BookingNoticeBanner from '../../components/booking/BookingNoticeBanner.vue';
 import { summarizeVisitDevicePrices, type SummaryPrice } from '../../components/booking/visit-device-pricing';
 import { useStepHistory } from '../../components/booking/use-step-history';
 import { catalogPriceLabel, deviceFactsText, readableScope } from '../../components/booking/booking-price';
@@ -122,6 +123,69 @@ const pendingDraftSubmit = ref<{
   operationKey: string;
   request: BookingDraftSubmitRequest;
 } | null>(null);
+
+const pendingVisitLimitReached = ref(false);
+const pendingLimitMessage = ref('');
+
+function isPendingVisitLimitError(error: unknown): { isLimit: boolean; message: string } {
+  const errObj = error as {
+    response?: {
+      status?: number;
+      data?: {
+        error?: { code?: string; message?: string; details?: unknown };
+        message?: string;
+        code?: string;
+      };
+    };
+  } | undefined;
+
+  const data = errObj?.response?.data;
+  const code = data?.error?.code || data?.code;
+  const message = data?.error?.message || data?.message;
+
+  if (code === 'PENDING_VISIT_LIMIT_REACHED') {
+    return {
+      isLimit: true,
+      message: typeof message === 'string' && message.trim()
+        ? message.trim()
+        : 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.',
+    };
+  }
+
+  if (typeof message === 'string') {
+    const lower = message.toLowerCase();
+    if (
+      lower.includes('hai lượt sửa chữa chờ') ||
+      lower.includes('chờ kỹ thuật viên nhận') ||
+      lower.includes('pending_visit_limit_reached') ||
+      lower.includes('giới hạn yêu cầu đang chờ')
+    ) {
+      return { isLimit: true, message: message.trim() };
+    }
+  }
+
+  return { isLimit: false, message: '' };
+}
+
+async function saveDraftQuietly() {
+  try {
+    if (!isAiFlow && hasBookingInput()) {
+      const saved = await bookingDraftsApi.save(buildSafeDraftSnapshot(), currentBookingDraft.value?.version ?? null);
+      currentBookingDraft.value = saved;
+    }
+  } catch (err) {
+    console.warn('[NewBookingWizardPage] auto-save draft quietly failed:', err);
+  }
+}
+
+async function handleViewPendingRequests() {
+  await saveDraftQuietly();
+  router.push('/app/orders?filter=pending');
+}
+
+function handleDismissPendingLimit() {
+  pendingVisitLimitReached.value = false;
+}
 
 // Form state
 const categories = ref<ServiceCategory[]>([]);
@@ -1644,6 +1708,17 @@ async function retrySavedDraftSubmit() {
       draftNotice.value = 'Chưa nhận được kết quả đặt lịch hợp lệ. Bạn có thể kiểm tra lại bằng cùng yêu cầu.';
     }
   } catch (error: unknown) {
+    const quotaCheck = isPendingVisitLimitError(error);
+    if (quotaCheck.isLimit) {
+      pendingVisitLimitReached.value = true;
+      pendingLimitMessage.value = quotaCheck.message;
+      submitOutcomeUnknown.value = false;
+      draftNotice.value = '';
+      void saveDraftQuietly();
+      await nextTick();
+      document.getElementById('pending-limit-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     const status = (error as { response?: { status?: number } })?.response?.status;
     if (status === undefined || status === 408 || status >= 500) {
       submitOutcomeUnknown.value = true;
@@ -2232,6 +2307,16 @@ async function submitVisit(current: VisitDeviceInput[]) {
     const visit = await visitGroupsApi.create(request);
     router.push(`/app/visits/${visit.id}`);
   } catch (error: unknown) {
+    const quotaCheck = isPendingVisitLimitError(error);
+    if (quotaCheck.isLimit) {
+      pendingVisitLimitReached.value = true;
+      pendingLimitMessage.value = quotaCheck.message;
+      submitOutcomeUnknown.value = false;
+      void saveDraftQuietly();
+      await nextTick();
+      document.getElementById('pending-limit-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     if (!(error as { response?: unknown })?.response) {
       submitOutcomeUnknown.value = true;
       toast.warning('Chưa xác nhận được kết quả gửi yêu cầu. Vui lòng kiểm tra Đơn của tôi trước khi gửi lại.');
@@ -2374,6 +2459,17 @@ async function createAndFindTech() {
     router.push(`/app/bookings/${booking.id}/candidates`);
   } catch (error: unknown) {
     console.error('[NewBookingWizardPage] createBooking failed:', error);
+    const quotaCheck = isPendingVisitLimitError(error);
+    if (quotaCheck.isLimit) {
+      pendingVisitLimitReached.value = true;
+      pendingLimitMessage.value = quotaCheck.message;
+      submitOutcomeUnknown.value = false;
+      void saveDraftQuietly();
+      await nextTick();
+      document.getElementById('pending-limit-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     const errObj = error as {
       response?: { data?: { error?: { message?: string }; message?: string } };
     } | undefined;
@@ -3288,6 +3384,16 @@ async function createAndFindTech() {
       </div>
       <!-- Step 3: conversation with the assistant before booking -->
       <div v-else-if="step === 3" key="step-3" ref="aiBookingPanel" class="mx-auto flex w-full max-w-6xl min-h-0 flex-col gap-3 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-3 shadow-[var(--shadow-e1)] sm:p-5" :style="{ height: aiBookingHeight ? `${aiBookingHeight}px` : '72dvh' }" data-testid="ai-booking-panel">
+        <BookingNoticeBanner
+          v-if="pendingVisitLimitReached"
+          id="pending-limit-banner"
+          variant="warning"
+          title="Bạn đã đạt giới hạn yêu cầu đang chờ"
+          :description="pendingLimitMessage || 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.'"
+          :primary-cta="{ label: 'Xem yêu cầu đang chờ', onClick: handleViewPendingRequests }"
+          :secondary-cta="{ label: 'Để sau', onClick: handleDismissPendingLimit }"
+          data-testid="booking-pending-limit-banner-ai"
+        />
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Trò chuyện với trợ lý AI</h2>
@@ -3435,6 +3541,17 @@ async function createAndFindTech() {
       <!-- Step 4: one last look, then send. -->
       <div v-else-if="step === 4" key="step-4" class="mx-auto w-full max-w-3xl space-y-4">
         <h2 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Kiểm tra lần cuối</h2>
+
+        <BookingNoticeBanner
+          v-if="pendingVisitLimitReached"
+          id="pending-limit-banner"
+          variant="warning"
+          title="Bạn đã đạt giới hạn yêu cầu đang chờ"
+          :description="pendingLimitMessage || 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.'"
+          :primary-cta="{ label: 'Xem yêu cầu đang chờ', onClick: handleViewPendingRequests }"
+          :secondary-cta="{ label: 'Để sau', onClick: handleDismissPendingLimit }"
+          data-testid="booking-pending-limit-banner"
+        />
 
         <dl v-if="aiSessionId && aiRecap" data-testid="ai-recap" class="space-y-2 rounded-2xl border border-ink-200 bg-white p-5 text-sm">
           <div v-if="aiRecap.device" class="flex gap-4"><dt class="w-28 shrink-0 text-ink-500">Thiết bị</dt><dd class="text-ink-900">{{ aiRecap.device }}</dd></div>

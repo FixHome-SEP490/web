@@ -64,6 +64,24 @@ export function getNotificationCategory(item: NotificationItem): NotificationCat
   const title = (item.title || '').toLowerCase();
   const m = (item.message || '').toLowerCase();
 
+  // Check-in face of a technician held for a service manager, and the manager's answer (PO 20/11/2026).
+  if (t === 'CHECKIN_FACE_FLAGGED' || t === 'CHECKIN_FACE_REVIEW_REQUIRED' || t === 'CHECKIN_FACE_REVIEW_OVERDUE') {
+    return {
+      category: 'SERVICE_MANAGER', severity: 'warning', label: 'Quản lý dịch vụ',
+      eventLabel: 'Xác nhận khuôn mặt',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf('warning'), iconName: 'alert',
+    };
+  }
+  if (t === 'CHECKIN_FACE_APPROVED' || t === 'CHECKIN_FACE_REJECTED') {
+    const approved = t === 'CHECKIN_FACE_APPROVED';
+    return {
+      category: 'SERVICE_MANAGER', severity: approved ? 'success' : 'error', label: 'Quản lý dịch vụ',
+      eventLabel: approved ? 'Đã xác nhận khuôn mặt' : 'Chụp lại khuôn mặt',
+      badgeClass: 'bg-ink-100 text-ink-600 border-ink-200',
+      ...toneOf(approved ? 'success' : 'error'), iconName: approved ? 'check' : 'x',
+    };
+  }
   if (t === 'PART_RETURN_DECLARED') {
     return {
       category: 'TECHNICIAN', severity: 'warning', label: 'Kỹ thuật viên',

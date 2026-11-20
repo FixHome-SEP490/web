@@ -86,6 +86,28 @@ describe('Customer home', () => {
     expect(w.find('[data-testid="dashboard-active-order"]').exists()).toBe(true);
   });
 
+  it('opens a visit device through its visit and says the technician arrived (bugs 181/182)', async () => {
+    api.getCustomerOrders.mockResolvedValue([order({ status: 'EN_ROUTE', arrivalVerified: true, visitGroupId: 'g1' })]);
+    const w = mount(CustomerDashboard, { global: { stubs } });
+    await flushPromises();
+    const card = w.get('[data-testid="dashboard-active-order"]');
+    expect(card.text()).toContain('Kỹ thuật viên đã đến');
+    expect(card.text()).toContain('Đã đến, chờ sửa');
+    expect(card.text()).not.toContain('Theo dõi vị trí');
+    await card.findAll('button').find((b) => b.text().includes('Xem tiến độ'))!.trigger('click');
+    expect(api.push).toHaveBeenCalledWith('/app/visits/g1');
+  });
+
+  it('goes back from a visit device to its visit (bug 181)', async () => {
+    api.getOrder.mockResolvedValue(order({ visitGroupId: 'g1' }));
+    const w = mount(CustomerOrderDetailPage, { global: { stubs } });
+    await flushPromises();
+    const back = w.get('[data-testid="order-back"]');
+    expect(back.text()).toContain('Lượt sửa nhiều thiết bị');
+    await back.trigger('click');
+    expect(api.push).toHaveBeenCalledWith('/app/visits/g1');
+  });
+
   it('shows skeletons while loading, then a retry line when orders fail', async () => {
     let fail!: (reason: unknown) => void;
     api.getCustomerOrders.mockImplementation(() => new Promise((_, reject) => { fail = reject; }));

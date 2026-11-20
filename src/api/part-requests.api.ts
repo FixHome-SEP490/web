@@ -173,6 +173,10 @@ export interface PartCustodyReturnRecord {
   technicianName?: string | null;
   /** The return goes back into a W2 warehouse's stock; the queue marks it for the whole page in one read. */
   warehouseAllocated?: boolean;
+  discrepancies?: Array<{ declaredQty: number; observedQty: number; occurredAt: string }>;
+  returnStatus?: string;
+  handedOverAt?: string;
+  cohortActivatedAt?: string;
 }
 
 export interface DeclareReturnPayload {
@@ -653,6 +657,17 @@ export const partRequestsApi = {
   async getPendingReturns(): Promise<PartCustodyReturnRecord[]> {
     const res = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(
       '/part-returns/pending',
+    );
+    return res.data.data || [];
+  },
+
+  /**
+   * P1: Technician part-return obligations across all active custody records.
+   * Capped at 100 rows on backend. Returns [] or throws if unavailable.
+   */
+  async getMyReturns(): Promise<PartCustodyReturnRecord[]> {
+    const res = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(
+      '/part-returns/mine',
     );
     return res.data.data || [];
   },

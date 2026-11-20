@@ -270,6 +270,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết bảo hành' },
       },
       {
+        path: 'part-returns',
+        name: 'tech-part-returns',
+        component: () => import('../pages/technician/TechnicianPartReturnsPage.vue'),
+        meta: { roles: ['TECHNICIAN'], title: 'Linh kiện cần trả' },
+      },
+      {
         path: 'earnings',
         name: 'tech-earnings',
         component: () => import('../pages/technician/TechnicianEarningsPage.vue'),
@@ -357,6 +363,12 @@ const routes: RouteRecordRaw[] = [
         name: 'console-cancellations',
         component: () => import('../pages/console/ConsoleCancellationsPage.vue'),
         meta: { title: 'Huỷ đơn', roles: ['SERVICE_MANAGER'] },
+      },
+      {
+        path: 'checkin-faces',
+        name: 'console-checkin-faces',
+        component: () => import('../pages/console/ConsoleCheckinFacesPage.vue'),
+        meta: { title: 'Xác nhận khuôn mặt check-in', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'strikes',

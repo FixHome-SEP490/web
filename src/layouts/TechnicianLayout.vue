@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   BadgeCheck,
   ChevronRight,
+  PackageCheck,
 } from 'lucide-vue-next';
 
 import { ChatFloatingWidget, AppSidebar } from '../components';
@@ -219,6 +220,7 @@ const sidebarNavigation = computed<SidebarNavGroup[]>(() => [
         badge: () => (activeJobs.value > 0 ? String(activeJobs.value) : null),
       },
       { path: '/tech/warranty', label: 'Bảo hành', icon: ShieldCheck },
+      { path: '/tech/part-returns', label: 'Linh kiện cần trả', icon: PackageCheck },
     ],
   },
   {
