@@ -1183,9 +1183,11 @@ const parsedReview = computed(() => {
       <button
         type="button"
         class="whitespace-nowrap inline-flex items-center gap-1.5 h-9 text-sm font-medium text-ink-600 hover:text-ink-900 transition-colors"
-        @click="router.push('/app/orders')"
+        data-testid="order-back"
+        @click="router.push(visitGroupId ? `/app/visits/${visitGroupId}` : '/app/orders')"
       >
-        <ArrowLeft :size="16" /> Đơn của tôi
+        <!-- Bug 181: a device of a visit goes back to its visit, where every device shows. -->
+        <ArrowLeft :size="16" /> {{ visitGroupId ? 'Lượt sửa nhiều thiết bị' : 'Đơn của tôi' }}
       </button>
 
       <div v-if="order" class="flex items-center gap-2">
