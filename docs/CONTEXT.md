@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 03:36 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-retest-2111b
+> Cập nhật lần cuối: 2026-11-21 04:03 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-retest-2111c
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 04:03 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Ví thợ và ví khách: báo rõ khi tên chủ tài khoản có số/ký hiệu thay vì lỗi lưu chung chung
+- 2026-11-21 04:02 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Lượt nhiều máy: tóm tắt hoá đơn cả lượt hiện đúng số tiền máy đã sửa (dòng hoá đơn từ API không có invoiceId)
 - 2026-11-21 03:36 (UTC+7) | ToanAltF4 | fix/web-retest-2111b | Khách: hỏi xác nhận trước khi từ chối báo giá (đơn lẻ huỷ cả đơn, lượt nhiều máy dừng máy đó); chi tiết đơn ghi Đã đến, chờ sửa khi thợ đã check-in
 - 2026-11-21 02:39 (UTC+7) | ToanAltF4 | fix/web-retest-2111 | Bản nháp đặt lịch gửi mức khẩn cấp đúng giá trị backend (medium), trước đây Lưu bản nháp luôn báo Nội dung bản nháp không hợp lệ
 - 2026-11-21 00:38 (UTC+7) | ToanAltF4 | fix/visit-device-links-181-182 | Bug 181/182: trang chủ khách mở thiết bị của lượt nhiều máy về trang lượt, ghi Kỹ thuật viên đã đến khi đã check-in; nút quay lại ở chi tiết đơn của lượt về trang lượt
@@ -661,5 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
 - 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm
 - 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
-- 2026-11-08 21:27 (UTC+7) | ToanAltF4 | fix/ai-new-session-service | Phiên mới trên trang Phân tích cùng AI nhận lại dịch vụ AI gợi ý (đặt lại cờ chọn tay sau khi xoá dịch vụ)
-- 2026-11-08 21:09 (UTC+7) | ToanAltF4 | fix/ai-chat-new-session-smooth | Khung chat AI: phiên mới là mới hoàn toàn (bỏ trả lời về muộn của phiên cũ, trang Phân tích cùng AI về bước 1 trống, sửa mô tả thì phân tích lại), trả lời thay chỗ dòng chờ, chữ hiện mịn, chi tiết mờ dần
