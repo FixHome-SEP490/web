@@ -270,6 +270,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Chi tiết bảo hành' },
       },
       {
+        path: 'part-returns',
+        name: 'tech-part-returns',
+        component: () => import('../pages/technician/TechnicianPartReturnsPage.vue'),
+        meta: { roles: ['TECHNICIAN'], title: 'Linh kiện cần trả' },
+      },
+      {
         path: 'earnings',
         name: 'tech-earnings',
         component: () => import('../pages/technician/TechnicianEarningsPage.vue'),
