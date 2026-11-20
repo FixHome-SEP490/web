@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 00:33 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/bug184-part-return-cancelled
+> Cập nhật lần cuối: 2026-11-21 00:38 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/visit-device-links-181-182
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 00:38 (UTC+7) | ToanAltF4 | fix/visit-device-links-181-182 | Bug 181/182: trang chủ khách mở thiết bị của lượt nhiều máy về trang lượt, ghi Kỹ thuật viên đã đến khi đã check-in; nút quay lại ở chi tiết đơn của lượt về trang lượt
 - 2026-11-21 00:33 (UTC+7) | ToanAltF4 | fix/bug184-part-return-cancelled | BUG 184: trang công việc của thợ hiện linh kiện cần trả và nút báo đã trả khi đơn (máy trong lượt nhiều máy) đã huỷ, kể cả khi thợ không còn phụ trách đơn
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
 - 2026-11-19 14:44 (UTC+7) | Lạc Vỹ | LacVy | Gỡ ràng buộc UI lệch Backend: chuẩn hóa ô tiền/min/max/regex khớp DTO và bỏ chặn cứng theo client (OTP, địa chỉ, số dư, hủy đơn, trần bảo hành).
