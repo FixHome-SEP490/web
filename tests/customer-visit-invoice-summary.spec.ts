@@ -91,6 +91,18 @@ describe('Customer VisitGroup finalized invoice summary', () => {
     expect(visits.payWithWallet).not.toHaveBeenCalled();
   });
 
+  it('shows the finalized amount when invoice lines come without invoiceId, as the invoice endpoint sends them', async () => {
+    for (const key of ['o1', 'o2', 'o3']) {
+      const line: Record<string, unknown> = { ...invoices[key]!.items[0]! };
+      delete line.invoiceId;
+      invoices[key]!.items = [line as typeof invoices.o1.items[0]];
+    }
+    const w = await open();
+    const row = w.get('[data-testid="visit-invoice-row-2"]');
+    expect(row.text()).toContain('Tiền công hóa đơn máy 2');
+    expect(row.text()).not.toContain('Chưa xác định');
+  });
+
   it('creates and cancels one server-priced VisitGroup cash request for all three devices', async () => {
     cashIntents.get.mockResolvedValue({ cashFirstEnabled: true, intent: null });
     const pending = { id: '11111111-1111-4111-8111-111111111111', scopeKind: 'VISIT_GROUP', scopeId: 'v1', status: 'pending', grossVnd: 600000, customerDueVnd: 500000, technicianId: 'tech-1', createdAt: '2026-10-29T00:00:00.000Z', receivedAt: null, receiptId: null };
