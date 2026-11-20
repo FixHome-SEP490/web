@@ -139,7 +139,7 @@ function goBack() {
 </script>
 
 <template>
-  <div class="service-detail" :aria-busy="loading">
+  <div class="service-detail fh-public" :aria-busy="loading">
     <nav class="detail-breadcrumb" aria-label="Đường dẫn">
       <RouterLink to="/">Trang chủ</RouterLink>
       <span aria-hidden="true">/</span>
@@ -338,21 +338,20 @@ function goBack() {
     justify-content: center;
     width: 136px;
     height: 136px;
-    border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, var(--color-brand-50) 0%, var(--color-ink-50) 100%);
-    border: 1px solid var(--color-brand-100);
-    padding: 12px;
-    box-shadow: var(--shadow-e1);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
   }
   .detail-artwork-img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.08));
+    filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.08));
   }
 }
 @media (min-width: 1024px) {
-  .detail-artwork-card { width: 160px; height: 160px; padding: 16px; }
+  .detail-artwork-card { width: 160px; height: 160px; padding: 0; }
 }
 .detail-eyebrow { display: flex; align-items: center; gap: 10px; color: var(--color-brand-800); font-size: 13px; font-weight: 600; }
 .detail-icon { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-brand-100); border-radius: var(--radius-sm); background: var(--color-brand-50); color: var(--color-brand-700); }
@@ -365,9 +364,9 @@ function goBack() {
 .detail-status-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--color-success-600); }
 .detail-status-dot--off { background: var(--color-ink-400); }
 
-.booking-panel { grid-area: panel; position: sticky; top: 96px; min-width: 0; padding: 21px; border: 1px solid var(--color-ink-200); border-radius: var(--radius-lg); background: var(--color-ink-25); box-shadow: var(--shadow-e1); }
+.booking-panel { grid-area: panel; position: sticky; top: 96px; min-width: 0; padding: 21px; border: 1px solid #E1E9F5; border-radius: var(--radius-lg); background: #ffffff; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.05); }
 .booking-panel__topline { display: flex; align-items: center; gap: 11px; color: var(--color-ink-600); font-size: 12px; font-weight: 500; }
-.booking-panel__icon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-brand-100); border-radius: var(--radius-sm); background: var(--color-brand-50); color: var(--color-brand-700); }
+.booking-panel__icon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 0; background: transparent; color: var(--color-brand-700); }
 .booking-price { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 7px; margin: 17px 0 16px; padding: 16px 0 14px; border-top: 1px solid var(--color-ink-200); border-bottom: 1px solid var(--color-ink-200); }
 .booking-price__label { color: var(--color-ink-600); font-size: 12px; font-weight: 500; }
 .booking-price__amount { display: flex; max-width: 100%; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; color: var(--color-ink-900); font-family: var(--font-num); font-size: clamp(24px, 2.3vw, 31px); line-height: 1.22; font-variant-numeric: tabular-nums; }

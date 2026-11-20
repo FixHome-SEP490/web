@@ -8,32 +8,23 @@ import { useChatStore } from '../stores/chat.store';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { useCallStore } from '../stores/call.store';
 import {
-  CalendarPlus,
-  ChevronDown,
-  ShieldAlert,
   Bell,
+  ShieldAlert,
   User,
   MessageSquare,
   Home,
   ClipboardList,
-  ShieldCheck,
-  Bot,
-  LayoutGrid,
-  TicketPercent,
 } from 'lucide-vue-next';
-import { FhButton, ChatFloatingWidget, AiAssistantWidget } from '../components';
-import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
-import AccountMenu from '../components/account/AccountMenu.vue';
+import { ChatFloatingWidget, AiAssistantWidget } from '../components';
+import CustomerTopHeader from '../components/account/CustomerTopHeader.vue';
 import CallOverlay from '../components/chat/CallOverlay.vue';
 import { toast } from 'vue-sonner';
 import { vnDateString } from '../utils/vn-time';
-import { useRoutePrefetch } from '../composables/useCachedQuery';
 
 const router = useRouter();
 /** The full chat page fills the screen: no room kept for the floating buttons it does not show. */
 const onChatPage = computed(() => router.currentRoute?.value?.name === 'customer-messages');
 const authStore = useAuthStore();
-const prefetchRoute = useRoutePrefetch();
 const chatStore = useChatStore();
 const notifStore = useNotificationsStore();
 const callStore = useCallStore();
@@ -48,32 +39,10 @@ const hasActionBar = computed(() => router.currentRoute?.value?.meta?.actionBar 
 
 let chatPoll: (() => void) | null = null;
 
-// ── Tab sliding indicator animation (Desktop & Mobile) ──
-const desktopNavRef = ref<HTMLElement | null>(null);
-const compactDesktopNavRef = ref<HTMLElement | null>(null);
-const compactDesktopOverflowButtonRef = ref<HTMLElement | null>(null);
-const compactDesktopOverflowPanelRef = ref<HTMLElement | null>(null);
-const navItemRefs = ref<Record<string, HTMLElement | null>>({});
-const navIndicatorStyle = ref<Record<string, string>>({ opacity: '0' });
-const desktopOverflowOpen = ref(false);
-const wideDesktopMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-  ? window.matchMedia('(min-width: 1440px)')
-  : null;
-const isWideDesktop = ref(wideDesktopMedia?.matches ?? false);
-
+// ── Mobile bottom tab sliding indicator ──
 const mobileNavRef = ref<HTMLElement | null>(null);
 const mobileTabRefs = ref<Record<string, HTMLElement | null>>({});
 const mobileIndicatorStyle = ref<Record<string, string>>({ opacity: '0' });
-
-function setNavItemRef(to: string, el: unknown) {
-  if (!el) return;
-  const domEl = (typeof el === 'object' && el !== null && '$el' in el)
-    ? (el as { $el: HTMLElement }).$el
-    : (el as HTMLElement);
-  if (domEl && typeof domEl === 'object') {
-    navItemRefs.value[to] = domEl;
-  }
-}
 
 function setMobileTabRef(to: string, el: unknown) {
   if (!el) return;
@@ -83,33 +52,6 @@ function setMobileTabRef(to: string, el: unknown) {
   if (domEl && typeof domEl === 'object') {
     mobileTabRefs.value[to] = domEl;
   }
-}
-
-function updateNavIndicator() {
-  const currentPath = router.currentRoute.value?.path || '';
-  const activeItem = navItems.find((item) =>
-    item.exact ? currentPath === item.to : currentPath.startsWith(item.to)
-  );
-  // The compact header highlights the disclosure button itself. Do not draw a
-  // full-width active underline beneath “Thêm”, which looks displaced at 75% zoom.
-  if (!isWideDesktop.value) { navIndicatorStyle.value = { opacity: '0' }; return; }
-  const nav = desktopNavRef.value;
-  const el = activeItem && navItemRefs.value[activeItem.to];
-  if (!activeItem || !nav || !el) {
-    navIndicatorStyle.value = { opacity: '0' };
-    return;
-  }
-  if (el.offsetWidth === 0) {
-    navIndicatorStyle.value = { opacity: '0' };
-    return;
-  }
-  const left = el.offsetLeft;
-  const width = el.offsetWidth;
-  navIndicatorStyle.value = {
-    transform: `translate3d(${left}px, 0, 0)`,
-    width: `${width}px`,
-    opacity: '1',
-  };
 }
 
 function updateMobileIndicator() {
@@ -135,45 +77,6 @@ function updateMobileIndicator() {
   };
 }
 
-function updateAllIndicators() {
-  updateNavIndicator();
-  updateMobileIndicator();
-}
-
-function closeDesktopOverflow(returnFocus = false) {
-  desktopOverflowOpen.value = false;
-  if (returnFocus) {
-    void nextTick(() => compactDesktopOverflowButtonRef.value?.focus());
-  }
-}
-
-function onDesktopOverflowTriggerKeydown(event: KeyboardEvent) {
-  if (event.key !== 'ArrowDown') return;
-  event.preventDefault();
-  desktopOverflowOpen.value = true;
-  void nextTick(() => compactDesktopOverflowPanelRef.value?.querySelector<HTMLElement>('a')?.focus());
-}
-
-function onDesktopOverflowDocumentClick(event: MouseEvent) {
-  const nav = compactDesktopNavRef.value;
-  if (desktopOverflowOpen.value && nav && !event.composedPath().includes(nav)) {
-    closeDesktopOverflow();
-  }
-}
-
-function onDesktopOverflowDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && desktopOverflowOpen.value) {
-    event.preventDefault();
-    closeDesktopOverflow(true);
-  }
-}
-
-function onWideDesktopChange(event: MediaQueryListEvent) {
-  isWideDesktop.value = event.matches;
-  closeDesktopOverflow();
-  void nextTick(updateAllIndicators);
-}
-
 onMounted(async () => {
   chatStore.initSocket();
   // Listening for calls is separate from opening the chat widget: a call has to
@@ -195,14 +98,11 @@ onMounted(async () => {
   }, 20000);
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('resize', updateAllIndicators);
+    window.addEventListener('resize', updateMobileIndicator);
   }
-  document.addEventListener('click', onDesktopOverflowDocumentClick);
-  document.addEventListener('keydown', onDesktopOverflowDocumentKeydown);
-  wideDesktopMedia?.addEventListener('change', onWideDesktopChange);
   void nextTick(() => {
-    updateAllIndicators();
-    setTimeout(updateAllIndicators, 60);
+    updateMobileIndicator();
+    setTimeout(updateMobileIndicator, 60);
   });
 });
 
@@ -212,11 +112,8 @@ onUnmounted(() => {
     chatPoll = null;
   }
   if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', updateAllIndicators);
+    window.removeEventListener('resize', updateMobileIndicator);
   }
-  document.removeEventListener('click', onDesktopOverflowDocumentClick);
-  document.removeEventListener('keydown', onDesktopOverflowDocumentKeydown);
-  wideDesktopMedia?.removeEventListener('change', onWideDesktopChange);
 });
 
 watch(
@@ -232,8 +129,7 @@ watch(
 watch(
   () => router.currentRoute.value?.path,
   () => {
-    closeDesktopOverflow();
-    void nextTick(updateAllIndicators);
+    void nextTick(updateMobileIndicator);
   }
 );
 
@@ -248,25 +144,6 @@ const isSuspended = computed<boolean>(() => {
 const unread = computed(() => (chatStore.totalUnreadCount > 99 ? '99+' : String(chatStore.totalUnreadCount)));
 const effectiveNotifCount = computed(() => Math.max(notifStore.unreadCount, notifStore.unreadNotifications.length));
 const unreadNotif = computed(() => (effectiveNotifCount.value > 99 ? '99+' : String(effectiveNotifCount.value)));
-
-/**
- * Top bar on wide screens. Repair history lives in the account menu (PO 09/10/2026),
- * so the bar keeps four links.
- */
-const navItems = [
-  { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
-  { to: '/app/orders', label: 'Đơn sửa chữa', icon: ClipboardList, exact: false },
-  { to: '/app/warranties', label: 'Bảo hành', icon: ShieldCheck, exact: false },
-  { to: '/app/messages', label: 'Tin nhắn', icon: MessageSquare, exact: false },
-  { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },
-];
-
-const activeNavItem = computed(() => {
-  const currentPath = router.currentRoute.value?.path || '';
-  return navItems.find((item) => (item.exact ? currentPath === item.to : currentPath.startsWith(item.to))) ?? null;
-});
-
-const compactDesktopNavActive = computed(() => Boolean(activeNavItem.value));
 
 const tabItems = [
   { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
@@ -292,162 +169,7 @@ const handleLogout = async () => {
     class="min-h-screen flex flex-col bg-transparent text-ink-900"
     :class="hasActionBar ? '[--fh-dock:10rem] sm:[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]' : '[--fh-dock:5.25rem] lg:[--fh-dock:1.25rem]'"
   >
-    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-ink-200/80">
-      <!-- The desktop nav collapses before the booking actions and account controls compete for width. -->
-      <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-6 min-w-0">
-          <router-link to="/" class="inline-flex items-center gap-2.5 shrink-0 group" aria-label="FixHome - Trang chủ">
-            <img :src="'/logo.png'" alt="" class="w-9 h-9 object-contain rounded-xl group-hover:scale-105 transition-transform" />
-            <span class="text-xl font-bold tracking-tight whitespace-nowrap"><span class="text-brand-600">Fix</span><span class="text-success-600">Home</span></span>
-          </router-link>
-
-          <nav
-            v-show="isWideDesktop"
-            ref="desktopNavRef"
-            class="hidden min-[1440px]:flex items-center h-16 gap-1 text-sm font-medium text-ink-600 relative"
-            aria-label="Điều hướng chính"
-            data-testid="customer-desktop-nav"
-          >
-            <!-- Sliding active indicator bar -->
-            <div
-              class="pointer-events-none absolute bottom-0 left-0 h-[2.5px] bg-brand-600 rounded-t-full transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] motion-reduce:transition-none"
-              :style="navIndicatorStyle"
-              aria-hidden="true"
-            />
-
-            <router-link
-              v-for="item in navItems"
-              :key="item.to"
-              :ref="(el) => setNavItemRef(item.to, el)"
-              :to="item.to"
-              @mouseenter="prefetchRoute(item.to)"
-              @focus="prefetchRoute(item.to)"
-              class="h-10 px-3 rounded-lg inline-flex items-center gap-2 whitespace-nowrap hover:bg-ink-50 hover:text-ink-950 transition-colors"
-              :active-class="item.exact ? '' : 'text-brand-700 font-semibold'"
-              :exact-active-class="item.exact ? 'text-brand-700 font-semibold' : ''"
-            >
-              <component :is="item.icon" :size="16" :stroke-width="1.8" class="shrink-0" />
-              <span>{{ item.label }}</span>
-              <span
-                v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
-                class="min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center leading-none shadow-2xs"
-              >
-                {{ unread }}
-              </span>
-            </router-link>
-          </nav>
-
-          <nav
-            v-show="!isWideDesktop"
-            ref="compactDesktopNavRef"
-            class="hidden lg:flex items-center h-16 relative"
-            aria-label="Điều hướng chính"
-          >
-            <button
-              ref="compactDesktopOverflowButtonRef"
-              type="button"
-              class="h-9 px-3.5 rounded-full border inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-              :class="compactDesktopNavActive
-                ? 'border-brand-200 bg-brand-50/75 text-brand-700 font-semibold'
-                : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50 hover:text-ink-950'"
-              :aria-label="desktopOverflowOpen ? 'Đóng điều hướng thêm' : 'Mở điều hướng thêm'"
-              aria-controls="customer-desktop-nav-overflow"
-              :aria-expanded="desktopOverflowOpen"
-              data-testid="customer-desktop-nav-overflow-trigger"
-              @click="desktopOverflowOpen = !desktopOverflowOpen"
-              @keydown="onDesktopOverflowTriggerKeydown"
-            >
-              <component :is="activeNavItem?.icon ?? LayoutGrid" :size="16" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
-              <span>{{ activeNavItem?.label ?? 'Điều hướng' }}</span>
-              <span
-                v-if="chatStore.totalUnreadCount > 0 && activeNavItem?.to !== '/app/messages'"
-                class="h-1.5 w-1.5 rounded-full bg-danger-600 shrink-0"
-                aria-hidden="true"
-              />
-              <ChevronDown
-                :size="15"
-                class="shrink-0 transition-transform duration-200 motion-reduce:transition-none"
-                :class="desktopOverflowOpen ? 'rotate-180' : ''"
-                aria-hidden="true"
-              />
-            </button>
-            <Transition
-              enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
-              enter-from-class="opacity-0 scale-95 -translate-y-1.5"
-              enter-to-class="opacity-100 scale-100 translate-y-0"
-              leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
-              leave-from-class="opacity-100 scale-100 translate-y-0"
-              leave-to-class="opacity-0 scale-95 -translate-y-1.5"
-            >
-              <div
-                v-show="desktopOverflowOpen"
-                id="customer-desktop-nav-overflow"
-                ref="compactDesktopOverflowPanelRef"
-                class="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-2xl bg-white p-1.5 text-sm text-ink-700 shadow-(--shadow-e3) ring-1 ring-ink-900/[0.06]"
-                data-testid="customer-desktop-nav-overflow"
-              >
-                <template v-if="desktopOverflowOpen">
-                  <router-link
-                    v-for="item in navItems"
-                    :key="item.to"
-                    :to="item.to"
-                    class="flex h-10 items-center gap-3 rounded-xl px-3 whitespace-nowrap transition-colors hover:bg-ink-50 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-brand-600"
-                    :active-class="item.exact ? '' : 'bg-brand-50/75 text-brand-700 font-semibold'"
-                    :exact-active-class="item.exact ? 'bg-brand-50/75 text-brand-700 font-semibold' : ''"
-                    @mouseenter="prefetchRoute(item.to)"
-                    @focus="prefetchRoute(item.to)"
-                    @click="closeDesktopOverflow()"
-                  >
-                    <component :is="item.icon" :size="17" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
-                    <span>{{ item.label }}</span>
-                    <span
-                      v-if="item.to === '/app/messages' && chatStore.totalUnreadCount > 0"
-                      class="ml-auto min-w-4.5 h-4.5 px-1.5 rounded-full bg-danger-600 text-white text-[10px] font-bold font-num inline-flex items-center justify-center leading-none shadow-2xs"
-                    >
-                      {{ unread }}
-                    </span>
-                  </router-link>
-                </template>
-              </div>
-            </Transition>
-          </nav>
-        </div>
-
-        <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          <FhButton
-            variant="primary"
-            size="sm"
-            :disabled="isSuspended"
-            :title="isSuspended ? 'Tài khoản đang bị tạm khoá đặt dịch vụ' : 'Tạo yêu cầu sửa chữa mới'"
-            aria-label="Đặt thợ ngay"
-            @click="router.push('/app/bookings/new')"
-          >
-            <CalendarPlus :size="16" />
-            <span class="hidden sm:inline lg:hidden xl:inline whitespace-nowrap">Đặt thợ ngay</span>
-          </FhButton>
-          <!-- The AI form sits right beside the plain one. -->
-          <FhButton
-            variant="secondary"
-            size="sm"
-            :disabled="isSuspended"
-            title="Mô tả sự cố để trợ lý AI chẩn đoán rồi đặt thợ"
-            aria-label="Chẩn đoán bằng AI"
-            data-testid="header-ai-booking"
-            @click="router.push('/app/bookings/ai')"
-          >
-            <Bot :size="16" class="text-brand-600" />
-            <span class="hidden sm:inline lg:hidden xl:inline whitespace-nowrap">Chẩn đoán bằng AI</span>
-          </FhButton>
-
-          <span class="hidden sm:block h-5 w-px bg-ink-200 mx-0.5" aria-hidden="true" />
-
-          <div class="flex items-center gap-1.5">
-            <NotificationBellDropdown />
-            <AccountMenu context="customer-app" @logout="handleLogout" />
-          </div>
-        </div>
-      </div>
-    </header>
+    <CustomerTopHeader :is-suspended="isSuspended" @logout="handleLogout" />
 
     <!-- A real restriction on the account: an alert, so red. -->
     <div v-if="isSuspended" class="bg-danger-50 border-b border-danger-200 px-4 py-3" role="alert">

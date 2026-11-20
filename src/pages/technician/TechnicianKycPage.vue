@@ -285,21 +285,28 @@ const startRecording = () => {
   }, 1000);
 };
 
+// Ảnh đã lên Storage thì dùng lại khi nộp lại, tránh để file mồ côi.
+const uploadedSlots = new WeakMap<File, SubmitDocumentPayload>();
+
 const uploadSlot = async (slot: KycSlot): Promise<SubmitDocumentPayload> => {
   const file = slot.file;
   if (!file) throw new Error(`Thiếu ảnh cho ${slot.label}`);
+  const cached = uploadedSlots.get(file);
+  if (cached) return cached;
   const mimeType = file.type as KycMimeType;
   const { storageObjectPath, uploadUrl } = await technicianVerificationApi.requestUploadUrl(
     mimeType,
   );
   await technicianVerificationApi.uploadToSignedUrl(uploadUrl, mimeType, file);
-  return {
+  const doc: SubmitDocumentPayload = {
     documentType: slot.documentType,
     storageObjectPath,
     fileName: `${slot.key}.${MIME_EXTENSIONS[mimeType]}`,
     fileSize: file.size,
     mimeType,
   };
+  uploadedSlots.set(file, doc);
+  return doc;
 };
 
 const handleSubmit = async () => {

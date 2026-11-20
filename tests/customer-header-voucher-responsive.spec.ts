@@ -149,6 +149,7 @@ describe('customer responsive header navigation', () => {
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
+      '/',
     ]);
     expect(new Set(destinations).size).toBe(destinations.length);
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
@@ -186,6 +187,7 @@ describe('customer responsive header navigation', () => {
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
+      '/',
     ]);
   });
 

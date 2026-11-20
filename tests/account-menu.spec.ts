@@ -182,7 +182,6 @@ describe('public header', () => {
   });
 
   it.each([
-    [UserRole.CUSTOMER, '/app/bookings/new', 'Đặt thợ ngay', ['menu-orders', 'menu-history', 'menu-wallet', 'menu-profile']],
     [UserRole.TECHNICIAN, '/tech', 'Vào trang thợ', ['menu-jobs', 'menu-wallet', 'menu-profile']],
     [UserRole.SERVICE_MANAGER, '/console', 'Vào trang quản lý', ['menu-orders']],
     [UserRole.ADMIN, '/console', 'Vào trang quản lý', ['menu-orders']],
@@ -190,14 +189,12 @@ describe('public header', () => {
     const { wrapper, router } = await mountAs('public', role);
     const action = wrapper.get('[data-testid="header-role-action"]');
     expect(action.text()).toBe(actionLabel);
-    // The old header sent every role to a "Vào trang quản lý" button.
-    if (role === UserRole.CUSTOMER || role === UserRole.TECHNICIAN) expect(wrapper.text()).not.toContain('Vào trang quản lý');
+    if (role === UserRole.TECHNICIAN) expect(wrapper.text()).not.toContain('Vào trang quản lý');
 
     const menu = await openAccountMenu(wrapper);
     expect(menu.text()).not.toMatch(SERVICE_WORDS);
     expect(menu.text()).toContain('Đăng xuất');
     for (const id of items) expect(menu.find(`[data-testid="${id}"]`).exists()).toBe(true);
-    // On a phone the role button lives in the menu instead (hidden from sm up).
     const narrow = menu.get('[data-testid="menu-role-action"]');
     expect(narrow.attributes('href')).toBe(actionTo);
     expect(narrow.classes()).toContain('sm:hidden');
@@ -208,8 +205,38 @@ describe('public header', () => {
     wrapper.unmount();
   });
 
+  it('gives a signed-in CUSTOMER the unified customer navbar on public pages too', async () => {
+    const { wrapper, router } = await mountAs('public', UserRole.CUSTOMER);
+    const action = wrapper.get('[data-testid="header-role-action"]');
+    expect(action.text()).toBe('Đặt thợ ngay');
+    expect(wrapper.find('[data-testid="header-ai-booking"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Vào trang quản lý');
+
+    const topNav = wrapper.get('header nav');
+    expect(topNav.findAll('a').map((a) => a.attributes('href'))).toEqual([
+      '/app',
+      '/app/orders',
+      '/app/warranties',
+      '/app/messages',
+      '/app/vouchers',
+      '/',
+    ]);
+
+    const menu = await openAccountMenu(wrapper);
+    expect(menu.text()).not.toMatch(SERVICE_WORDS);
+    expect(menu.text()).toContain('Đăng xuất');
+    for (const id of ['menu-history', 'menu-wallet', 'menu-profile']) {
+      expect(menu.find(`[data-testid="${id}"]`).exists()).toBe(true);
+    }
+
+    await action.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/app/bookings/new');
+    wrapper.unmount();
+  });
+
   it('keeps the phone menu to site navigation only', async () => {
-    const { wrapper } = await mountAs('public', UserRole.CUSTOMER);
+    const { wrapper } = await mountAs('public', null);
     await wrapper.get('button[aria-controls="public-mobile-menu"]').trigger('click');
     const nav = wrapper.get('#public-mobile-menu');
     expect(nav.text()).toContain('Dịch vụ');
@@ -257,6 +284,7 @@ describe('customer header', () => {
       '/app/warranties',
       '/app/messages',
       '/app/vouchers',
+      '/',
     ]);
     const menu = await openAccountMenu(wrapper);
     const history = menu.get('[data-testid="menu-history"]');

@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="public-services">
+  <div class="public-services fh-public">
     <section class="services-hero" aria-labelledby="services-title">
       <div class="services-hero__inner">
         <div class="services-hero__copy">
@@ -482,11 +482,20 @@ onBeforeUnmount(() => {
 
       <div v-if="loading || categoriesLoading" class="service-grid service-grid--loading" aria-label="Đang tải dịch vụ">
         <article v-for="index in SERVICES_PAGE_SIZE" :key="index" class="service-card service-card--skeleton" aria-hidden="true">
-          <div class="skeleton-topline"><FhSkeleton width="48px" height="48px" rounded="md" /><FhSkeleton width="94px" height="26px" rounded="full" /></div>
-          <FhSkeleton width="42%" height="13px" />
-          <FhSkeleton width="84%" height="25px" />
-          <FhSkeleton height="16px" :count="2" />
-          <div class="skeleton-bottomline"><FhSkeleton width="118px" height="30px" /><FhSkeleton width="112px" height="44px" rounded="md" /></div>
+          <div class="service-card__skeleton-art">
+            <FhSkeleton width="96px" height="96px" rounded="lg" />
+          </div>
+          <div class="service-card__body">
+            <div class="space-y-2">
+              <FhSkeleton width="42%" height="13px" />
+              <FhSkeleton width="84%" height="22px" />
+              <FhSkeleton width="64%" height="16px" />
+            </div>
+            <div class="skeleton-bottomline">
+              <FhSkeleton width="76px" height="20px" />
+              <FhSkeleton width="108px" height="40px" rounded="md" />
+            </div>
+          </div>
         </article>
       </div>
 
@@ -518,62 +527,62 @@ onBeforeUnmount(() => {
             role="listitem"
             :style="{ animationDelay: `${Math.min(index, 7) * 24}ms` }"
           >
-            <div class="service-card__top">
-              <div class="service-mark" aria-hidden="true">
-                <img
-                  :src="getServiceArtworkUrl(service)"
-                  alt=""
-                  loading="lazy"
-                  class="service-mark__img"
-                  aria-hidden="true"
-                />
-              </div>
-              <div class="service-card__meta">
+            <div class="service-mark" aria-hidden="true">
+              <img
+                :src="getServiceArtworkUrl(service)"
+                alt=""
+                loading="lazy"
+                class="service-mark__img"
+                aria-hidden="true"
+              />
+            </div>
+
+            <div class="service-card__body">
+              <div class="service-card__head">
                 <span v-if="categoryName(service)" class="service-category">{{ categoryName(service) }}</span>
+                <h3 class="service-card__title">
+                  <RouterLink :to="detailTarget(service)">{{ service.name }}</RouterLink>
+                </h3>
               </div>
-            </div>
 
-            <h3 class="service-card__title">
-              <RouterLink :to="detailTarget(service)">{{ service.name }}</RouterLink>
-            </h3>
+              <div class="service-price">
+                <template v-if="getServicePriceSummaryDisplay(service)">
+                  <strong>{{ getServicePriceSummaryDisplay(service)!.label }}</strong>
+                  <span v-if="getServicePriceSummaryDisplay(service)!.caption" class="service-price__range">{{ getServicePriceSummaryDisplay(service)!.caption }}</span>
+                </template>
+                <template v-else-if="pricing(service).kind === 'fixed'">
+                  <span class="service-price__label">Giá niêm yết</span>
+                  <strong><FhMoney :amount="fixedAmount(service)" /> <small v-if="service.unit">/ {{ service.unit }}</small></strong>
+                </template>
+                <template v-else-if="pricing(service).kind === 'inspection'">
+                  <span class="service-price__label">Giá được báo sau khi kiểm tra</span>
+                  <strong>Báo giá sau khảo sát</strong>
+                  <span v-if="referenceRange(service)" class="service-price__range">
+                    Khoảng tham khảo:
+                    <FhMoney :amount="referenceRange(service)!.min" /> –
+                    <FhMoney :amount="referenceRange(service)!.max" />
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="service-price__label">Giá dịch vụ</span>
+                  <strong class="service-price__unknown">Thông tin giá đang được cập nhật</strong>
+                </template>
+              </div>
 
-            <div class="service-price">
-              <template v-if="getServicePriceSummaryDisplay(service)">
-                <strong>{{ getServicePriceSummaryDisplay(service)!.label }}</strong>
-                <span v-if="getServicePriceSummaryDisplay(service)!.caption" class="service-price__range">{{ getServicePriceSummaryDisplay(service)!.caption }}</span>
-              </template>
-              <template v-else-if="pricing(service).kind === 'fixed'">
-                <span class="service-price__label">Giá niêm yết</span>
-                <strong><FhMoney :amount="fixedAmount(service)" /> <small v-if="service.unit">/ {{ service.unit }}</small></strong>
-              </template>
-              <template v-else-if="pricing(service).kind === 'inspection'">
-                <span class="service-price__label">Giá được báo sau khi kiểm tra</span>
-                <strong>Báo giá sau khảo sát</strong>
-                <span v-if="referenceRange(service)" class="service-price__range">
-                  Khoảng tham khảo:
-                  <FhMoney :amount="referenceRange(service)!.min" /> –
-                  <FhMoney :amount="referenceRange(service)!.max" />
-                </span>
-              </template>
-              <template v-else>
-                <span class="service-price__label">Giá dịch vụ</span>
-                <strong class="service-price__unknown">Thông tin giá đang được cập nhật</strong>
-              </template>
-            </div>
-
-            <div class="service-card__actions">
-              <RouterLink class="service-details-link" :to="detailTarget(service)">
-                Chi tiết <ArrowRight :size="15" aria-hidden="true" />
-              </RouterLink>
-              <FhButton
-                variant="primary"
-                size="md"
-                :disabled="!service.isActive"
-                :data-testid="`service-booking-${service.id}`"
-                @click="bookService(service)"
-              >
-                Chọn dịch vụ
-              </FhButton>
+              <div class="service-card__actions">
+                <RouterLink class="service-details-link" :to="detailTarget(service)">
+                  Chi tiết <ArrowRight :size="15" aria-hidden="true" />
+                </RouterLink>
+                <FhButton
+                  variant="primary"
+                  size="md"
+                  :disabled="!service.isActive"
+                  :data-testid="`service-booking-${service.id}`"
+                  @click="bookService(service)"
+                >
+                  Chọn dịch vụ
+                </FhButton>
+              </div>
             </div>
           </article>
         </div>
@@ -696,9 +705,9 @@ onBeforeUnmount(() => {
   gap: 8px;
   overflow: visible;
   padding: 0 12px;
-  border: 1px solid var(--color-ink-200);
+  border: 1px solid #E1E9F5;
   border-radius: 999px;
-  background: var(--color-ink-25);
+  background: #ffffff;
   box-shadow: 0 8px 24px rgb(22 63 132 / 7%);
   color: var(--color-ink-700);
   font: inherit;
@@ -743,7 +752,7 @@ onBeforeUnmount(() => {
   padding: 0 20px;
   border: 1px solid var(--color-brand-200);
   border-radius: 20px;
-  background: var(--color-ink-25);
+  background: #ffffff;
   color: var(--color-brand-700);
   box-shadow: 0 16px 48px rgb(37 99 235 / 9%), 0 2px 6px rgb(27 54 96 / 4%);
   transition: transform 240ms var(--service-ease), border-color 220ms var(--service-ease), box-shadow 240ms var(--service-ease);
@@ -780,9 +789,9 @@ onBeforeUnmount(() => {
   max-height: min(286px, 42vh);
   overflow-y: auto;
   padding: 7px;
-  border: 1px solid var(--color-ink-200);
+  border: 1px solid #E1E9F5;
   border-radius: 18px;
-  background: var(--color-ink-25);
+  background: #ffffff;
   box-shadow: var(--shadow-e2);
 }
 .search-suggestion {
@@ -1086,49 +1095,72 @@ onBeforeUnmount(() => {
 .category-more-toggle:hover { background: var(--color-brand-50); }
 .category-more-toggle:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
 .category-suggestion { width: auto; min-width: 44px; justify-content: flex-start; padding-inline: 13px; }
-.category-suggestion { min-height: 44px; border-radius: 12px; background: var(--color-ink-25); box-shadow: none; font-size: 13px; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease; }
+.category-suggestion { min-height: 44px; border-radius: 12px; background: #ffffff; border-color: #E1E9F5; box-shadow: none; font-size: 13px; transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease; }
 .category-suggestion:hover,
 .category-suggestion--selected { box-shadow: inset 0 0 0 1px var(--color-brand-600); }
 .category-suggestion:focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
 .category-error { grid-column: 1 / -1; margin: 0; padding: 12px 16px; border-radius: 12px; }
 
-.services-results { padding-top: 26px; border-top-color: var(--color-ink-200); }
+.services-results { padding-top: 26px; border-top-color: #E2E8F0; }
 .results-heading-row { margin-bottom: 18px; }
 .results-heading-row h2 { font-size: 24px; line-height: 1.25; letter-spacing: -0.025em; }
 .results-description { margin-top: 5px; }
-.results-count { gap: 7px; padding: 8px 12px; border: 1px solid var(--color-ink-200); border-radius: 10px; background: var(--color-ink-25); }
+.results-count { gap: 7px; padding: 8px 12px; border: 1px solid #E1E9F5; border-radius: 10px; background: #ffffff; }
 .results-count strong { font-size: 18px; }
 
-.service-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.service-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .service-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
   min-width: 0;
-  min-height: 260px;
+  min-height: 184px;
   padding: 20px;
-  border-color: var(--color-ink-200);
-  border-radius: 16px;
-  background: var(--color-ink-25);
-  box-shadow: none;
+  border: 1px solid #E1E9F5;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.04);
   animation: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
-.service-card:hover { border-color: var(--color-brand-300); box-shadow: var(--shadow-e1); transform: translateY(-2px); }
-.service-card__top { margin-bottom: 14px; }
-.service-mark { width: 42px; height: 42px; border-radius: 12px; background: var(--color-brand-50); }
-.service-category { font-size: 12px; }
-.service-card__title { min-height: 2.7em; font-size: 17px; line-height: 1.4; }
-.service-price { min-height: 82px; padding-block: 14px; }
+.service-card:hover { border-color: var(--color-brand-300); box-shadow: 0 12px 28px rgba(37, 99, 235, 0.08); transform: translateY(-2px); }
+.service-mark {
+  width: 96px;
+  height: 96px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.service-card__skeleton-art { width: 96px; flex: 0 0 96px; }
+.service-card__body {
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  align-self: stretch;
+}
+.service-card__head { display: flex; flex-direction: column; gap: 3px; }
+.service-category { font-size: 12px; color: var(--color-ink-500); }
+.service-card__title { min-height: 0; font-size: 17px; line-height: 1.35; font-weight: 700; }
+.service-price { min-height: 0; padding: 10px 0 12px; margin-top: auto; border-bottom: 1px solid #E2E8F0; }
 .service-price__label { font-size: 12px; }
 .service-price > strong { font-size: 17px; }
 .service-price__range { font-size: 12px; line-height: 1.45; }
-.service-card__actions { padding-top: 12px; }
+.service-card__actions { padding-top: 12px; min-height: 0; }
 .service-details-link { font-size: 13px; }
-.service-card__actions :deep(button) { border-radius: 10px; }
+.service-card__actions :deep(button) { border-radius: 999px; min-height: 38px; padding-inline: 14px; }
 .service-grid--busy { opacity: 0.72; }
-.service-grid--loading .service-card { min-height: 260px; }
+.service-grid--loading .service-card { min-height: 184px; gap: 16px; }
+.skeleton-bottomline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 12px; border-top: 1px solid #E2E8F0; }
 .service-pagination__viewport { margin-top: 24px; }
 
 @media (max-width: 1199px) {
-  .service-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 899px) {
   .public-services { width: min(calc(100% - 40px), 760px); padding-top: 24px; }
@@ -1138,6 +1170,8 @@ onBeforeUnmount(() => {
   .services-search-stage { width: min(100%, 700px); }
   .category-cloud { padding-top: 0; }
   .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .service-mark { width: 84px; height: 84px; }
+  .service-card__skeleton-art { width: 84px; flex: 0 0 84px; }
 }
 @media (max-width: 560px) {
   .public-services { width: calc(100% - 32px); padding: 20px 0 48px; }
@@ -1158,9 +1192,11 @@ onBeforeUnmount(() => {
   .results-count { flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 9px; font-size: 11px; }
   .results-count strong { font-size: 16px; }
   .service-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .service-card { min-height: 0; padding: 17px; }
+  .service-card { min-height: 0; padding: 16px; gap: 14px; }
+  .service-mark { width: 76px; height: 76px; }
+  .service-card__skeleton-art { width: 76px; flex: 0 0 76px; }
   .service-card__title { min-height: 0; }
-  .service-price { min-height: 76px; }
+  .service-price { min-height: 0; }
   .service-pagination__viewport { margin-top: 18px; overflow-x: auto; }
   .service-pagination__viewport :deep(nav) { min-width: max-content; }
 }

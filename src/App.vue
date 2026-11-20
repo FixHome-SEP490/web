@@ -7,11 +7,14 @@ import { isAppSurface, isConsoleSurface } from './utils/app-surface';
 
 const route = useRoute();
 
-// Customer/technician screens (`.fh-app`) and Console screens (`.fh-console`)
-// share cool-slate neutrals on <html> so teleported dialogs and tables stay crisp.
+// Customer/technician screens (`.fh-app`), Console screens (`.fh-console`), and public
+// screens (`.fh-public`) all use crisp cool-slate neutrals so teleported overlays stay consistent.
 watchEffect(() => {
-  document.documentElement.classList.toggle('fh-app', isAppSurface(route.path));
-  document.documentElement.classList.toggle('fh-console', isConsoleSurface(route.path));
+  const app = isAppSurface(route.path);
+  const console = isConsoleSurface(route.path);
+  document.documentElement.classList.toggle('fh-app', app);
+  document.documentElement.classList.toggle('fh-console', console);
+  document.documentElement.classList.toggle('fh-public', !app && !console);
 });
 </script>
 
