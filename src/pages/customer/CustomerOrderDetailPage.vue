@@ -72,6 +72,7 @@ import { useQueryClient } from '@tanstack/vue-query';
 import { afterRunningRead, onOrderChange, onOrderLocation, onResync, whileOffline } from '../../services/live-updates';
 import type { OrderChangeKind } from '../../services/chat-socket.service';
 import { formatRating } from '../../utils/formatters';
+import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const route = useRoute();
 const showRebook = ref(false);
@@ -353,6 +354,13 @@ const trackingMarkers = computed<MapMarker[]>(() => {
   if (order.value?.technicianLocation) markers.push({ id: 'technician', lat: order.value.technicianLocation.lat, lng: order.value.technicianLocation.lng, color: '#2563eb' });
   return markers;
 });
+
+// The technician checked in but the repair has not started: the order still reads EN_ROUTE.
+const arrivedWaiting = computed(() =>
+  !workStopped.value
+  && ['EN_ROUTE', 'en_route'].includes(String(order.value?.status))
+  && !!order.value?.arrivalVerified,
+);
 
 const showLiveArrival = computed(() =>
   !workStopped.value
@@ -673,6 +681,8 @@ async function checkQuotationApproval() {
 
 const handleRejectQuotation = async () => {
   if (actionLoading.value || quotationCheckId.value) return;
+  // Rejecting the quotation cancels the whole order (the mobile app warns the same way).
+  if (!window.confirm('Từ chối báo giá sẽ huỷ toàn bộ đơn sửa chữa này, không chỉ báo giá. Bạn vẫn muốn từ chối?')) return;
   quotationFeedback.value = null;
   try {
     actionLoading.value = true;
@@ -1355,7 +1365,7 @@ const parsedReview = computed(() => {
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-2 shrink-0">
-              <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : undefined" />
+              <FhStatusPill :status="workStopped ? 'CANCELLED' : order.status" :label="workStopped ? 'Đã dừng công việc' : arrivedWaiting ? VISIT_DEVICE_ARRIVED_LABEL : undefined" data-testid="order-status-pill" />
               <FhStatusPill
                 v-if="!oldFinanceReview && order.status !== 'CANCELLED'"
                 :status="isPaid ? 'COMPLETED' : 'PENDING'"

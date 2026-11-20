@@ -76,6 +76,9 @@ export function useVisitOrderDetails(visitId: () => string, refresh: () => Promi
     if (costId ? !cost || !canDecideCost(bundle, cost)
       || (action === 'APPROVE' && cost.items.some(item => item.partSource === 'external') && !externalConsent)
       : !canDecideOfficialQuotation(bundle.order)) return;
+    // Rejecting a device's quotation stops the repair of that device.
+    if (!cost && action === 'REJECT'
+      && !window.confirm('Từ chối báo giá sẽ dừng sửa máy này trong lượt. Bạn vẫn muốn từ chối?')) return;
     deciding.value = true;
     const groupId = visitId();
     feedback.value = null;

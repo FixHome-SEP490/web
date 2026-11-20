@@ -842,13 +842,27 @@ describe('customer visit page', () => {
     visitApi.checkout.mockResolvedValue(checkout());
     orders.getOrder.mockImplementation(async id => ({ id, status: 'EN_ROUTE', quotation: { id: 'q1', status: 'SENT' } }));
     orders.rejectQuotation.mockRejectedValue(new Error('network'));
+    const confirm = vi.fn(() => true); vi.stubGlobal('confirm', confirm);
     const w = await mountPage();
     await w.get('[data-testid="visit-quote-reject"]').trigger('click');
     await flushPromises();
+    vi.unstubAllGlobals();
     expect(w.get('[role="alert"]').text()).toContain('Chưa gửi được lựa chọn');
     expect(w.text()).not.toContain('Đã từ chối báo giá của máy này.');
     expect(visitApi.checkout).toHaveBeenCalledTimes(2);
     expect(w.find('[data-testid="visit-quote-reject"]').exists()).toBe(true);
+  });
+
+  it('asks before rejecting a device quotation and keeps it when the customer backs out', async () => {
+    visitApi.checkout.mockResolvedValue(checkout());
+    orders.getOrder.mockImplementation(async id => ({ id, status: 'EN_ROUTE', quotation: { id: 'q1', status: 'SENT' } }));
+    const confirm = vi.fn(() => false); vi.stubGlobal('confirm', confirm);
+    const w = await mountPage();
+    await w.get('[data-testid="visit-quote-reject"]').trigger('click');
+    await flushPromises();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('dừng sửa máy này'));
+    vi.unstubAllGlobals();
+    expect(orders.rejectQuotation).not.toHaveBeenCalled();
   });
 
   it('does not show an incomplete checkout as paid or free', async () => {
