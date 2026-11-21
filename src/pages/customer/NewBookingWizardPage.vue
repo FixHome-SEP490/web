@@ -23,7 +23,9 @@ import {
   X,
   Play,
 } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhSkeleton } from '../../components';
+import { FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
+import BookingDraftBanner from '../../components/booking/BookingDraftBanner.vue';
+import { describeBookingDraft, formatDraftExpiry, isBookingDraft } from '../../utils/booking-draft-summary';
 import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
 import BookingStepDock from '../../components/booking/BookingStepDock.vue';
 import BookingSummary, { type SummaryDevice } from '../../components/booking/BookingSummary.vue';
@@ -117,6 +119,7 @@ const draftNotice = ref('');
 const draftWarning = ref('');
 const restoredPhotoNotice = ref(false);
 const restoredServerDraft = ref(false);
+const confirmDiscardDraftOpen = ref(false);
 const pendingDraftSubmit = ref<{
   draftId: string;
   expectedVersion: number;
@@ -1437,14 +1440,6 @@ async function loadAddresses() {
   }
 }
 
-function formatDraftExpiry(expiresAt: string): string {
-  const date = new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return 'ngày hết hạn chưa xác định';
-  return new Intl.DateTimeFormat('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(date);
-}
-
 function hasBookingInput(): boolean {
   return !!(selectedServiceId.value || description.value.trim() || extraDevices.value.length
     || (selectedAddressId.value && selectedAddress.value?.isDefault === false) || customerNote.value.trim() || uploadedPhotos.value.length
@@ -1494,8 +1489,12 @@ async function loadCurrentBookingDraft() {
   try {
     const draft = await bookingDraftsApi.current();
     if (isPageDisposed.value) return;
-    currentBookingDraft.value = draft;
-    draftPromptVisible.value = !!draft;
+    const valid = isBookingDraft(draft) ? draft : null;
+    currentBookingDraft.value = valid;
+    draftPromptVisible.value = !!valid;
+    if (valid && route.query.resumeDraft === '1' && !hasBookingInput()) {
+      await resumeBookingDraft();
+    }
   } catch {
     draftNotice.value = 'Chưa tải được bản nháp đã lưu. Bạn vẫn có thể đặt lịch như bình thường.';
   }
@@ -1532,9 +1531,14 @@ async function saveBookingDraft() {
   }
 }
 
-async function discardBookingDraft() {
+function requestDiscardBookingDraft() {
   if (!currentBookingDraft.value || draftBusy.value || pendingDraftSubmit.value) return;
-  if (!window.confirm('Bỏ bản nháp đã lưu? Thông tin này sẽ không còn dùng để tiếp tục đặt lịch.')) return;
+  confirmDiscardDraftOpen.value = true;
+}
+
+async function discardBookingDraft() {
+  confirmDiscardDraftOpen.value = false;
+  if (!currentBookingDraft.value || draftBusy.value || pendingDraftSubmit.value) return;
   draftBusy.value = true;
   draftNotice.value = '';
   try {
@@ -1543,10 +1547,10 @@ async function discardBookingDraft() {
       currentBookingDraft.value = null;
       draftPromptVisible.value = false;
       restoredServerDraft.value = false;
-      toast.success('Đã bỏ bản nháp.');
+      toast.success('Đã huỷ bản nháp.');
     }
   } catch (error: unknown) {
-    draftNotice.value = userFacingError(error, 'Chưa bỏ được bản nháp. Vui lòng thử lại.');
+    draftNotice.value = userFacingError(error, 'Chưa huỷ được bản nháp. Vui lòng thử lại.');
   } finally {
     draftBusy.value = false;
   }
@@ -2569,33 +2573,64 @@ async function createAndFindTech() {
       </div>
     </div>
 
-    <div v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry" class="flex flex-wrap items-center justify-between gap-2 animate-slide-up-delay-1">
-      <p v-if="currentBookingDraft" class="text-xs text-ink-600" data-testid="booking-draft-expiry">
-        Bản nháp hết hạn {{ formatDraftExpiry(currentBookingDraft.expiresAt) }}
-      </p>
-      <span v-else></span>
-      <FhButton
-        variant="ghost"
-        size="sm"
-        :loading="draftBusy"
-        :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
-        data-testid="booking-draft-save"
-        @click="saveBookingDraft"
-      >Lưu bản nháp</FhButton>
+    <div
+      v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry && !(draftPromptVisible && currentBookingDraft && !restoredServerDraft)"
+      class="animate-slide-up-delay-1"
+    >
+      <div
+        v-if="currentBookingDraft"
+        class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-ink-200/85 bg-white px-3.5 py-2.5 shadow-2xs"
+      >
+        <p class="inline-flex items-center gap-2 text-xs text-ink-600" data-testid="booking-draft-expiry">
+          <span class="h-2 w-2 rounded-full bg-brand-600 shrink-0" aria-hidden="true" />
+          <span>
+            <span class="font-medium text-ink-800">{{ describeBookingDraft(currentBookingDraft) }}</span>
+            · Hết hạn <span class="font-num">{{ formatDraftExpiry(currentBookingDraft.expiresAt) }}</span>
+          </span>
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :loading="draftBusy"
+            :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
+            data-testid="booking-draft-save"
+            @click="saveBookingDraft"
+          >Lưu bản nháp</FhButton>
+          <FhButton
+            variant="ghost"
+            size="sm"
+            class="text-ink-600 hover:bg-danger-50/70 hover:text-danger-700"
+            :disabled="draftBusy || loading || !!pendingDraftSubmit"
+            data-testid="booking-draft-bar-discard"
+            @click="requestDiscardBookingDraft"
+          >Huỷ bản nháp</FhButton>
+        </div>
+      </div>
+      <div v-else class="flex justify-end">
+        <FhButton
+          variant="ghost"
+          size="sm"
+          :loading="draftBusy"
+          :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
+          data-testid="booking-draft-save"
+          @click="saveBookingDraft"
+        >Lưu bản nháp</FhButton>
+      </div>
     </div>
 
-    <section
+    <BookingDraftBanner
       v-if="draftPromptVisible && currentBookingDraft && !restoredServerDraft"
-      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white p-3 text-sm"
-      data-testid="booking-draft-prompt"
-      aria-label="Bản nháp đã lưu"
-    >
-      <p class="min-w-0 flex-1 text-ink-700">Bạn có bản nháp đặt lịch còn hạn đến {{ formatDraftExpiry(currentBookingDraft.expiresAt) }}.</p>
-      <div class="flex flex-wrap gap-2">
-        <FhButton variant="secondary" size="sm" :loading="draftBusy" :disabled="draftBusy" data-testid="booking-draft-resume" @click="resumeBookingDraft">Tiếp tục đặt lịch</FhButton>
-        <FhButton variant="ghost" size="sm" :disabled="draftBusy || !!pendingDraftSubmit" data-testid="booking-draft-discard" @click="discardBookingDraft">Bỏ bản nháp</FhButton>
-      </div>
-    </section>
+      class="animate-slide-up-delay-1"
+      :draft="currentBookingDraft"
+      :loading="draftBusy"
+      resume-label="Tiếp tục đặt"
+      test-id="booking-draft-prompt"
+      resume-test-id="booking-draft-resume"
+      discard-test-id="booking-draft-discard"
+      @resume="resumeBookingDraft"
+      @discard="discardBookingDraft"
+    />
     <p v-if="draftWarning" role="status" class="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="booking-draft-warning">{{ draftWarning }}</p>
     <p v-if="restoredPhotoNotice" role="note" class="text-xs text-ink-600" data-testid="booking-draft-photo-note">Ảnh không được khôi phục từ bản nháp. Hãy tải lại ảnh cần thiết trước khi gửi yêu cầu.</p>
     <p v-if="draftNotice" role="status" class="text-sm text-ink-600" data-testid="booking-draft-notice">{{ draftNotice }}</p>
@@ -3804,6 +3839,17 @@ async function createAndFindTech() {
       :category-name="detailsCategoryName"
       @close="closeServiceDetails"
       @confirm="chooseServiceFromDetails"
+    />
+    <FhConfirmDialog
+      :open="confirmDiscardDraftOpen"
+      :loading="draftBusy"
+      :danger="true"
+      title="Huỷ bản nháp đặt lịch?"
+      consequence="Thông tin đã lưu trong bản nháp sẽ bị xoá và không thể khôi phục."
+      confirm-text="Huỷ bản nháp"
+      cancel-text="Giữ lại"
+      @confirm="discardBookingDraft"
+      @cancel="confirmDiscardDraftOpen = false"
     />
   </div>
 </template>
