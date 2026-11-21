@@ -362,7 +362,7 @@ const confirmReject = async () => {
               <section class="space-y-2">
                 <h4 class="text-sm font-semibold text-ink-900">Kỹ năng và cấp độ</h4>
                 <p class="text-xs text-ink-500">Xác nhận cấp độ dựa trên bản công chứng bằng cấp. Bỏ chọn "Xác nhận" nếu chưa đủ căn cứ.</p>
-                <ul class="divide-y divide-ink-100 rounded-[var(--radius-md)] border border-ink-200 bg-white">
+                <ul class="max-h-80 divide-y divide-ink-100 overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-ink-200 bg-white">
                   <li v-for="skill in detail.skills" :key="skill.id" class="flex flex-wrap items-center gap-3 px-4 py-2.5">
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-ink-900">{{ skill.serviceName }}</div>
