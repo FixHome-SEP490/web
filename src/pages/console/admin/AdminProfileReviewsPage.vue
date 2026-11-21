@@ -522,13 +522,13 @@ const confirmReject = async () => {
             </div>
 
             <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-ink-200 bg-ink-25/60 px-6 py-4">
-              <p v-if="!attendedVisit" class="text-xs text-ink-500">Chỉ duyệt hồ sơ sau khi đã gặp trực tiếp tại trụ sở.</p>
+              <p v-if="detail.stage !== 'profile_review'" class="text-xs text-ink-500">Chỉ duyệt hồ sơ sau khi đã gặp trực tiếp tại trụ sở.</p>
               <span v-else />
               <div class="flex flex-wrap justify-end gap-2">
                 <FhButton variant="secondary" size="sm" @click="closeDetail">Đóng</FhButton>
                 <FhButton v-if="detail.stage === 'profile_rejected'" variant="secondary" size="sm" :disabled="busy" @click="reopen">Mở lại hồ sơ</FhButton>
-                <FhButton variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
-                <FhButton variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
+                <FhButton v-if="detail.stage !== 'profile_rejected' && detail.stage !== 'approved'" variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
+                <FhButton v-if="detail.stage === 'profile_review'" variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
               </div>
             </footer>
           </section>

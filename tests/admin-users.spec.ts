@@ -66,4 +66,22 @@ describe('Admin users', () => {
     await flushPromises();
     expect(createTechnician).toHaveBeenCalledWith({ email: 'tho.moi@fixhome.test', fullName: 'Thợ Mới', phoneNumber: '0901234567' });
   });
+
+  it('says what is wrong with an emoji name or a bad email instead of a generic failure (QA 22/11/2026)', async () => {
+    createTechnician.mockReset();
+    const w = await mountPage();
+    await w.findAll('button').find((b) => b.text().includes('Tạo tài khoản thợ'))!.trigger('click');
+    const inputs = w.findAll('[role="dialog"] input');
+    await inputs[0].setValue('😀😀');
+    await inputs[1].setValue('tho.moi@fixhome.test');
+    await w.get('[role="dialog"] form').trigger('submit');
+    await flushPromises();
+    expect(w.get('[role="dialog"]').text()).toContain('Họ tên chỉ gồm chữ cái');
+    await inputs[0].setValue('Thợ Mới');
+    await inputs[1].setValue('abc');
+    await w.get('[role="dialog"] form').trigger('submit');
+    await flushPromises();
+    expect(w.get('[role="dialog"]').text()).toContain('Email sai định dạng');
+    expect(createTechnician).not.toHaveBeenCalled();
+  });
 });

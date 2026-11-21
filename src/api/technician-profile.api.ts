@@ -104,12 +104,18 @@ function normalizeServiceArea(payload: unknown): TechnicianServiceAreaView {
   };
 }
 
+/** "HH:mm"; một vài lịch cũ lưu hết ngày là "24:00", máy chủ chỉ nhận "23:59" (cùng nghĩa, ô chọn hiện "24:00"). */
+function scheduleTime(value: unknown): string {
+  const text = String(value ?? '').slice(0, 5);
+  return text === '24:00' ? '23:59' : text;
+}
+
 function normalizeSchedule(payload: unknown): TechnicianScheduleView {
   const schedule = isRecord(payload) ? payload : {};
   return {
     dayOfWeek: Number(schedule.dayOfWeek ?? 0),
-    startTime: String(schedule.startTime ?? ''),
-    endTime: String(schedule.endTime ?? ''),
+    startTime: scheduleTime(schedule.startTime),
+    endTime: scheduleTime(schedule.endTime),
   };
 }
 
