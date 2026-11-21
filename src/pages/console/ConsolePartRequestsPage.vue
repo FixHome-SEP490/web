@@ -207,7 +207,15 @@ async function refreshRequestRow(requestId: string) {
     const fresh = await partRequestsApi.getById(requestId);
     if (version !== loadVersion) return;
     const current = requests.value.find((row) => row.id === requestId);
-    if (current) replaceRow({ ...current, ...fresh, warehouseAllocation: fresh.warehouseAllocation ?? current.warehouseAllocation });
+    if (!current) return;
+    // The summary cards come from the list call; move this row between them so they match the table.
+    const from = current.status.toLowerCase();
+    const to = String(fresh.status ?? current.status).toLowerCase();
+    const counts = serverStatusCounts.value;
+    if (counts && from !== to) {
+      serverStatusCounts.value = { ...counts, [from]: Math.max(0, (counts[from] ?? 0) - 1), [to]: (counts[to] ?? 0) + 1 };
+    }
+    replaceRow({ ...current, ...fresh, warehouseAllocation: fresh.warehouseAllocation ?? current.warehouseAllocation });
   } catch {
     // The command itself succeeded; the next list load shows the status.
   }
