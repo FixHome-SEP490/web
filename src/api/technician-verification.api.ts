@@ -138,11 +138,6 @@ export const technicianVerificationApi = {
     return normalizeVerification(res.data.data);
   },
 
-  /** Withdraws the technician's own still-PENDING request so they can resubmit. */
-  async withdraw(): Promise<void> {
-    await apiClient.delete('/technicians/me/verification');
-  },
-
   async getDocumentAccess(documentId: string): Promise<string> {
     const res = await apiClient.get<{ data: { signedUrl: string } }>(
       `/technicians/me/verification/documents/${documentId}/access`,

@@ -12,7 +12,6 @@ const { technicianVerificationApi } = vi.hoisted(() => ({
     requestUploadUrl: vi.fn(),
     uploadToSignedUrl: vi.fn(),
     submit: vi.fn(),
-    withdraw: vi.fn(),
   },
 }));
 
@@ -84,7 +83,8 @@ describe('Xác minh danh tính: trạng thái dễ đọc', () => {
     expect(wrapper.text()).toContain('Hồ sơ đang chờ duyệt');
     expect(wrapper.text()).toContain('Đã nộp: CCCD mặt trước, CCCD mặt sau, Video khuôn mặt');
     expect(wrapper.text()).not.toContain('front.jpg');
-    expect(wrapper.findAll('button').filter((b) => b.text() === 'Nộp lại')).toHaveLength(1);
+    // The server has no way to withdraw a pending request, so none is offered.
+    expect(wrapper.findAll('button').filter((b) => b.text() === 'Nộp lại')).toHaveLength(0);
   });
 
   it('a rejected request shows the reason above the form, once', async () => {
