@@ -136,6 +136,28 @@ describe('faulty part inspection on the manager page', () => {
     draw.mockRestore();
   });
 
+  it('moves the summary cards with the row after preparing the code, without a reload (BUG DETECTOR 212)', async () => {
+    const request = warranty({ id: 'pr-count', requestType: 'pre_repair' });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'reserved', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 9, statusCounts: { requested: 9, ready: 0 } });
+    api.getWarehouseAllocation.mockResolvedValue(allocation);
+    api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...allocation, status: 'ready' }, qrToken: 'pickup-token' });
+    api.getById.mockResolvedValueOnce({ ...request, status: 'ready' });
+    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
+    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
+    expect(card('Chờ chuẩn bị')).toContain('9');
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
+    await flushPromises();
+    expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị8');
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng1');
+    expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+    draw.mockRestore();
+  });
+
   it('shows a reissued code after handover as the technician receipt, without a dead handover button', async () => {
     const request = warranty({ id: 'pr-done', requestType: 'quotation' });
     const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'handed_over', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
