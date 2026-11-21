@@ -49,11 +49,26 @@ function formatWhen(value?: string | null): string | undefined {
   return Number.isNaN(time.getTime()) ? undefined : vnDateTimeString(time);
 }
 
+/**
+ * The backend writes an English log line plus a Vietnamese tag when a
+ * technician's auto-accept took the job ("Technician accepted invitation (tự
+ * nhận việc)"). The tag alone made the whole line pass as Vietnamese, so the
+ * English half reached customers. Show only what it means.
+ */
+const AUTO_ACCEPT_TAG = ' (tự nhận việc)';
+const NON_ASCII = /[^ -~]/;
+function readableReason(title: string): string {
+  if (title.endsWith(AUTO_ACCEPT_TAG) && !NON_ASCII.test(title.slice(0, -AUTO_ACCEPT_TAG.length))) {
+    return 'Kỹ thuật viên bật tự nhận việc nên đơn được nhận tự động';
+  }
+  return toUserFacingMessage(title, '');
+}
+
 export function toTimelineSteps(entries: TimelineEntry[]): TimelineStep[] {
   return entries.map((entry, index) => {
     const label = timelineStatusLabel(entry.status);
     // Keep a recorded reason only when it is a sentence a person wrote for people.
-    const reason = toUserFacingMessage(entry.title ?? '', '');
+    const reason = readableReason(entry.title ?? '');
     return {
       key: `${entry.status}-${index}`,
       label,
