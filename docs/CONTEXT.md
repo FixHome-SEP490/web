@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 17:26 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-form-dto-2111
+> Cập nhật lần cuối: 2026-11-21 18:35 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,8 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
-- 2026-11-21 17:26 (UTC+7) | ToanAltF4 | fix/web-form-dto-2111 | Kiểm form theo DTO: SĐT bỏ dấu cách, hồ sơ thợ (tên, SĐT, giới thiệu 2000, năm 0-80), bảo hành 0 ngày không mất, chat 2000 ký tự có báo lỗi, mô tả đặt lịch 5000, onboarding, chi phí phát sinh 2000, khu vực phục vụ, giới hạn cấu hình admin
-- 2026-11-21 17:02 (UTC+7) | ToanAltF4 | fix/web-be-align-2111 | Khớp BE: tải ảnh kỹ năng đọc data, nhả đơn gửi lý do + ảnh + xác nhận, tiếp tục sau gián đoạn tới 5 máy, ghi chú kiểm linh kiện hỏng >=10 ký tự, banner chờ bỏ yêu cầu hết hạn, giới hạn ô nhập theo DTO (BUG DETECTOR 214-219)
+- 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
 - 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
 - 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile

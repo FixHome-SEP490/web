@@ -5,6 +5,7 @@ import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 import type { BookingSlot } from '../utils/booking-session';
 import { readFailedWorkFinance } from './stopped-work-finance.api';
 import { readPartsSourcing, type PartsSourcing } from '../utils/parts-sourcing';
+import { isOrderWorkStopped } from '../utils/order-work-stopped';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -59,7 +60,7 @@ export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
   !['completed', 'cancelled'].includes(String(order.status).toLowerCase());
 /** The pill for an order the technician no longer holds. */
 export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
-  order.workStopped === true || order.operationalDisposition === 'STOPPED'
+  isOrderWorkStopped(order)
     ? { status: 'CANCELLED', label: 'Đã dừng công việc' }
     : isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
 export interface FailedWorkFinance {
