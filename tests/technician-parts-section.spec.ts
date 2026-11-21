@@ -656,4 +656,81 @@ describe('TechnicianPartsSection inside the job page', () => {
     expect(wrapper.text()).not.toMatch(/QueryFailedError|part_requests|500/);
     wrapper.unmount();
   });
+  // flow-2211: a warranty replacement is recorded after the order completed, or the warranty can never be closed.
+  it('lets the technician record a received warranty part on a completed order', async () => {
+    const pr = { ...request('received'), requestType: 'warranty', reason: 'Warranty part: faulty part must be inspected before it is issued' };
+    partRequestsApi.getByOrderId.mockResolvedValue([pr]);
+    partRequestsApi.updateItemUsage.mockResolvedValue({ ...pr.items[0], usageStatus: 'used' });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'COMPLETED', usageFrozen: true, approvedPartQuantities: {} }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Bảo hành');
+    expect(wrapper.text()).not.toContain('Phát sinh khi sửa');
+    expect(wrapper.text()).not.toContain('Warranty part');
+    expect(wrapper.text()).not.toContain('Chưa được khách duyệt');
+    const used = wrapper.findAll('button').find(b => b.text() === 'Đã dùng')!;
+    expect(used.attributes('disabled')).toBeUndefined();
+    await used.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.updateItemUsage).toHaveBeenCalledWith('pr-1', 'i-1', { usageStatus: 'used' });
+    wrapper.unmount();
+  });
+
+  it('keeps a recorded warranty part and non-warranty parts of a completed order read-only', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([{ ...request('received', 'used'), requestType: 'warranty' }]);
+    const done = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'COMPLETED', usageFrozen: true }, global: { stubs } });
+    await flushPromises();
+    expect(done.findAll('button').some(b => b.text() === 'Đã dùng')).toBe(false);
+    done.unmount();
+    partRequestsApi.getByOrderId.mockResolvedValue([request('received')]);
+    const repair = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'COMPLETED', usageFrozen: true }, global: { stubs } });
+    await flushPromises();
+    expect(repair.findAll('button').some(b => b.text() === 'Đã dùng')).toBe(false);
+    repair.unmount();
+  });
+
+  it('keeps a person-written reason', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([{ ...request('requested'), reason: 'Nghi hỏng tụ quạt' }]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' }, global: { stubs } });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="part-request-reason"]').text()).toContain('Nghi hỏng tụ quạt');
+    wrapper.unmount();
+  });
+
+  it('sends whole quantities of at most 100 and drops the draft on cancel', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([]);
+    partsCatalogApi.getCatalog.mockResolvedValue({ data: [{ id: 'p-1', name: 'Băng keo nhôm', sku: 'ACV035', sellingPrice: 25000 }], meta: { total: 1 } });
+    partRequestsApi.createPreRepair.mockResolvedValue({ ...request('requested') });
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs } });
+    await flushPromises();
+    const open = async () => {
+      await wrapper.findAll('button').find(b => b.text().includes('Tạo yêu cầu linh kiện'))!.trigger('click');
+      await wrapper.get('input[placeholder="Tên linh kiện, mã hoặc hãng"]').trigger('focus');
+      await flushPromises();
+      await wrapper.get('[data-testid="catalog-result"]').trigger('click');
+    };
+    await open();
+    const qty = wrapper.get('[data-testid="part-request-qty"]');
+    await qty.setValue('150');
+    await qty.trigger('change');
+    expect((qty.element as HTMLInputElement).value).toBe('100');
+    await wrapper.findAll('button').find(b => b.text().includes('Thêm vào danh sách'))!.trigger('click');
+    await wrapper.get('[data-testid="cancel-part-request-form"]').trigger('click');
+    await open();
+    await wrapper.get('[data-testid="part-request-qty"]').setValue('2.7');
+    await wrapper.get('[data-testid="part-request-qty"]').trigger('change');
+    await wrapper.findAll('button').find(b => b.text().includes('Thêm vào danh sách'))!.trigger('click');
+    await wrapper.findAll('button').find(b => b.text().includes('Gửi yêu cầu tới Quản lý'))!.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.createPreRepair).toHaveBeenCalledWith('so-1', expect.objectContaining({ items: [expect.objectContaining({ partCatalogId: 'p-1', quantity: 2 })] }));
+    wrapper.unmount();
+  });
+
+  it('limits the handover code to what the server accepts', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('ready')]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'EN_ROUTE' }, global: { stubs } });
+    await flushPromises();
+    await wrapper.findAll('button').find((button) => button.text().includes('Nhập mã bàn giao'))!.trigger('click');
+    expect(wrapper.get('[data-testid="handover-code-input"]').attributes('maxlength')).toBe('128');
+    wrapper.unmount();
+  });
 });
