@@ -171,7 +171,7 @@ const onProvinceChange = () => {
 };
 
 const saveArea = async () => {
-  if (!areaForm.value.provinceCode || !areaForm.value.districtCode || !areaForm.value.districtName) {
+  if (!areaForm.value.provinceCode?.trim() || !areaForm.value.districtCode?.trim() || !areaForm.value.districtName?.trim()) {
     formError.value = 'Điền đủ tỉnh, mã và tên quận, huyện.';
     return;
   }

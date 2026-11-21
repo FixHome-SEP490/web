@@ -51,6 +51,8 @@ import {
 import CancelledOrderPartReturns from '../../components/CancelledOrderPartReturns.vue';
 import {
   ordersApi,
+  OVERRUN_REASONS,
+  type OverrunReasonCode,
   historicalPill,
   isHistoricalOrder,
   type HistoricalOrderItem,
@@ -64,7 +66,7 @@ import FailedRepairDialog from '../../components/technician/FailedRepairDialog.v
 import { createGroupStopPort, type GroupStopResult } from '../../api/group-stop.api';
 import CannotContinueDialog from '../../components/technician/CannotContinueDialog.vue';
 import { createCannotContinuePort, type CustomerContinuation } from '../../api/platform-continuation.api';
-import { failedRepairKey } from '../../api/failed-repair.api';
+import { failedRepairKey, uploadFailedRepairEvidence } from '../../api/failed-repair.api';
 import { createTechnicianFailedRepairPort } from '../../api/technician-failed-repair.api';
 import { usePartsCatalogPicker } from '../../composables/usePartsCatalogPicker';
 import { VISIT_DEVICE_LIMIT, visitGroupsApi, type VisitCheckout } from '../../api/visit-groups.api';
@@ -595,16 +597,43 @@ const WITHDRAW_REASONS = [
 ];
 
 // Still on another job and this one starts soon (PO 20/10/2026): release it, no points lost, the customer picks another technician.
-const overrun = ref<{ eligible: boolean; currentOrderCode: string | null } | null>(null);
+const overrun = ref<{ eligible: boolean; currentOrderCode: string | null; currentOrderId: string | null } | null>(null);
 const showOverrunModal = ref(false);
 const releasing = ref(false);
 const releaseError = ref('');
+// The server needs a reason (10-2000 characters), 1 to 3 photos of the job still under repair and a confirmation.
+const overrunReasonCode = ref<OverrunReasonCode | ''>('');
+const overrunReason = ref('');
+const overrunPhotos = ref<File[]>([]);
+const overrunConfirmed = ref(false);
+// A photo already uploaded keeps its id, so a retry never uploads it twice.
+const overrunUploaded = new Map<File, string>();
+const pickOverrunPhotos = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  overrunPhotos.value = Array.from(input.files ?? []).slice(0, 3);
+};
 const handleReleaseForOverrun = async () => {
   if (releasing.value) return;
+  const reason = overrunReason.value.trim();
+  if (!overrunReasonCode.value) { releaseError.value = 'Chọn lý do.'; return; }
+  if (reason.length < 10 || reason.length > 2000) { releaseError.value = 'Mô tả tình huống từ 10 đến 2000 ký tự.'; return; }
+  if (!overrunPhotos.value.length) { releaseError.value = 'Thêm 1 đến 3 ảnh đơn đang sửa.'; return; }
+  if (!overrunConfirmed.value) { releaseError.value = 'Xác nhận thông tin là đúng.'; return; }
+  const currentOrderId = overrun.value?.currentOrderId;
+  if (!currentOrderId) { releaseError.value = 'Chưa đọc được đơn đang sửa. Vui lòng tải lại trang.'; return; }
   releasing.value = true;
   releaseError.value = '';
   try {
-    await ordersApi.releaseForOverrun(jobId);
+    const evidenceIds: string[] = [];
+    for (const file of overrunPhotos.value) {
+      let id = overrunUploaded.get(file);
+      if (!id) {
+        id = (await uploadFailedRepairEvidence(currentOrderId, file)).evidenceId;
+        overrunUploaded.set(file, id);
+      }
+      evidenceIds.push(id);
+    }
+    await ordersApi.releaseForOverrun(jobId, { reasonCode: overrunReasonCode.value, reason, evidenceIds, confirm: true });
     void cache.refresh(affectedBy.orderChange);
     showOverrunModal.value = false;
     toast.success('Đã nhả đơn. Khách sẽ chọn thợ khác.');
@@ -3794,6 +3823,7 @@ const toggleMore = async () => {
                   <textarea
                     ref="acReasonInput"
                     v-model="acReason"
+                    maxlength="2000"
                     aria-required="true"
                     :aria-invalid="acReasonError ? 'true' : undefined"
                     :aria-describedby="acReasonError ? 'additional-cost-reason-error' : undefined"
@@ -3836,6 +3866,7 @@ const toggleMore = async () => {
                     <input
                       v-else
                       v-model="item.description"
+                      maxlength="2000"
                       type="text"
                       :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
                       :aria-label="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
@@ -4200,6 +4231,28 @@ const toggleMore = async () => {
           <div>
             <h3 id="overrun-release-title" class="text-lg font-bold text-ink-900">Nhả đơn này?</h3>
             <p class="mt-1 text-sm text-ink-600">Bạn đang làm đơn #{{ overrun?.currentOrderCode }} chưa xong. Khách được báo và chọn thợ khác, giá và lịch hẹn giữ nguyên. Không trừ điểm uy tín.</p>
+          </div>
+          <div class="space-y-3 text-sm">
+            <label class="block">
+              <span class="block font-medium text-ink-700 mb-1">Lý do</span>
+              <select v-model="overrunReasonCode" :disabled="releasing" data-testid="overrun-reason-code" class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600">
+                <option value="" disabled>Chọn lý do</option>
+                <option v-for="option in OVERRUN_REASONS" :key="option.code" :value="option.code">{{ option.label }}</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="block font-medium text-ink-700 mb-1">Mô tả tình huống</span>
+              <textarea v-model="overrunReason" rows="3" maxlength="2000" :disabled="releasing" data-testid="overrun-reason" placeholder="Ít nhất 10 ký tự" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"></textarea>
+            </label>
+            <label class="block">
+              <span class="block font-medium text-ink-700 mb-1">Ảnh đơn #{{ overrun?.currentOrderCode }} đang sửa (1 đến 3 ảnh)</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="releasing" data-testid="overrun-photos" class="block w-full text-sm" @change="pickOverrunPhotos" />
+              <span v-if="overrunPhotos.length" class="mt-1 block text-xs text-ink-500">Đã chọn {{ overrunPhotos.length }} ảnh</span>
+            </label>
+            <label class="flex items-start gap-2">
+              <input v-model="overrunConfirmed" type="checkbox" :disabled="releasing" data-testid="overrun-confirm" class="mt-0.5" />
+              <span class="text-ink-700">Tôi xác nhận thông tin trên là đúng.</span>
+            </label>
           </div>
           <p v-if="releaseError" role="alert" class="text-sm text-danger-700">{{ releaseError }}</p>
           <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">

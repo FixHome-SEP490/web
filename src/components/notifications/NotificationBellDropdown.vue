@@ -116,6 +116,11 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/tech/warranty');
       return;
     }
+    // Visit and profile-review notices carry a visit or profile id, never an order.
+    if (itemType.startsWith('OFFICE_VISIT_') || itemType === 'PROFILE_REJECTED' || itemType === 'KYC_IDENTITY_APPROVED') {
+      router.push('/tech/profile');
+      return;
+    }
     if (itemType === 'PART_REQUEST_READY') {
       const orderId = await resolvePartRequestServiceOrderId(item);
       if (orderId) router.push(`/tech/jobs/${encodeURIComponent(orderId)}`);
@@ -146,6 +151,10 @@ const handleItemClick = async (item: NotificationItem) => {
   if (role === 'SERVICE_MANAGER' || role === 'ADMIN') {
     if (itemType.startsWith('WARRANTY_')) {
       router.push('/console/warranty');
+      return;
+    }
+    if (itemType === 'OFFICE_VISIT_BOOKED') {
+      router.push('/console/office-visits');
       return;
     }
     if (itemType.startsWith('CHECKIN_FACE_')) {

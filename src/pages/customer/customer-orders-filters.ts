@@ -13,6 +13,12 @@ export const ORDER_STATES: Record<OrdersTab, readonly string[]> = {
 };
 
 /**
+ * Backend keeps `en_route`/`under_repair` DB status when onsite work stops (`workStopped: true`),
+ * so FE collects stopped orders from these states when displaying the `CANCELLED` tab.
+ */
+export const STOPPED_ORDER_STATES: readonly string[] = ['en_route', 'under_repair'];
+
+/**
  * Booking requests no technician holds. A matched booking shows as its order. A request
  * nobody took yet (closed, "chờ hỗ trợ") is still being handled, so it is under
  * "Đang xử lý" too. The request list also asks the server to leave out bookings that

@@ -510,7 +510,9 @@ function invoiceSummaryRow(item: Visit['items'][number]) {
     const line = value as Record<string, unknown>;
     const unitPrice = billingAmount(line.unitPrice);
     const lineTotal = billingAmount(line.lineTotal);
-    if (typeof line.id !== 'string' || !line.id.trim() || lineIds.has(line.id) || line.invoiceId !== invoice.id
+    // The invoice endpoint does not repeat invoiceId on each line; only a line naming another invoice is refused.
+    if (typeof line.id !== 'string' || !line.id.trim() || lineIds.has(line.id)
+      || (line.invoiceId !== undefined && line.invoiceId !== invoice.id)
       || typeof line.description !== 'string' || !line.description.trim()
       || typeof line.quantity !== 'number' || !Number.isSafeInteger(line.quantity) || line.quantity <= 0
       || unitPrice === null || lineTotal === null) return unknown;

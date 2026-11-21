@@ -348,6 +348,45 @@ describe('NewBookingWizardPage A+ service finder', () => {
     wrapper.unmount();
   });
 
+  it('keeps "Huỷ bản nháp" accessible after resuming or saving and discards via confirmation dialog', async () => {
+    currentDraft.mockResolvedValue({
+      id: 'draft-cancel', version: 3, expiresAt: '2026-12-05T00:00:00.000Z',
+      snapshot: { kind: 'booking', addressId: 'addr-1', mode: 'urgent', quantity: 1, step: 1,
+        items: [{ serviceId: 'svc-ac-clean', description: 'Máy lạnh chảy nước' }] },
+    });
+    getService.mockImplementation(async (id: string) => ({ ...sampleCategories[0].services[0], id, isActive: true }));
+    const wrapper = await renderWizard();
+    await wrapper.get('[data-testid="booking-draft-resume"]').trigger('click');
+    await flushPromises();
+
+    // Even after resuming (prompt dismissed), the top bar still exposes "Huỷ bản nháp".
+    await wrapper.get('[data-testid="booking-draft-bar-discard"]').trigger('click');
+    await flushPromises();
+    const dialog = wrapper.get('[role="dialog"]');
+    const confirmBtn = dialog.findAll('button').find((b) => b.text().trim() === 'Huỷ bản nháp');
+    expect(confirmBtn).toBeDefined();
+    await confirmBtn!.trigger('click');
+    await flushPromises();
+    expect(discardDraft).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="booking-draft-expiry"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('auto-resumes the saved draft when opened with resumeDraft=1', async () => {
+    route.query = { resumeDraft: '1' };
+    currentDraft.mockResolvedValue({
+      id: 'draft-auto', version: 2, expiresAt: '2026-12-05T00:00:00.000Z',
+      snapshot: { kind: 'booking', addressId: 'addr-1', mode: 'urgent', quantity: 1, step: 1,
+        items: [{ serviceId: 'svc-ac-clean', description: 'Tự tiếp tục từ trang đơn' }] },
+    });
+    getService.mockImplementation(async (id: string) => ({ ...sampleCategories[0].services[0], id, isActive: true }));
+    const wrapper = await renderWizard();
+    expect(wrapper.find('[data-testid="booking-draft-prompt"]').exists()).toBe(false);
+    expect((wrapper.get('[data-testid="booking-description"]').element as HTMLTextAreaElement).value).toBe('Tự tiếp tục từ trang đơn');
+    expect(wrapper.find('[data-testid="booking-draft-bar-discard"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('shows compact categories and selects nothing by default', async () => {
     const wrapper = await renderWizard();
 

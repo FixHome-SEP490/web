@@ -425,6 +425,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Khu vực phục vụ', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
+        path: 'office-visits',
+        name: 'console-office-visits',
+        component: () => import('../pages/console/ConsoleOfficeVisitsPage.vue'),
+        meta: { title: 'Lịch hẹn trụ sở', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+      },
+      {
         path: 'admin/profile-reviews',
         name: 'admin-profile-reviews',
         component: () => import('../pages/console/admin/AdminProfileReviewsPage.vue'),

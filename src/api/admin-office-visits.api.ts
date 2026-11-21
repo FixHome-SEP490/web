@@ -127,6 +127,9 @@ export const adminOfficeVisitsApi = {
   async approveReview(technicianId: string, skills: SkillDecision[]): Promise<void> {
     await apiClient.patch(`/admin/technician-profile-reviews/${technicianId}/approve`, { skills });
   },
+  async reopenReview(technicianId: string): Promise<void> {
+    await apiClient.patch(`/admin/technician-profile-reviews/${technicianId}/reopen`);
+  },
   async rejectReview(technicianId: string, reason: string): Promise<void> {
     await apiClient.patch(`/admin/technician-profile-reviews/${technicianId}/reject`, { reason });
   },

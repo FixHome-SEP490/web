@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 00:38 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/visit-device-links-181-182
+> Cập nhật lần cuối: 2026-11-21 18:35 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,18 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
+- 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
+- 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
+- 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
+- 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
+- 2026-11-21 14:46 (UTC+7) | ToanAltF4 | fix/sm-part-stats-2111 | SM yêu cầu linh kiện: ô đếm trạng thái đổi theo dòng sau Chuẩn bị mã kho (BUG DETECTOR 212)
+- 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
+- 2026-11-21 04:13 (UTC+7) | ToanAltF4 | fix/web-retest-2111d | Console Huỷ đơn: lý do hệ thống ghi tiếng Anh (khách từ chối báo giá) hiện tiếng Việt
+- 2026-11-21 04:03 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Ví thợ và ví khách: báo rõ khi tên chủ tài khoản có số/ký hiệu thay vì lỗi lưu chung chung
+- 2026-11-21 04:02 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Lượt nhiều máy: tóm tắt hoá đơn cả lượt hiện đúng số tiền máy đã sửa (dòng hoá đơn từ API không có invoiceId)
+- 2026-11-21 03:36 (UTC+7) | ToanAltF4 | fix/web-retest-2111b | Khách: hỏi xác nhận trước khi từ chối báo giá (đơn lẻ huỷ cả đơn, lượt nhiều máy dừng máy đó); chi tiết đơn ghi Đã đến, chờ sửa khi thợ đã check-in
+- 2026-11-21 02:39 (UTC+7) | ToanAltF4 | fix/web-retest-2111 | Bản nháp đặt lịch gửi mức khẩn cấp đúng giá trị backend (medium), trước đây Lưu bản nháp luôn báo Nội dung bản nháp không hợp lệ
 - 2026-11-21 00:38 (UTC+7) | ToanAltF4 | fix/visit-device-links-181-182 | Bug 181/182: trang chủ khách mở thiết bị của lượt nhiều máy về trang lượt, ghi Kỹ thuật viên đã đến khi đã check-in; nút quay lại ở chi tiết đơn của lượt về trang lượt
 - 2026-11-21 00:33 (UTC+7) | ToanAltF4 | fix/bug184-part-return-cancelled | BUG 184: trang công việc của thợ hiện linh kiện cần trả và nút báo đã trả khi đơn (máy trong lượt nhiều máy) đã huỷ, kể cả khi thợ không còn phụ trách đơn
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
@@ -650,16 +662,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
-- 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
-- 2026-11-12 00:51 (UTC+7) | ToanAltF4 | perf/web-duplicate-reads | Tối ưu tốc độ: thanh bên của thợ đếm việc đang làm bằng 1 request nhỏ (statuses, pageSize=1) thay vì tải cả danh sách đơn; danh sách hội thoại và số thông báo chưa đọc gộp các lần gọi trùng khi mở trang (coalesce).
-- 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được
-- 2026-11-11 21:38 (UTC+7) | ToanAltF4 | fix/warehouse-status-label | Nhãn trạng thái kho đang hoạt động hiện Đang hoạt động thay vì Thành công (BUG 91); test chặn truyền chữ vào giữa thẻ FhStatusPill
-- 2026-11-11 21:20 (UTC+7) | ToanAltF4 | fix/warehouse-log-w2-kinds | Nhật ký kho đọc được dòng W2 (giữ/nhả/xuất/hoàn, người thao tác có thể trống); bản #234 hiện Chưa tải được vì hàm chuẩn hoá chỉ nhận nhập kho/điều chỉnh
-- 2026-11-11 19:32 (UTC+7) | ToanAltF4 | fix/bug-detector-1111-web | Sửa BUG DETECTOR 67 (đăng nhập không đi theo redirect của vai trò khác), 78 (đổi kho nhanh không ghi đè tồn), 79 (thử lại điều chỉnh tồn theo đúng kho), 80 (nhãn nhật ký kho W2), 83 (popup bàn giao rõ nội dung), 84 (đọc lại trạng thái khi bàn giao lỗi), 85 (bàn giao xong không báo lỗi vì QR), 89 (thống kê trạng thái từ server), 90 (dùng phân kho gửi kèm, bỏ N request)
-- 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
-- 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm
-- 2026-11-08 21:44 (UTC+7) | ToanAltF4 | fix/ai-new-session-stay-in-chat | Phiên mới trên trang Phân tích cùng AI ở lại khung chat: chỉ còn lời chào, không gửi gì, chờ khách gõ
-- 2026-11-08 21:27 (UTC+7) | ToanAltF4 | fix/ai-new-session-service | Phiên mới trên trang Phân tích cùng AI nhận lại dịch vụ AI gợi ý (đặt lại cờ chọn tay sau khi xoá dịch vụ)
-- 2026-11-08 21:09 (UTC+7) | ToanAltF4 | fix/ai-chat-new-session-smooth | Khung chat AI: phiên mới là mới hoàn toàn (bỏ trả lời về muộn của phiên cũ, trang Phân tích cùng AI về bước 1 trống, sửa mô tả thì phân tích lại), trả lời thay chỗ dòng chờ, chữ hiện mịn, chi tiết mờ dần
-- 2026-11-08 18:03 (UTC+7) | ToanAltF4 | fix/warehouse-handover-reissue | Sửa nút Đã giao thực tế ở mục Lấy hàng tại kho: mã cấp lại sau bàn giao đặt đúng ô mã nhận, nút giao chỉ hiện khi phiếu ready, không thoát im lặng, lỗi báo bằng toast
-- 2026-11-08 13:57 (UTC+7) | foxonworld | foxonworld/fixhome-w2-e2e-web-hotfix-20261108 | Sửa Web warehouse envelope, nối queue W2 theo kho SM dự kiến và hiện km đường thẳng từ booking snapshot có nhãn chưa xác minh; focused 47/47, full 2649/2649, lint/typecheck/build PASS; Backend route/runtime và signed-in E2E CHƯA KIỂM CHỨNG.

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractApiErrorMessage,
+  validateBankAccountName,
   validateEmail,
   validateFullName,
   validatePassword,
@@ -148,5 +149,16 @@ describe('extractApiErrorMessage', () => {
       'du phong',
     );
     expect(extractApiErrorMessage(undefined, 'du phong')).toBe('du phong');
+  });
+});
+
+describe('validateBankAccountName', () => {
+  it('accepts a holder name the server accepts', () => {
+    expect(validateBankAccountName('NGUYEN VAN A')).toBe('');
+    expect(validateBankAccountName("Lê Thị O'Neil-Trần")).toBe('');
+  });
+  it('refuses digits and symbols with a reason instead of a generic save error', () => {
+    expect(validateBankAccountName('Tho Dien Lanh 12')).toContain('Tên chủ tài khoản chỉ gồm chữ cái');
+    expect(validateBankAccountName('An 😀')).toContain('Tên chủ tài khoản');
   });
 });

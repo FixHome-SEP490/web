@@ -5,6 +5,7 @@ import type { WarrantyClaimStatus } from '../utils/warranty-claim';
 import type { BookingSlot } from '../utils/booking-session';
 import { readFailedWorkFinance } from './stopped-work-finance.api';
 import { readPartsSourcing, type PartsSourcing } from '../utils/parts-sourcing';
+import { isOrderWorkStopped } from '../utils/order-work-stopped';
 
 export type CanonicalOrderStatus =
   | 'ACCEPTED'
@@ -59,7 +60,7 @@ export const isReleasedJob = (order: HistoricalOrderItem): boolean =>
   !['completed', 'cancelled'].includes(String(order.status).toLowerCase());
 /** The pill for an order the technician no longer holds. */
 export const historicalPill = (order: HistoricalOrderItem): { status: string; label: string } =>
-  order.workStopped === true || order.operationalDisposition === 'STOPPED'
+  isOrderWorkStopped(order)
     ? { status: 'CANCELLED', label: 'Đã dừng công việc' }
     : isReleasedJob(order) ? { status: 'CANCELLED', label: 'Bạn đã rời đơn' } : { status: order.status, label: '' };
 export interface FailedWorkFinance {
@@ -321,6 +322,15 @@ export interface CreateWarrantyClaimPayload {
 /** Evidence kinds as the backend stores them; `checkin_face` is the face photo taken at check-in. */
 export type EvidenceType = 'before' | 'after' | 'additional' | 'checkin_face';
 /** The same kinds as the web passes them when uploading. */
+export const OVERRUN_REASONS = [
+  { code: 'new_fault_found', label: 'Phát sinh lỗi thêm' },
+  { code: 'waiting_parts', label: 'Chờ linh kiện' },
+  { code: 'repair_longer', label: 'Sửa lâu hơn dự kiến' },
+  { code: 'other', label: 'Lý do khác' },
+] as const;
+export type OverrunReasonCode = (typeof OVERRUN_REASONS)[number]['code'];
+export interface OverrunReleaseReport { reasonCode: OverrunReasonCode; reason: string; evidenceIds: string[]; confirm: true }
+
 export type EvidencePhase = 'BEFORE' | 'AFTER' | 'CHECKIN_FACE';
 
 export interface OrderEvidenceRecord {
@@ -627,14 +637,15 @@ export const ordersApi = {
   },
 
   /** Whether the technician, still on another job, may release this upcoming order without losing points (PO 20/10/2026). */
-  async overrunReleaseStatus(orderId: string): Promise<{ eligible: boolean; currentOrderCode: string | null }> {
-    const res = await apiClient.get<ApiResponse<{ eligible?: boolean; currentOrderCode?: string | null }>>(`/service-orders/${orderId}/overrun-release`);
-    const data = (res.data?.data || {}) as { eligible?: boolean; currentOrderCode?: string | null };
-    return { eligible: data.eligible === true, currentOrderCode: data.currentOrderCode ?? null };
+  async overrunReleaseStatus(orderId: string): Promise<{ eligible: boolean; currentOrderCode: string | null; currentOrderId: string | null }> {
+    const res = await apiClient.get<ApiResponse<{ eligible?: boolean; currentOrderCode?: string | null; currentOrderId?: string | null }>>(`/service-orders/${orderId}/overrun-release`);
+    const data = (res.data?.data || {}) as { eligible?: boolean; currentOrderCode?: string | null; currentOrderId?: string | null };
+    return { eligible: data.eligible === true, currentOrderCode: data.currentOrderCode ?? null, currentOrderId: data.currentOrderId ?? null };
   },
 
-  async releaseForOverrun(orderId: string): Promise<void> {
-    await apiClient.post(`/service-orders/${orderId}/overrun-release`);
+  /** The server needs a reason, 1 to 3 photos of the job still under repair and a confirmation (DelayReportDto). */
+  async releaseForOverrun(orderId: string, body: OverrunReleaseReport): Promise<void> {
+    await apiClient.post(`/service-orders/${orderId}/overrun-release`, body);
   },
 
   async cancelOrder(orderId: string, reason: string): Promise<Record<string, unknown>> {

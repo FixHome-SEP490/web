@@ -56,6 +56,7 @@ import type {
 } from '../../types/technician-onboarding.types';
 import { userFacingError } from '../../utils/user-facing-error';
 import { parseDayKey, vnParts } from '../../utils/vn-time';
+import { validateFullName } from '../../utils/input-validation';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -100,9 +101,8 @@ const validateAge = (dobString: string): boolean => {
 
 const validateStep1 = (): boolean => {
   const errs: Record<string, string> = {};
-  if (!fullName.value.trim() || fullName.value.trim().length < 2) {
-    errs.fullName = 'Họ và tên tối thiểu 2 ký tự';
-  }
+  const nameError = validateFullName(fullName.value);
+  if (nameError) errs.fullName = nameError;
   if (!dateOfBirth.value) {
     errs.dateOfBirth = 'Vui lòng chọn ngày sinh';
   } else if (!validateAge(dateOfBirth.value)) {
@@ -1097,8 +1097,13 @@ const handleSaveStep3 = async () => {
 };
 
 const handleSaveStep4 = async () => {
-  if (!fullAddress.value.trim() || fullAddress.value.length < 5) {
+  const addressLength = fullAddress.value.trim().length;
+  if (addressLength < 5) {
     toast.error('Vui lòng nhập địa chỉ cụ thể của bạn');
+    return;
+  }
+  if (addressLength > 500) {
+    toast.error('Địa chỉ tối đa 500 ký tự');
     return;
   }
   if (selectedAreaKeys.value.length === 0) {
@@ -1753,6 +1758,7 @@ const handleLogout = async () => {
             </label>
             <textarea
               v-model="bio"
+              maxlength="2000"
               rows="3"
               placeholder="Ví dụ: Thợ sửa điện lạnh chuyên nghiệp với 5 năm kinh nghiệm, có chứng chỉ nghề, tận tâm, có mặt nhanh chóng..."
               class="w-full p-3 text-sm bg-ink-50 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -1824,6 +1830,7 @@ const handleLogout = async () => {
               <div class="relative">
                 <input
                   v-model="fullAddress"
+                  maxlength="500"
                   @input="onAddressInput"
                   type="text"
                   placeholder="Ví dụ: 123 Nguyễn Thị Minh Khai, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh"

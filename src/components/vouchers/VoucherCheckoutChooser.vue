@@ -43,7 +43,8 @@ const attemptKey = queryKeys.voucherAttempts.scope;
 let disposed = false;
 let switchingContext = false;
 const customerId = computed(() => auth.userRole === 'CUSTOMER' ? auth.user?.id : null);
-const open = ref(true);
+// Closed by default so it never covers the payment methods; it opens on tap or when the customer returns from the wallet with a claim.
+const open = ref(typeof route.query.voucherClaimId === 'string' && route.query.voucherClaimId !== '');
 const state = ref<ChooserState>('loading');
 const offers = ref<VoucherOffer[]>([]);
 const selectedId = ref('');
@@ -98,6 +99,12 @@ const canApply = computed(() => !reservation.value && !terminal.value && !applyi
   && (reservationAttemptStarted.value ? !!pendingAttempt()
     : previewState.value === 'ready' && preview.value?.paymentAvailable === true
       && !!selectedOffer.value && !!customerId.value && !!props.scopeId));
+// 'Máy chủ chưa sẵn sàng' only when the server preview really says payment is unavailable, not before a voucher is picked.
+const applyLabel = computed(() => {
+  if (preview.value && preview.value.paymentAvailable !== true) return 'Máy chủ chưa sẵn sàng';
+  if (selectedOffer.value && previewState.value === 'loading') return 'Đang kiểm tra voucher…';
+  return 'Áp dụng voucher';
+});
 const walletLocation = computed(() => ({
   name: 'customer-vouchers',
   query: { returnTo: route.fullPath },
@@ -325,7 +332,6 @@ function clearLocalContext() {
 }
 watch(() => props.scopeId, () => {
   clearLocalContext();
-  open.value = true;
   void load();
 }, { flush: 'sync' });
 
@@ -450,7 +456,8 @@ function toggle() {
     return;
   }
   open.value = true;
-  void load();
+  // The wallet read started on mount is reused; a later open refreshes it.
+  if (state.value !== 'loading') void load();
 }
 
 function handleOffline() {
@@ -585,7 +592,7 @@ onBeforeUnmount(() => {
         :disabled="!canApply"
         :loading="applying"
         @click="applyVoucher"
-      >{{ applying ? 'Đang giữ chỗ…' : preview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}</FhButton>
+      >{{ applying ? 'Đang giữ chỗ…' : applyLabel }}</FhButton>
     </div>
 
     <VoucherSelectionSheet

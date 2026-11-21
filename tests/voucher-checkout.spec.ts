@@ -28,7 +28,14 @@ function signIn() {
   return auth;
 }
 
-function mountChooser(pinia: ReturnType<typeof createPinia>, scopeId: string | null = 'order-1', query: Record<string, unknown> = {}) {
+// The sheet starts closed (BUG DETECTOR 207); most cases open it the way the customer does, by tapping the voucher row.
+function mountChooser(pinia: ReturnType<typeof createPinia>, scopeId: string | null = 'order-1', query: Record<string, unknown> = {}, tapOpen = true) {
+  const wrapper = mountClosedChooser(pinia, scopeId, query);
+  if (tapOpen && !wrapper.find('[data-testid="voucher-selection-sheet"]').exists()) void wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+  return wrapper;
+}
+
+function mountClosedChooser(pinia: ReturnType<typeof createPinia>, scopeId: string | null = 'order-1', query: Record<string, unknown> = {}) {
   routeReplace.mockClear();
   return mount(VoucherCheckoutChooser, {
     props: { scopeId },
@@ -122,6 +129,31 @@ describe('checkout voucher boundary', () => {
 
     await wrapper.get('[data-testid="voucher-selection-cancel"]').trigger('click');
     expect(wrapper.find('[data-testid="voucher-selection-sheet"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('starts closed so the payment methods stay visible, and does not call the server not ready before a voucher is picked (BUG DETECTOR 207, 209)', async () => {
+    const pinia = createPinia(); setActivePinia(pinia); signIn();
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => ({
+      data: { success: true, data: path === '/vouchers/wallet' ? [walletClaim] : preview('claim-1', 'order-1', 250000, 50000, true) },
+    }) as never);
+    const wrapper = mountClosedChooser(pinia);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="voucher-selection-sheet"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="open-voucher-chooser"]').attributes('aria-expanded')).toBe('false');
+    expect(apiClient.get).toHaveBeenCalledTimes(1);
+    const apply = wrapper.get('[data-testid="checkout-voucher-apply"]');
+    expect(apply.text()).toBe('Áp dụng voucher');
+    expect(apply.attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).not.toContain('Máy chủ chưa sẵn sàng');
+
+    await wrapper.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="voucher-selection-apply"]').text()).toBe('Áp dụng voucher');
+    await wrapper.get('[data-testid="voucher-selection-option"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="voucher-selection-apply"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.text()).not.toContain('Máy chủ chưa sẵn sàng');
     wrapper.unmount();
   });
 
