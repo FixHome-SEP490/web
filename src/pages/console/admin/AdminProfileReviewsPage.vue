@@ -169,13 +169,6 @@ const act = async (task: () => Promise<unknown>, success: string, fallback: stri
   }
 };
 
-const markAttended = () =>
-  scheduledVisit.value && act(() => adminOfficeVisitsApi.markAttended(scheduledVisit.value!.id), 'Đã ghi nhận buổi gặp.', 'Chưa ghi nhận được buổi gặp.');
-const markMissed = () =>
-  scheduledVisit.value && act(() => adminOfficeVisitsApi.markMissed(scheduledVisit.value!.id), 'Đã ghi nhận thợ vắng buổi hẹn.', 'Chưa ghi nhận được.');
-const resetMissed = () =>
-  detail.value && act(() => adminOfficeVisitsApi.resetMissed(detail.value!.technicianId), 'Đã cho phép thợ đặt lại lịch.', 'Chưa cho phép đặt lại được.');
-
 const reopen = () =>
   detail.value && act(() => adminOfficeVisitsApi.reopenReview(detail.value!.technicianId), 'Đã mở lại hồ sơ, thợ đặt lịch gặp lại.', 'Chưa mở lại được hồ sơ.');
 
@@ -363,11 +356,7 @@ const confirmReject = async () => {
                 </p>
                 <p v-else-if="attendedVisit" class="text-sm font-medium text-success-700">Đã gặp trực tiếp ({{ attendedVisit.officeName }}, <span class="font-num">{{ formatTime(attendedVisit.scheduledAt) }}</span>).</p>
                 <p v-else class="text-sm text-ink-500">Thợ chưa đặt lịch.</p>
-                <div class="flex flex-wrap gap-2">
-                  <FhButton v-if="scheduledVisit" variant="primary" size="sm" :disabled="busy" @click="markAttended">Đã gặp</FhButton>
-                  <FhButton v-if="scheduledVisit" variant="secondary" size="sm" :disabled="busy" @click="markMissed">Thợ vắng</FhButton>
-                  <FhButton v-if="detail.stage === 'visit_blocked'" variant="secondary" size="sm" :disabled="busy" @click="resetMissed">Cho phép đặt lại</FhButton>
-                </div>
+                <p v-if="!attendedVisit" class="text-xs text-ink-500">Quản lý dịch vụ ghi nhận buổi gặp (đã gặp, vắng, cho đặt lại) ở mục "Lịch hẹn trụ sở".</p>
               </section>
 
               <section class="space-y-2">

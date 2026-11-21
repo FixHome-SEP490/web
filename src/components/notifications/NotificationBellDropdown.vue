@@ -116,6 +116,11 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/tech/warranty');
       return;
     }
+    // Visit and profile-review notices carry a visit or profile id, never an order.
+    if (itemType.startsWith('OFFICE_VISIT_') || itemType === 'PROFILE_REJECTED' || itemType === 'KYC_IDENTITY_APPROVED') {
+      router.push('/tech/profile');
+      return;
+    }
     if (itemType === 'PART_REQUEST_READY') {
       const orderId = await resolvePartRequestServiceOrderId(item);
       if (orderId) router.push(`/tech/jobs/${encodeURIComponent(orderId)}`);

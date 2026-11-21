@@ -33,6 +33,7 @@ const loadError = ref('');
 const error = ref('');
 const successMessage = ref('');
 const busyId = ref('');
+const selected = ref<OfficeVisitRow | null>(null);
 
 const load = async () => {
   loading.value = true;
@@ -53,6 +54,7 @@ const act = async (id: string, task: () => Promise<unknown>, ok: string, fail: s
   try {
     await task();
     successMessage.value = ok;
+    selected.value = null;
     await load();
   } catch (reason) {
     error.value = userFacingError(reason, fail);
@@ -107,6 +109,7 @@ onMounted(load);
         <template #cell-status="{ row }"><FhStatusPill :status="STATUS[row.status].pill" :label="STATUS[row.status].label" /></template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
+            <FhButton variant="secondary" size="sm" @click="selected = row">Xem</FhButton>
             <template v-if="row.status === 'scheduled'">
               <FhButton variant="primary" size="sm" :disabled="busyId === row.id" @click="attended(row)">Đã gặp</FhButton>
               <FhButton variant="secondary" size="sm" :disabled="busyId === row.id" @click="missed(row)">Thợ vắng</FhButton>
@@ -116,5 +119,41 @@ onMounted(load);
         </template>
       </ConsoleTable>
     </div>
+
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="selected"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="office-visit-title"
+          @click.self="selected = null"
+          @keydown.esc="selected = null"
+        >
+          <section class="fh-modal-panel w-full max-w-md space-y-4 rounded-[var(--radius-lg)] border border-ink-200 bg-white p-6 shadow-(--shadow-e3)">
+            <div class="flex items-start justify-between gap-3">
+              <h3 id="office-visit-title" class="text-base font-semibold text-ink-900">Lịch hẹn lên trụ sở</h3>
+              <FhStatusPill :status="STATUS[selected.status].pill" :label="STATUS[selected.status].label" />
+            </div>
+            <dl class="space-y-2 text-sm">
+              <div><dt class="text-xs text-ink-500">Kỹ thuật viên</dt><dd class="font-medium text-ink-900">{{ selected.technicianName }}</dd></div>
+              <div v-if="selected.technicianPhone"><dt class="text-xs text-ink-500">Số điện thoại</dt><dd class="font-num text-ink-900"><a :href="`tel:${selected.technicianPhone}`" class="underline">{{ selected.technicianPhone }}</a></dd></div>
+              <div><dt class="text-xs text-ink-500">Trụ sở</dt><dd class="text-ink-900">{{ selected.officeName }}<span class="block text-xs text-ink-500">{{ selected.officeAddress }}</span></dd></div>
+              <div><dt class="text-xs text-ink-500">Giờ hẹn</dt><dd class="font-num text-ink-900">{{ vnDateTimeString(selected.scheduledAt) }}</dd></div>
+              <div v-if="selected.note"><dt class="text-xs text-ink-500">Ghi chú</dt><dd class="text-ink-900">{{ selected.note }}</dd></div>
+            </dl>
+            <div class="flex flex-wrap justify-end gap-2">
+              <FhButton variant="secondary" size="sm" @click="selected = null">Đóng</FhButton>
+              <template v-if="selected.status === 'scheduled'">
+                <FhButton variant="primary" size="sm" :disabled="busyId === selected.id" @click="attended(selected)">Đã gặp</FhButton>
+                <FhButton variant="secondary" size="sm" :disabled="busyId === selected.id" @click="missed(selected)">Thợ vắng</FhButton>
+              </template>
+              <FhButton v-else-if="selected.status === 'missed'" variant="secondary" size="sm" :disabled="busyId === selected.id" @click="reset(selected)">Cho phép đặt lại</FhButton>
+            </div>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>

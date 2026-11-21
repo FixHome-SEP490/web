@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 15:10 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-21 15:35 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
 - 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
 - 2026-11-21 14:46 (UTC+7) | ToanAltF4 | fix/sm-part-stats-2111 | SM yêu cầu linh kiện: ô đếm trạng thái đổi theo dòng sau Chuẩn bị mã kho (BUG DETECTOR 212)
 - 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-12 00:51 (UTC+7) | ToanAltF4 | perf/web-duplicate-reads | Tối ưu tốc độ: thanh bên của thợ đếm việc đang làm bằng 1 request nhỏ (statuses, pageSize=1) thay vì tải cả danh sách đơn; danh sách hội thoại và số thông báo chưa đọc gộp các lần gọi trùng khi mở trang (coalesce).
 - 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được
 - 2026-11-11 21:38 (UTC+7) | ToanAltF4 | fix/warehouse-status-label | Nhãn trạng thái kho đang hoạt động hiện Đang hoạt động thay vì Thành công (BUG 91); test chặn truyền chữ vào giữa thẻ FhStatusPill
-- 2026-11-11 21:20 (UTC+7) | ToanAltF4 | fix/warehouse-log-w2-kinds | Nhật ký kho đọc được dòng W2 (giữ/nhả/xuất/hoàn, người thao tác có thể trống); bản #234 hiện Chưa tải được vì hàm chuẩn hoá chỉ nhận nhập kho/điều chỉnh
