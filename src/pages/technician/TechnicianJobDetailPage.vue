@@ -3823,6 +3823,7 @@ const toggleMore = async () => {
                   <textarea
                     ref="acReasonInput"
                     v-model="acReason"
+                    maxlength="2000"
                     aria-required="true"
                     :aria-invalid="acReasonError ? 'true' : undefined"
                     :aria-describedby="acReasonError ? 'additional-cost-reason-error' : undefined"
@@ -3865,6 +3866,7 @@ const toggleMore = async () => {
                     <input
                       v-else
                       v-model="item.description"
+                      maxlength="2000"
                       type="text"
                       :placeholder="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"
                       :aria-label="item.type === 'LABOR' ? 'Mô tả công việc phát sinh' : 'Tên linh kiện'"

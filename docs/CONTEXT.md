@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 17:02 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-be-align-2111
+> Cập nhật lần cuối: 2026-11-21 17:26 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-form-dto-2111
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 17:26 (UTC+7) | ToanAltF4 | fix/web-form-dto-2111 | Kiểm form theo DTO: SĐT bỏ dấu cách, hồ sơ thợ (tên, SĐT, giới thiệu 2000, năm 0-80), bảo hành 0 ngày không mất, chat 2000 ký tự có báo lỗi, mô tả đặt lịch 5000, onboarding, chi phí phát sinh 2000, khu vực phục vụ, giới hạn cấu hình admin
 - 2026-11-21 17:02 (UTC+7) | ToanAltF4 | fix/web-be-align-2111 | Khớp BE: tải ảnh kỹ năng đọc data, nhả đơn gửi lý do + ảnh + xác nhận, tiếp tục sau gián đoạn tới 5 máy, ghi chú kiểm linh kiện hỏng >=10 ký tự, banner chờ bỏ yêu cầu hết hạn, giới hạn ô nhập theo DTO (BUG DETECTOR 214-219)
 - 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
-- 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
