@@ -600,7 +600,7 @@ const confirmReject = async () => {
       @cancel="showReject = false"
     >
       <label class="block text-sm font-medium text-ink-700" for="profile-reject-reason">Lý do từ chối</label>
-      <textarea id="profile-reject-reason" v-model="rejectReason" rows="3" class="mt-1.5" :class="consoleTextarea" placeholder="Ví dụ: bản công chứng bằng cấp không rõ"></textarea>
+      <textarea id="profile-reject-reason" v-model="rejectReason" maxlength="2000" rows="3" class="mt-1.5" :class="consoleTextarea" placeholder="Ví dụ: bản công chứng bằng cấp không rõ"></textarea>
       <Transition name="fh-fade-slide">
         <p v-if="rejectError" class="mt-1 text-sm text-danger-600" role="alert">{{ rejectError }}</p>
       </Transition>

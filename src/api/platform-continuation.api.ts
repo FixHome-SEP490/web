@@ -1,6 +1,7 @@
 import apiClient, { getHttpStatus } from './client';
 import { userFacingError } from '../utils/user-facing-error';
 import { uploadFailedRepairEvidence } from './failed-repair.api';
+import { VISIT_DEVICE_LIMIT } from './visit-groups.api';
 import type { TechnicianReportReasonClass, TechnicianReportReasonCode } from './support-cases.api';
 
 export type CannotContinueReasonCode = Exclude<TechnicianReportReasonCode, 'customer_absent' | 'customer_unreachable' | 'customer_cancelled'>;
@@ -67,7 +68,7 @@ function readResult(data: unknown, orderId: string, bookingId: string, groupId: 
       || source.incidentId !== data.incidentId || source.visitGroupId !== groupId) throw invalid();
     if (next.prefilledRebookAvailable) {
       // T2: only the exact draft/confirmation paths for this owned booking are accepted. No navigation uses them.
-      if (!Number.isInteger(next.sourceCount) || (next.sourceCount as number) < 1 || (next.sourceCount as number) > 3
+      if (!Number.isInteger(next.sourceCount) || (next.sourceCount as number) < 1 || (next.sourceCount as number) > VISIT_DEVICE_LIMIT
         || next.targetKind !== (next.sourceCount === 1 ? 'booking' : 'visit_group')
         || next.draftPath !== `/api/v1/bookings/${bookingId}/interruption-draft`
         || next.confirmationPath !== `/api/v1/bookings/${bookingId}/interruption-rebook`) throw invalid();

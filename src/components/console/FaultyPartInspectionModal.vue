@@ -45,6 +45,12 @@ async function submit() {
     error.value = `Kết luận do lắp đặt cần ghi chú (ít nhất ${MIN_NOTE} ký tự) và ít nhất một ảnh linh kiện hỏng.`;
     return;
   }
+  // The server takes an optional note only at 10 characters or more, whatever the result.
+  const typed = note.value.trim().length;
+  if (typed > 0 && typed < MIN_NOTE) {
+    error.value = `Ghi chú cần ít nhất ${MIN_NOTE} ký tự, hoặc để trống.`;
+    return;
+  }
   submitting.value = true;
   error.value = '';
   try {

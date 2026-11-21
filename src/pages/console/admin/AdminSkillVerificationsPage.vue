@@ -413,6 +413,7 @@ const formatDate = (value: string) => {
       <textarea
         id="skill-reject-reason"
         v-model="rejectReason"
+        maxlength="2000"
         rows="3"
         class="mt-1.5"
         :class="consoleTextarea"
