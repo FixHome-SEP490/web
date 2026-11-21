@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { tidyAddressText } from '../../utils/address-text';
 import { addressFieldError, normalizeAddressText } from '../../utils/address-input';
-import { containsUnsafeText } from '../../utils/input-validation';
+import { containsUnsafeText, validateFullName, validatePhoneNumber } from '../../utils/input-validation';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
@@ -446,18 +446,26 @@ const filteredServices = computed(() => {
 const handleSaveSkill = async (service: ServiceItem) => {
   const draft = skillDrafts.value[service.id];
   if (!draft) return;
+  const isFixedPrice = String(service.pricingMode).toLowerCase() === 'fixed_price';
+  // 0 is a real value; only an empty box means "not set" (UpdateSkillPricingDto).
+  const blank = (value: unknown) => value === '' || value === null || value === undefined;
+  const warranty = blank(draft.typicalWarrantyDays) ? null : Number(draft.typicalWarrantyDays);
+  const price = isFixedPrice || blank(draft.listedLaborPrice) ? null : Number(draft.listedLaborPrice);
+  if (warranty !== null && (!Number.isInteger(warranty) || warranty < 0 || warranty > 3650)) {
+    showFeedback('Bảo hành là số ngày nguyên từ 0 đến 3650.', 'error');
+    return;
+  }
+  if (price !== null && (!Number.isFinite(price) || price < 0 || price > 9_999_999_999.99)) {
+    showFeedback('Giá công không hợp lệ.', 'error');
+    return;
+  }
   savingSkillId.value = service.id;
   try {
-    const isFixedPrice = String(service.pricingMode).toLowerCase() === 'fixed_price';
     const offering = await technicianProfileApi.setSkillPricing(service.id, {
       isActive: draft.enabled,
       level: draft.level.trim() || 'INTERMEDIATE',
-      typicalWarrantyDays: draft.typicalWarrantyDays ? Number(draft.typicalWarrantyDays) : null,
-      listedLaborPrice: isFixedPrice
-        ? null
-        : draft.listedLaborPrice
-          ? Number(draft.listedLaborPrice)
-          : null,
+      typicalWarrantyDays: warranty,
+      listedLaborPrice: price,
     });
     myOfferings.value.set(service.id, offering);
     await loadProfile();
@@ -819,13 +827,23 @@ const locationChanged = computed(() => locationDraftKey() !== savedLocationDraft
 // ----------------- Actions -----------------
 const handleSaveProfileInfo = async () => {
   if (isSavingInfo.value) return;
+  // Same rules as the server (UpdateProfileDto, UpdateTechnicianProfileDto).
+  const infoError = validateFullName(fullName.value)
+    || (phoneNumber.value.trim() ? validatePhoneNumber(phoneNumber.value) : '')
+    || (bio.value.trim().length > 2000 ? 'Giới thiệu tối đa 2000 ký tự.' : '')
+    || (!Number.isInteger(yearsExperience.value) || yearsExperience.value < 0 || yearsExperience.value > 80
+      ? 'Số năm kinh nghiệm là số nguyên từ 0 đến 80.' : '');
+  if (infoError) {
+    showFeedback(infoError, 'error');
+    return;
+  }
   const submittedDraft = infoDraftKey();
   isSavingInfo.value = true;
   try {
     const [updatedUser, updatedProfile] = await Promise.all([
       profileApi.updateMe({
         fullName: fullName.value.trim(),
-        phoneNumber: phoneNumber.value.trim() || undefined,
+        phoneNumber: phoneNumber.value.replace(/\s+/g, '').replace(/^\+84/, '0') || undefined,
       }),
       technicianProfileApi.updateMyProfile({
         bio: bio.value.trim(),
@@ -1100,6 +1118,7 @@ const openAvatarModal = () => {
                 <textarea
                   id="tp-bio"
                   v-model="bio"
+                  maxlength="2000"
                   rows="4"
                   placeholder="VD: 8 năm sửa điều hoà, tủ lạnh, máy giặt. Đúng hẹn, báo đúng giá."
                   class="w-full p-3.5 bg-white border border-ink-200 rounded-xl text-[15px] leading-relaxed focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20"

@@ -2649,6 +2649,7 @@ async function createAndFindTech() {
             <textarea
               id="booking-description"
               v-model="description"
+              maxlength="5000"
               rows="3"
               class="w-full rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5 text-xs leading-relaxed text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-600 focus:outline-none sm:text-sm"
               placeholder="Ví dụ: máy lạnh chảy nước ở dàn lạnh, quạt kêu to và không mát…"
@@ -3198,6 +3199,7 @@ async function createAndFindTech() {
               <textarea
                 id="booking-description"
                 v-model="description"
+                maxlength="5000"
                 rows="3"
                 class="w-full rounded-xl border border-ink-300 bg-white p-3.5 text-base leading-relaxed text-ink-900 placeholder:text-ink-400 focus:border-brand-600 focus:outline-none sm:text-sm"
                 placeholder="Ví dụ: máy chảy nước ở dàn lạnh, lâu chưa vệ sinh"
