@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 18:35 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
+> Cập nhật lần cuối: 2026-11-21 23:46 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/booking-ai-visit-2111
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 23:46 (UTC+7) | ToanAltF4 | fix/booking-ai-visit-2111 | BUG 239-241: đặt nhiều máy từ chat AI có nút chính lưu máy này và sang máy kế tiếp, máy cuối lưu và tiếp tục mà không cần Thêm thiết bị; khách có 1 địa chỉ vẫn mở được Thêm địa chỉ mới ở bước 2
 - 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
 - 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết

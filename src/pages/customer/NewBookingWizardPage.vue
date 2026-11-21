@@ -308,14 +308,18 @@ const currentDeviceUnits = computed(() => {
 const visitDeviceCount = computed(() => extraDevices.value.length
   + (editingSavedDeviceKey.value ? 0 : currentDeviceUnits.value));
 const canAddDevice = computed(() => visitDeviceCount.value < visitDeviceLimit.value);
-// Keep the assistant's queue workflow unchanged; the manual last editor saves
-// and advances in one action, without ever opening another draft beyond the cap.
-const canSaveLastAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+// The last editor saves and advances in one action, without ever opening another
+// draft beyond the cap. BUG 239/240 (21/11/2026): the assistant's devices follow
+// the same rule once none is waiting, and while one is waiting the main action
+// saves this one and opens the next, so "Thêm thiết bị" is only for one more machine.
+const aiNextDeviceName = computed(() => (aiVisitWaiting.value ? aiVisitQueue.value[0]?.nameVi.toLowerCase() ?? '' : ''));
+const canSaveAndNextAi = computed(() => aiVisitWaiting.value && !!selectedServiceId.value && !editingSavedDeviceKey.value);
+const canSaveLastAndContinue = computed(() => !isAiFlow && !aiVisitWaiting.value && visitGrouping.value
   && extraDevices.value.length === visitDeviceLimit.value - 1 && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitWaiting.value && visitGrouping.value
   && extraDevices.value.length > 0 && extraDevices.value.length < visitDeviceLimit.value
   && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value)
+const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value || canSaveAndNextAi.value)
   ? isCatalogV2PreviewReady.value && !loading.value && !uploadingPhoto.value
   : !editingSavedDeviceKey.value && (
   selectedServiceId.value
@@ -2058,7 +2062,7 @@ function toggleSymptom(symptom: string) {
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
   if (step.value !== 1 || singleSwitchOpen.value || loading.value || uploadingPhoto.value) return;
-  if (editingSavedDeviceKey.value) {
+  if (editingSavedDeviceKey.value || canSaveAndNextAi.value) {
     addAnotherDevice();
     return;
   }
@@ -3132,7 +3136,7 @@ async function createAndFindTech() {
                     {{ editingSavedDeviceKey ? 'Đang sửa thiết bị đã lưu' : `Máy ${extraDevices.length + 1}: ${selectedService?.name || 'Thiết bị đang chọn'}` }}
                   </p>
                   <p class="text-xs text-ink-600">
-                    {{ editingSavedDeviceKey ? 'Cập nhật thông tin bên dưới rồi bấm lưu thay đổi.' : canSaveLastAndContinue ? `Đã đủ ${visitDeviceLimit} máy, lưu để tiếp tục sang bước 2.` : 'Bấm thêm vào lượt để lưu máy này và tiếp tục chọn máy khác.' }}
+                    {{ editingSavedDeviceKey ? 'Cập nhật thông tin bên dưới rồi bấm lưu thay đổi.' : canSaveAndNextAi ? `Lưu máy này để mô tả tiếp ${aiNextDeviceName}.` : canSaveLastAndContinue ? `Đã đủ ${visitDeviceLimit} máy, lưu để tiếp tục sang bước 2.` : 'Bấm thêm vào lượt để lưu máy này và tiếp tục chọn máy khác.' }}
                   </p>
                 </div>
               </div>
@@ -3146,7 +3150,7 @@ async function createAndFindTech() {
                   :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
                   @click="canSaveLastAndContinue ? goToStep2() : addAnotherDevice()"
                 >
-                  <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveLastAndContinue ? `Lưu máy ${visitDeviceLimit} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
+                  <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndNextAi ? `Lưu và mô tả ${aiNextDeviceName}` : canSaveLastAndContinue ? `Lưu máy ${visitDeviceLimit} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
                 </FhButton>
                 <FhButton
                   v-if="editingSavedDeviceKey"
@@ -3292,7 +3296,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === visitDeviceLimit ? `Tiếp tục với ${visitDeviceLimit} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : canSaveAndNextAi ? `Lưu máy ${extraDevices.length + 1}, sang ${aiNextDeviceName}` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === visitDeviceLimit ? `Tiếp tục với ${visitDeviceLimit} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
@@ -3327,8 +3331,8 @@ async function createAndFindTech() {
                   </p>
                   <p class="truncate text-sm text-ink-600">{{ selectedAddress ? addressLine(selectedAddress) : 'Vui lòng chọn địa chỉ' }}</p>
                 </div>
-                <button v-if="addresses.length > 1" type="button" class="min-h-11 px-1 text-sm font-semibold text-brand-700 hover:underline" :aria-expanded="isAddressDropdownOpen" @click="toggleAddressDropdown">
-                  {{ isAddressDropdownOpen ? 'Đóng' : 'Đổi' }}
+                <button type="button" class="min-h-11 px-1 text-sm font-semibold text-brand-700 hover:underline" data-testid="booking-address-toggle" :aria-expanded="isAddressDropdownOpen" @click="toggleAddressDropdown">
+                  {{ isAddressDropdownOpen ? 'Đóng' : addresses.length > 1 ? 'Đổi' : 'Đổi hoặc thêm' }}
                 </button>
               </div>
               <div v-if="isAddressDropdownOpen" class="space-y-1.5 rounded-xl border border-ink-200 p-2" role="listbox" aria-label="Sổ địa chỉ">
