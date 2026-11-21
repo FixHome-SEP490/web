@@ -68,12 +68,16 @@ describe('compact booking session picker', () => {
     expect(calendar.attributes('role')).toBe('dialog');
 
     const monthLabel = (date: string) => `Tháng ${date.slice(5, 7)}, ${date.slice(0, 4)}`;
-    while (!calendar.text().includes(monthLabel(farDate))) {
-      await calendar.get('button[title="Tháng sau"]').trigger('click');
-    }
-
+    // The two dates can fall in different months (22/11: 28/11 and 01/12), so open each one's month.
+    const showMonth = async (date: string) => {
+      while (!calendar.text().includes(monthLabel(date))) {
+        await calendar.get('button[title="Tháng sau"]').trigger('click');
+      }
+    };
+    await showMonth(unavailableDate);
     const unavailableDay = calendar.get(`[data-testid="fh-date-${unavailableDate}"]`);
     expect(unavailableDay.attributes('disabled')).toBeDefined();
+    await showMonth(farDate);
     const farDay = calendar.get(`[data-testid="fh-date-${farDate}"]`);
     expect(farDay.attributes('disabled')).toBeUndefined();
     await farDay.trigger('click');
