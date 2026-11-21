@@ -3681,7 +3681,7 @@ async function createAndFindTech() {
           </div>
           <div v-if="selectedServiceId && !extraDevices.length && bookingDescription" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Tình trạng</span>
-            <p class="min-w-0 flex-1 text-ink-900 text-pretty" data-testid="confirm-description">{{ bookingDescription }}</p>
+            <p class="min-w-0 flex-1 whitespace-pre-line text-ink-900 text-pretty wrap-anywhere" data-testid="confirm-description">{{ bookingDescription }}</p>
             <button v-if="!isAiFlow" type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 1">Sửa</button>
           </div>
           <div v-if="selectedServiceId && !extraDevices.length && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">

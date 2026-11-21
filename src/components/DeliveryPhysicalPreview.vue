@@ -26,6 +26,10 @@ const steps = ['Giữ linh kiện tại kho', 'Xuất linh kiện cho đơn vị
 // W-16: on the paid path the server reports the recorded step; each step up to it is done.
 const STEP_REACHED: Record<string, number> = { RESERVED: 1, ISSUED_TO_COURIER: 2, DISPATCH_RECORDED: 3, TECHNICIAN_RECEIVED: 4 };
 const progress = computed(() => preview.value?.progress ?? null);
+// A delivery outside the new paid-delivery flow follows the usual part status
+// (ready, delivering, received); "not eligible" here only confused people.
+const legacyRequest = computed(() => state.value === 'ready' && !progress.value
+  && preview.value?.eligibility !== 'PENDING_ASSISTANCE' && preview.value?.reason === 'LEGACY_OR_NOT_ENROLLED');
 const reached = computed(() => STEP_REACHED[progress.value?.status ?? ''] ?? 0);
 const money = (value: number | null) => (value === null ? 'Chưa xác định' : `${value.toLocaleString('vi-VN')} ₫`);
 async function load() {
@@ -51,7 +55,7 @@ onUnmounted(() => { generation++; });
 </script>
 
 <template>
-  <section v-if="visible" :aria-labelledby="titleId" :aria-busy="state === 'loading'"
+  <section v-if="visible && !legacyRequest" :aria-labelledby="titleId" :aria-busy="state === 'loading'"
     class="min-w-0 space-y-3 rounded-xl border border-ink-200 bg-ink-25 p-4 text-sm text-ink-700"
     data-testid="delivery-physical-preview">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">

@@ -27,7 +27,7 @@ import ShippingShareBreakdown from './ShippingShareBreakdown.vue';
 import DeliveryPhysicalPreview from './DeliveryPhysicalPreview.vue';
 import DeliveryOperationsPanel from './DeliveryOperationsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../api/w3-delivery-physical.api';
-import { userFacingError } from '../utils/user-facing-error';
+import { toUserFacingMessage, userFacingError } from '../utils/user-facing-error';
 import {
   partRequestsApi,
   createIdempotencyKey,
@@ -110,6 +110,12 @@ const selectedItems = ref<SelectedPartItem[]>([]);
 const showSearchDropdown = ref(false);
 const selectedPart = ref<FixHomePart | null>(null);
 const selectedQuantity = ref(1);
+/** Backend accepts whole quantities from 1 to MAX_PART_REQUEST_QTY per line. */
+const MAX_PART_REQUEST_QTY = 100;
+const clampPartQty = (value: unknown) => {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) ? Math.min(MAX_PART_REQUEST_QTY, Math.max(1, n)) : 1;
+};
 const itemNote = ref('');
 const partialUsageDraft = ref<Record<string, number>>({});
 const partialUsageEditing = ref<Record<string, boolean>>({});
@@ -172,7 +178,7 @@ function custodyCommandKey(kind: string, itemId: string, version: number, quanti
 }
 const allStockItems = computed(() => partRequests.value.filter(row => row.status === 'received' || row.status === 'completed').flatMap(row => row.items));
 function usageLimit(item: PartRequest['items'][number]) {
-  if (item.partSource !== 'fixhome') return item.quantity;
+  if (item.partSource !== 'fixhome' || warrantyItemIds.value.has(item.id)) return item.quantity;
   if (props.approvedPartQuantities === undefined) {
     const record = returnFor(item.id);
     return record ? Math.max(0, record.issuedQty - Math.max(record.declaredQty, record.managerAcceptedQty)) : item.quantity;
@@ -180,6 +186,7 @@ function usageLimit(item: PartRequest['items'][number]) {
   return technicianUsageLimit(item, props.approvedPartQuantities, allStockItems.value, returnRecords.value);
 }
 function unapprovedItem(item: PartRequest['items'][number]) {
+  if (warrantyItemIds.value.has(item.id)) return false;
   return !!props.approvedPartQuantities && !!item.partCatalogId && (props.approvedPartQuantities[item.partCatalogId] ?? 0) === 0;
 }
 const bulkReturnCandidates = computed(() => partRequests.value.flatMap(request => request.items.flatMap(item => {
@@ -317,6 +324,18 @@ const declareValid = computed(() => {
 
 const isAccepted = computed(() => props.orderStatus?.toUpperCase() === 'ACCEPTED');
 const isUnderRepair = computed(() => props.orderStatus?.toUpperCase() === 'UNDER_REPAIR');
+/** Items of a warranty request: their usage is recorded once, after the order completed. */
+const warrantyItemIds = computed(() => new Set(partRequests.value
+  .filter(request => request.requestType === 'warranty')
+  .flatMap(request => request.items.map(item => item.id))));
+/** Whether the technician may record Used / Returned for this line now. */
+function canRecordUsage(request: PartRequest | undefined, item: PartRequest['items'][number] | undefined) {
+  if (!request || !item || request.status !== 'received') return false;
+  if (request.requestType === 'warranty') return item.usageStatus === 'pending';
+  return isUnderRepair.value && !props.usageFrozen;
+}
+/** The reason a person wrote; system notes in English stay hidden. */
+const requestReasonText = (reason?: string | null) => toUserFacingMessage(reason ?? '', '');
 const hasActivePreRepair = computed(() =>
   partRequests.value.some(
     (pr) => pr.requestType === 'pre_repair' && pr.status !== 'cancelled',
@@ -398,7 +417,7 @@ const selectedTotalPrice = computed(() =>
 
 const activePartEstimatedPrice = computed(() => {
   if (!selectedPart.value) return 0;
-  return selectedPart.value.sellingPrice * Math.max(1, selectedQuantity.value);
+  return selectedPart.value.sellingPrice * clampPartQty(selectedQuantity.value);
 });
 
 // Catalog descriptions arrive as pipe-separated field snapshots, not prose.
@@ -559,7 +578,7 @@ const addItemToForm = () => {
 
   const existing = selectedItems.value.find((i) => i.partCatalogId === part.id);
   if (existing) {
-    existing.quantity += Math.max(1, selectedQuantity.value);
+    existing.quantity = clampPartQty(existing.quantity + clampPartQty(selectedQuantity.value));
     if (itemNote.value.trim() && !existing.note) {
       existing.note = itemNote.value.trim();
     }
@@ -571,11 +590,20 @@ const addItemToForm = () => {
       price: part.sellingPrice,
       warrantyDays: part.warrantyDays,
       warrantyPolicy: part.warrantyPolicy,
-      quantity: Math.max(1, selectedQuantity.value),
+      quantity: clampPartQty(selectedQuantity.value),
       note: itemNote.value.trim(),
     });
   }
 
+  clearSelectedPart();
+};
+
+/** Closing the form drops the unsent draft so reopening starts clean. */
+const cancelCreateForm = () => {
+  showCreateForm.value = false;
+  selectedItems.value = [];
+  requestReason.value = '';
+  actionError.value = null;
   clearSelectedPart();
 };
 
@@ -585,7 +613,7 @@ const removeItemFromForm = (index: number) => {
 
 const increaseQuantity = (index: number) => {
   if (selectedItems.value[index]) {
-    selectedItems.value[index].quantity += 1;
+    selectedItems.value[index].quantity = clampPartQty(selectedItems.value[index].quantity + 1);
   }
 };
 
@@ -763,7 +791,7 @@ const handleUpdateUsage = async (
 ) => {
   const request = partRequests.value.find(row => row.id === requestId);
   const item = request?.items.find(row => row.id === itemId);
-  if (!item || !isUnderRepair.value || props.usageFrozen || request?.status !== 'received' || props.disabled || actionLoading.value || (status === 'used' && usageLimit(item) < item.quantity)) return;
+  if (!item || !canRecordUsage(request, item) || props.disabled || actionLoading.value || (status === 'used' && usageLimit(item) < item.quantity)) return;
   try {
     actionLoading.value = true;
     actionError.value = null;
@@ -1235,13 +1263,17 @@ const getStatusBadgeClass = (status: string) => {
                       v-model.number="selectedQuantity"
                       type="number"
                       min="1"
-                      max="50"
+                      :max="MAX_PART_REQUEST_QTY"
+                      step="1"
+                      data-testid="part-request-qty"
+                      @change="selectedQuantity = clampPartQty(selectedQuantity)"
                       class="w-10 h-7 text-xs font-bold font-num text-center bg-transparent border-0 outline-hidden"
                     />
                     <button
                       type="button"
                       class="h-7 w-7 rounded bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold flex items-center justify-center transition-colors"
-                      @click="selectedQuantity += 1"
+                      :disabled="selectedQuantity >= MAX_PART_REQUEST_QTY"
+                      @click="selectedQuantity = clampPartQty(selectedQuantity + 1)"
                     >
                       <Plus :size="13" />
                     </button>
@@ -1309,7 +1341,7 @@ const getStatusBadgeClass = (status: string) => {
 
           <!-- Bottom Action Buttons -->
           <div class="flex items-center justify-end gap-2 pt-2">
-            <FhButton variant="ghost" size="sm" @click="showCreateForm = false">Hủy bỏ</FhButton>
+            <FhButton variant="ghost" size="sm" data-testid="cancel-part-request-form" @click="cancelCreateForm">Hủy bỏ</FhButton>
             <FhButton
               variant="primary"
               size="sm"
@@ -1361,7 +1393,7 @@ const getStatusBadgeClass = (status: string) => {
                 v-else
                 class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
               >
-                {{ pr.requestType === 'quotation' ? 'Theo báo giá đã duyệt' : 'Phát sinh khi sửa' }}
+                {{ pr.requestType === 'quotation' ? 'Theo báo giá đã duyệt' : pr.requestType === 'warranty' ? 'Bảo hành' : 'Phát sinh khi sửa' }}
               </span>
 
               <span class="text-ink-500 text-[11px] flex items-center gap-1">
@@ -1378,8 +1410,8 @@ const getStatusBadgeClass = (status: string) => {
           </div>
           <div v-show="isRequestExpanded(pr.id, group.key)" class="space-y-3">
           <!-- Reason & Notes -->
-          <p v-if="pr.reason" class="text-xs text-ink-700">
-            <strong>Lý do:</strong> {{ pr.reason }}
+          <p v-if="requestReasonText(pr.reason)" class="text-xs text-ink-700" data-testid="part-request-reason">
+            <strong>Lý do:</strong> {{ requestReasonText(pr.reason) }}
           </p>
 
           <section v-if="pr.fulfillmentMethod === 'pickup' && (warehouseAllocationFor(pr)?.mode === 'warehouse' || warehouseAllocationLoading[pr.id] || warehouseAllocationErrors[pr.id])" class="space-y-1 rounded-lg border border-ink-200 bg-ink-25 p-3 text-xs" :data-testid="`tech-warehouse-allocation-${pr.id}`">
@@ -1465,6 +1497,8 @@ const getStatusBadgeClass = (status: string) => {
               <input
                 v-model="qrTokenInput"
                 type="text"
+                maxlength="128"
+                data-testid="handover-code-input"
                 :placeholder="needsWarehouseReceipt(pr) ? 'Nhập mã nhận hàng riêng do quản lý cung cấp' : 'Nhập mã bàn giao'"
                 class="flex-1 min-w-[200px] text-xs rounded border border-brand-300 p-2 bg-white"
               />
@@ -1541,7 +1575,7 @@ const getStatusBadgeClass = (status: string) => {
 
                   <p v-if="unapprovedItem(item)" class="text-sm text-warning-800">Chưa được khách duyệt linh kiện này. Thực dùng tối đa 0; báo giá bổ sung để xin duyệt hoặc khai trả toàn bộ.</p>
                   <div class="part-item-actions flex flex-wrap gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
-                    <template v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && !record">
+                    <template v-if="canRecordUsage(pr, item) && !record">
                       <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                         :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
                         :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
