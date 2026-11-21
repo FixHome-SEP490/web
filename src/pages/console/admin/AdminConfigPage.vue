@@ -26,8 +26,26 @@ interface ConfigDefinition {
   consumerEvidence?: string | null;
   min?: number;
   max?: number;
+  maxLength?: number;
   enumValues?: string[];
 }
+
+// Ranges the server enforces (admin-config.service KEY_VALIDATION) for settings this page
+// lists without a definition of its own, so a bad value is caught here in Vietnamese.
+const SERVER_LIMITS: Record<string, { min?: number; max?: number; maxLength?: number }> = {
+  'w3.shipping.max_new_fee_vnd': { min: 0, max: 100_000_000 },
+  'wallet.minimum_balance': { min: 0, max: 100_000_000 },
+  'warranty.tech_response_hours': { min: 1, max: 720 },
+  'warranty.inspection_hours': { min: 1, max: 720 },
+  'warranty.customer_response_hours': { min: 1, max: 720 },
+  'warranty.faulty_return_days': { min: 1, max: 60 },
+  'warranty.faulty_return_reminder_hours': { min: 1, max: 240 },
+  'reputation.warranty_violation_points': { min: 1, max: 100 },
+  'office.support_phone': { maxLength: 32 },
+  'office.max_missed_visits': { min: 1, max: 5 },
+  'office.visit_days_ahead': { min: 1, max: 30 },
+  'office.min_notice_hours': { min: 0, max: 72 },
+};
 
 interface ConfigRow extends ConfigDefinition {
   value: string | null;
@@ -142,6 +160,7 @@ const configRows = computed<ConfigRow[]>(() => {
       consumerEvidence: config.consumerEvidence,
       updatedAt: config.updatedAt,
       available: true,
+      ...SERVER_LIMITS[config.key],
     }));
   // W-2: "ban kinh" finds "Bán kính".
   const query = foldText(searchQuery.value.trim());
@@ -202,6 +221,7 @@ const validateValue = (config: ConfigRow, value: string): string => {
   if (config.valueType === 'enum' && config.enumValues && !config.enumValues.includes(trimmed)) {
     return `Chọn một trong: ${config.enumValues.map(valueLabel).join(', ')}.`;
   }
+  if (config.maxLength !== undefined && trimmed.length > config.maxLength) return `Tối đa ${config.maxLength} ký tự.`;
   if (config.valueType === 'int' || config.valueType === 'bigint') {
     const numericValue = Number(trimmed);
     if (config.min !== undefined && numericValue < config.min) return `Giá trị tối thiểu là ${config.min}.`;

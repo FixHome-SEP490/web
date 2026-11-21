@@ -34,6 +34,10 @@ import {
 import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { ordersApi, type OrderWarrantyGroup, type ServiceOrderItem } from '../../api/orders.api';
+import type { BookingDraft } from '../../api/booking-drafts.api';
+import BookingDraftBanner from '../../components/booking/BookingDraftBanner.vue';
+import { discardSavedBookingDraft, fetchCurrentBookingDraft } from '../../utils/booking-draft-summary';
+import { isOrderWorkStopped } from '../../utils/order-work-stopped';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 import {
@@ -66,7 +70,32 @@ const chatStore = useChatStore();
 const searchQuery = ref('');
 const selectedAddress = ref('');
 const claimingVoucherCode = ref<string | null>(null);
+const savedBookingDraft = ref<BookingDraft | null>(null);
+const discardingSavedDraft = ref(false);
 const isSignedIn = computed(() => authStore.isAuthenticated);
+
+async function refreshSavedDraft() {
+  savedBookingDraft.value = isSignedIn.value ? await fetchCurrentBookingDraft() : null;
+}
+
+async function discardSavedDraft() {
+  if (!savedBookingDraft.value || discardingSavedDraft.value) return;
+  discardingSavedDraft.value = true;
+  try {
+    if (await discardSavedBookingDraft()) {
+      savedBookingDraft.value = null;
+      toast.success('Đã huỷ bản nháp.');
+    }
+  } catch {
+    toast.error('Chưa huỷ được bản nháp. Vui lòng thử lại.');
+  } finally {
+    discardingSavedDraft.value = false;
+  }
+}
+
+watch(isSignedIn, () => {
+  void refreshSavedDraft();
+}, { immediate: true });
 
 // Each block is cached: a return visit shows it at once and reads it again in the background.
 const ordersQuery = useCachedQuery(sharedQueries.customerRecentOrders);
@@ -285,8 +314,8 @@ async function handleClaimVoucher(code: string) {
 
 const IN_PROGRESS = ['EN_ROUTE', 'UNDER_REPAIR', 'ACCEPTED', 'IN_PROGRESS'];
 
-// Active in-progress order (if any)
-const activeOrder = computed(() => orders.value.find((o) => IN_PROGRESS.includes(o.status)));
+// Active in-progress order (if any), excluding orders whose work has stopped.
+const activeOrder = computed(() => orders.value.find((o) => !isOrderWorkStopped(o) && IN_PROGRESS.includes(o.status)));
 
 const activeOrderStepIndex = computed(() => {
   const status = String(activeOrder.value?.status ?? '').toUpperCase();
@@ -304,11 +333,12 @@ const recentOrders = computed(() => orders.value.slice(0, 3));
 // and one check-in covers the visit while each order stays EN_ROUTE until its repair starts.
 const orderLink = (order: ServiceOrderItem) => (order.visitGroupId ? `/app/visits/${order.visitGroupId}` : `/app/orders/${order.id}`);
 const arrivedWaiting = (order: ServiceOrderItem) => String(order.status).toUpperCase() === 'EN_ROUTE' && !!order.arrivalVerified;
-const orderPillLabel = (order: ServiceOrderItem) => (arrivedWaiting(order) ? VISIT_DEVICE_ARRIVED_LABEL : '');
+const orderPillLabel = (order: ServiceOrderItem) =>
+  isOrderWorkStopped(order) ? 'Đã dừng công việc' : arrivedWaiting(order) ? VISIT_DEVICE_ARRIVED_LABEL : '';
 
 const statTiles = computed(() => [
   { label: 'Tổng đơn', value: orders.value.length },
-  { label: 'Đang xử lý', value: orders.value.filter((o) => IN_PROGRESS.includes(o.status)).length },
+  { label: 'Đang xử lý', value: orders.value.filter((o) => !isOrderWorkStopped(o) && IN_PROGRESS.includes(o.status)).length },
   { label: 'Hoàn thành', value: orders.value.filter((o) => o.status === 'COMPLETED').length },
 ]);
 
@@ -752,6 +782,15 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </section>
     </div>
 
+    <BookingDraftBanner
+      v-if="savedBookingDraft"
+      class="rounded-[var(--radius-lg)]"
+      :draft="savedBookingDraft"
+      :loading="discardingSavedDraft"
+      @resume="router.push({ path: '/app/bookings/new', query: { resumeDraft: '1' } })"
+      @discard="discardSavedDraft"
+    />
+
     <!-- Recent orders back in its original position directly below Hero -->
     <section
       v-if="loading"
@@ -843,7 +882,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                   >
                     {{ order.serviceName }}
                   </span>
-                  <FhStatusPill :status="order.status" :label="orderPillLabel(order)" class="shrink-0" />
+                  <FhStatusPill :status="isOrderWorkStopped(order) ? 'CANCELLED' : order.status" :label="orderPillLabel(order)" class="shrink-0" />
                 </div>
 
                 <span class="block text-xs text-ink-500 font-num whitespace-nowrap truncate">

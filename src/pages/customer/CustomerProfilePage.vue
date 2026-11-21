@@ -345,7 +345,8 @@ const handleSaveProfile = async () => {
     const updated = await profileApi.updateMe({
       // A verified name is never sent: it can no longer change.
       fullName: locked ? undefined : fullName.value.trim(),
-      phoneNumber: phoneNumber.value.trim() || undefined,
+      // The server only accepts the bare digits (it does not strip inner spaces).
+      phoneNumber: phoneNumber.value.replace(/\s+/g, '').replace(/^\+84/, '0') || undefined,
     });
     if (authStore.user && authStore.token) {
       authStore.setAuth(authStore.token, {

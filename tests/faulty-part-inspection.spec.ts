@@ -5,7 +5,7 @@ enableAutoUnmount(afterEach);
 const { api, auth } = vi.hoisted(() => ({
   api: {
     getAll: vi.fn(), getWarehouseTasks: vi.fn(), getWarehouseAllocation: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getReturnsByOrderId: vi.fn(),
-    markReady: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(), getById: vi.fn(),
+    markReady: vi.fn(), markDelivering: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(), getById: vi.fn(),
   },
   auth: { hasRole: vi.fn(() => true), user: { id: 'sm-1' }, userRole: 'SERVICE_MANAGER' },
 }));
@@ -74,43 +74,41 @@ describe('faulty part inspection on the manager page', () => {
       warranty({ id: 'a', faultyInspectionResult: 'manufacturer' }),
       { ...warranty({ id: 'b' }), requestType: 'additional' },
     ]);
-    expect(wrapper.findAll('button').filter((b) => b.text() === 'Chuẩn bị xong')).toHaveLength(2);
+    // BUG DETECTOR 258: actions sit in the pane of the chosen request; each request offers READY.
+    for (const id of ['a', 'b']) {
+      await wrapper.get(`[data-testid="part-request-detail-${id}"]`).trigger('click');
+      expect(wrapper.get(`[data-testid="part-request-pane-${id}"]`).findAll('button').filter((b) => b.text() === 'Chuẩn bị xong')).toHaveLength(1);
+    }
     expect(button(wrapper, 'Kiểm tra linh kiện hỏng')).toBeUndefined();
   });
 
-  it('uses the assigned warehouse queue and hands over in one step and shows the technician receipt', async () => {
+  it('uses the assigned warehouse queue and keeps the W2 QR, handover, and technician receipt on the main row', async () => {
     const request = warranty({ id: 'pr-w2', requestType: 'pre_repair' });
     const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'reserved', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1', estimatedStraightLineKm: 1.4, distanceReference: 'booking_snapshot', reviewRequired: true };
     api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
     api.getWarehouseAllocation.mockResolvedValue(allocation);
     api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...allocation, status: 'ready' }, qrToken: 'pickup-token' });
     api.confirmWarehouseHandover.mockResolvedValue({ allocation: { ...allocation, status: 'handed_over' }, qrToken: 'receipt-token' });
-    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
-    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
 
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
 
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
     expect(api.getAll).not.toHaveBeenCalled();
-    expect(wrapper.get('table').text()).toContain('Đã giao cho thợ');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Chuẩn bị mã kho');
     expect(wrapper.text()).toContain('Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~1.4 km; chưa xác minh đường đi/ETA');
     expect(wrapper.findAll('button').some((button) => button.text() === 'Chuẩn bị xong')).toBe(false);
 
-    await wrapper.get('table').findAll('button').find((button) => button.text() === 'Đã giao cho thợ')!.trigger('click');
-    await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === 'Chuẩn bị mã kho')!.trigger('click');
     await flushPromises();
     expect(api.prepareWarehouseQr).toHaveBeenCalledWith(request.id, expect.objectContaining({ idempotencyKey: expect.any(String) }));
-    expect(api.confirmWarehouseHandover).toHaveBeenCalledWith(request.id, expect.objectContaining({ qrToken: 'pickup-token' }));
+    const inlineHandover = wrapper.get('[data-testid^="part-request-pane-"]').findAll('button').find((button) => button.text() === 'Xác nhận đã giao trực tiếp');
+    expect(inlineHandover).toBeTruthy();
     expect(api.markReady).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Mã nhận hàng cho kỹ thuật viên');
-    expect(wrapper.text()).toContain('receipt-token');
-    expect(wrapper.text()).not.toContain('Mã lấy hàng một lần');
-    draw.mockRestore();
+    expect(wrapper.text()).toContain('Mã lấy hàng một lần · hết hạn trong 15 phút');
   });
 
-  it('updates the status column after the one-step handover, without a reload (BUG DETECTOR 208)', async () => {
+  it('updates the status column right after preparing the code and after the handover, without a reload (BUG DETECTOR 208)', async () => {
     const request = warranty({ id: 'pr-live', requestType: 'pre_repair' });
     const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'reserved', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
     api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
@@ -123,27 +121,32 @@ describe('faulty part inspection on the manager page', () => {
 
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
     await flushPromises();
-    expect(wrapper.get('table').text()).toContain('Chờ chuẩn bị');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Chờ chuẩn bị');
 
-    await wrapper.get('table').findAll('button').find((b) => b.text() === 'Đã giao cho thợ')!.trigger('click');
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
+    await flushPromises();
+    expect(api.getById).toHaveBeenCalledWith(request.id);
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Sẵn sàng giao');
+    expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+
+    await wrapper.get('[data-testid^="part-request-pane-"]').findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
     await flushPromises();
     await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
     await flushPromises();
     expect(api.confirmWarehouseHandover).toHaveBeenCalledOnce();
     expect(api.getById).toHaveBeenCalledTimes(2);
-    expect(wrapper.get('table').text()).toContain('Đã nhận / Đang dùng');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Đã nhận / Đang dùng');
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
     draw.mockRestore();
   });
 
-  it('moves the summary cards with the row after the handover, without a reload (BUG DETECTOR 212)', async () => {
+  it('moves the summary cards with the row after preparing the code, without a reload (BUG DETECTOR 212)', async () => {
     const request = warranty({ id: 'pr-count', requestType: 'pre_repair' });
     const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'reserved', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
     api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 9, statusCounts: { requested: 9, ready: 0 } });
     api.getWarehouseAllocation.mockResolvedValue(allocation);
     api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...allocation, status: 'ready' }, qrToken: 'pickup-token' });
-    api.confirmWarehouseHandover.mockResolvedValue({ allocation: { ...allocation, status: 'handed_over' }, qrToken: 'receipt-token' });
-    api.getById.mockResolvedValueOnce({ ...request, status: 'ready' }).mockResolvedValueOnce({ ...request, status: 'received' });
+    api.getById.mockResolvedValueOnce({ ...request, status: 'ready' });
     const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
     const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
 
@@ -151,13 +154,32 @@ describe('faulty part inspection on the manager page', () => {
     await flushPromises();
     const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
     expect(card('Chờ chuẩn bị')).toContain('9');
-    await wrapper.get('table').findAll('button').find((b) => b.text() === 'Đã giao cho thợ')!.trigger('click');
-    await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
     await flushPromises();
     expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị8');
-    expect(card('Sẵn sàng')).toBe('Sẵn sàng0');
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng1');
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+    draw.mockRestore();
+  });
+
+  it('moves the summary cards when a delivery request is marked ready and then delivering', async () => {
+    const request = { ...warranty({ id: 'pr-ship', requestType: 'pre_repair' }), fulfillmentMethod: 'delivery', status: 'requested' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 3, statusCounts: { requested: 3, ready: 0, delivering: 0 } });
+    api.markReady.mockResolvedValue({ ...request, status: 'ready', qrToken: 'FH-PR-x' });
+    api.markDelivering.mockResolvedValue({ ...request, status: 'delivering', qrToken: 'FH-PR-x' });
+    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
+    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị xong')!.trigger('click');
+    await flushPromises();
+    expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị2');
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng1');
+    await wrapper.findAll('button').find((b) => b.text() === 'Giao hàng')!.trigger('click');
+    await flushPromises();
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng0');
+    expect(card('Đang giao')).toBe('Đang giao1');
     draw.mockRestore();
   });
 
@@ -167,20 +189,16 @@ describe('faulty part inspection on the manager page', () => {
     api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
     api.getWarehouseAllocation.mockResolvedValue(allocation);
     api.prepareWarehouseQr.mockResolvedValue({ allocation, qrToken: 'receipt-again' });
-    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
-    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
 
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
-    await wrapper.findAll('button').find((button) => button.text() === 'Mã nhận hàng')!.trigger('click');
+    await wrapper.findAll('button').find((button) => button.text() === 'Cấp lại mã nhận')!.trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Mã nhận hàng cho kỹ thuật viên');
-    expect(wrapper.text()).toContain('receipt-again');
+    expect(wrapper.text()).toContain('Đưa mã nhận hàng riêng này cho kỹ thuật viên');
     expect(wrapper.text()).not.toContain('Mã lấy hàng một lần');
-    expect(wrapper.findAll('button').some((button) => button.text() === 'Đã giao cho thợ')).toBe(false);
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Xác nhận đã giao trực tiếp')).toBe(false);
     expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
-    draw.mockRestore();
   });
 
   it.each(['cancelled', 'completed'])('offers no warehouse code on a %s request, so the manager cannot hit the server refusal', async (status) => {
@@ -191,7 +209,7 @@ describe('faulty part inspection on the manager page', () => {
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.findAll('button').some((button) => ['Mã nhận hàng', 'Đã giao cho thợ'].includes(button.text()))).toBe(false);
+    expect(wrapper.findAll('button').some((button) => ['Cấp lại mã nhận', 'Chuẩn bị mã kho'].includes(button.text()))).toBe(false);
     expect(api.prepareWarehouseQr).not.toHaveBeenCalled();
   });
 
@@ -277,7 +295,9 @@ describe('warehouse handover on the manager page (BUG DETECTOR 83, 84, 85, 89, 9
     api.prepareWarehouseQr.mockResolvedValue({ allocation: ready, qrToken: 'pickup-1' });
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
     await flushPromises();
-    await wrapper.findAll('button').find((b) => b.text() === 'Đã giao cho thợ')!.trigger('click');
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
     await flushPromises();
     return wrapper;
   };
@@ -326,7 +346,7 @@ describe('warehouse handover on the manager page (BUG DETECTOR 83, 84, 85, 89, 9
     await confirm(wrapper);
     expect(api.getWarehouseAllocation).toHaveBeenCalledWith('pr-h');
     expect(text(wrapper)).toContain('Kho đã ghi nhận bàn giao trước đó');
-    expect(wrapper.findAll('button').some((b) => b.text() === 'Đã giao cho thợ')).toBe(false);
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Xác nhận đã giao trực tiếp')).toBe(false);
   });
 
   it('after a refusal with nothing handed over, says the stock was not issued', async () => {

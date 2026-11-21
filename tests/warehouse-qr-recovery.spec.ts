@@ -51,73 +51,63 @@ beforeEach(() => {
   api.getReturnsByOrderId.mockResolvedValue([]);
 });
 
-const handOver = async (wrapper: ReturnType<typeof mount>) => {
-  await click(wrapper, 'Đã giao cho thợ');
-  await click(wrapper, 'Đã giao thực tế');
-};
-const handed = { ...reserved, status: 'handed_over', tokenVersion: 2 };
-
-describe('one-step handover follows the server answer', () => {
-  it('keeps the receipt code on screen with a copy button when the QR image cannot be drawn', async () => {
+describe('warehouse code preparation follows the server answer', () => {
+  it('keeps an issued code on screen with a copy button when the QR image cannot be drawn', async () => {
     api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...reserved, status: 'ready', tokenVersion: 1 }, qrToken: 'pickup-code-1' });
-    api.confirmWarehouseHandover.mockResolvedValue({ allocation: handed, qrToken: 'receipt-code-1' });
     qr.toDataURL.mockRejectedValue(new Error('canvas unavailable'));
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
-    await handOver(wrapper);
+    await click(wrapper, 'Chuẩn bị mã kho');
 
     expect(api.prepareWarehouseQr).toHaveBeenCalledTimes(1);
-    expect(api.confirmWarehouseHandover).toHaveBeenCalledWith('pr-qr', expect.objectContaining({ qrToken: 'pickup-code-1' }));
-    expect(text(wrapper)).toContain('receipt-code-1');
-    expect(text(wrapper)).toContain('Mã nhận hàng cho kỹ thuật viên');
-    expect(text(wrapper)).not.toContain('pickup-code-1');
-    expect(wrapper.find('img[alt="QR nhận hàng cho kỹ thuật viên"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="copy-receipt-code"]').exists()).toBe(true);
+    expect(text(wrapper)).toContain('pickup-code-1');
+    expect(text(wrapper)).toContain('Mã lấy hàng một lần');
+    expect(text(wrapper)).not.toContain('Chưa tạo được mã QR');
+    expect(wrapper.find('img[alt="QR lấy hàng dùng một lần"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="copy-pickup-code"]').exists()).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Xác nhận đã giao trực tiếp')).toBe(true);
   });
 
-  it('draws the receipt QR image when it can', async () => {
+  it('draws the QR image when it can', async () => {
     api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...reserved, status: 'ready', tokenVersion: 1 }, qrToken: 'pickup-code-2' });
-    api.confirmWarehouseHandover.mockResolvedValue({ allocation: handed, qrToken: 'receipt-code-2' });
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
-    await handOver(wrapper);
-    expect(wrapper.get('img[alt="QR nhận hàng cho kỹ thuật viên"]').attributes('src')).toBe('data:image/png;base64,AAAA');
+    await click(wrapper, 'Chuẩn bị mã kho');
+    expect(wrapper.get('img[alt="QR lấy hàng dùng một lần"]').attributes('src')).toBe('data:image/png;base64,AAAA');
   });
 
-  it('reads the state back after a lost answer, does not send the command again and does not hand over', async () => {
+  it('reads the state back after a lost answer and does not send the command again', async () => {
     api.prepareWarehouseQr.mockRejectedValue(Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' }));
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
     api.getWarehouseAllocation.mockClear();
     api.getWarehouseAllocation.mockResolvedValue({ ...reserved, status: 'ready', tokenVersion: 1 });
-    await handOver(wrapper);
+    await click(wrapper, 'Chuẩn bị mã kho');
 
     expect(api.prepareWarehouseQr).toHaveBeenCalledTimes(1);
     expect(api.getWarehouseAllocation).toHaveBeenCalledTimes(1);
-    expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
     expect(text(wrapper)).toContain('Kho đã tạo mã mới nhưng câu trả lời không về tới trình duyệt');
     expect(text(wrapper)).not.toContain('Chưa tạo được mã QR');
   });
 
   it('says nothing was made when the server state did not change', async () => {
     api.prepareWarehouseQr.mockRejectedValue(new Error('Network Error'));
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
     api.getWarehouseAllocation.mockResolvedValue(reserved);
-    await handOver(wrapper);
+    await click(wrapper, 'Chuẩn bị mã kho');
 
     expect(api.prepareWarehouseQr).toHaveBeenCalledTimes(1);
-    expect(api.confirmWarehouseHandover).not.toHaveBeenCalled();
     expect(text(wrapper)).toContain('Chưa tạo được mã QR lấy hàng');
     expect(text(wrapper)).not.toContain('Kho đã tạo mã mới');
   });
 
   it('reports the refusal when the state cannot be read back either', async () => {
     api.prepareWarehouseQr.mockRejectedValue(new Error('Network Error'));
-    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs } });
     await flushPromises();
     api.getWarehouseAllocation.mockRejectedValue(new Error('Network Error'));
-    await handOver(wrapper);
+    await click(wrapper, 'Chuẩn bị mã kho');
 
     expect(api.prepareWarehouseQr).toHaveBeenCalledTimes(1);
     expect(text(wrapper)).toContain('Chưa tạo được mã QR lấy hàng');

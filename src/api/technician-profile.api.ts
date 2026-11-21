@@ -253,11 +253,11 @@ export const technicianProfileApi = {
     serviceId: string,
     mimeType: string,
   ): Promise<{ storageObjectPath: string; uploadUrl: string }> {
-    const res = await apiClient.post<{ storageObjectPath: string; uploadUrl: string }>(
+    const res = await apiClient.post<{ data: { storageObjectPath: string; uploadUrl: string } }>(
       `/technicians/me/services/${serviceId}/verification/documents/upload-url`,
       { mimeType },
     );
-    return res.data;
+    return res.data.data;
   },
 
   /** Uploads raw bytes straight to Supabase Storage — different origin, must
@@ -275,11 +275,11 @@ export const technicianProfileApi = {
     serviceId: string,
     doc: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
   ): Promise<SkillVerificationView> {
-    const res = await apiClient.post<unknown>(
+    const res = await apiClient.post<{ data: unknown }>(
       `/technicians/me/services/${serviceId}/verification/documents`,
       doc,
     );
-    return normalizeSkillVerification(res.data);
+    return normalizeSkillVerification(res.data.data);
   },
 
   // ---- Lịch làm việc ----

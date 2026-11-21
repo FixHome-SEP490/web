@@ -256,7 +256,8 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 </script>
 
 <template>
-  <div class="space-y-4">
+  <!-- BUG DETECTOR 255: three columns side by side; each part opens on click. -->
+  <div class="grid items-start gap-4 xl:grid-cols-3">
     <section v-if="faultyRows.length || faultyDone.length" class="animate-slide-up overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" data-testid="faulty-part-returns" aria-label="Linh kiện hỏng bảo hành">
       <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 bg-ink-50/70 px-5 py-3.5">
         <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -341,12 +342,17 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </p>
 
       <ul v-else class="divide-y divide-ink-100">
-        <li v-for="group in groups" :key="group.id" class="space-y-3 px-5 py-4" data-testid="part-return-group">
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
-            <span class="font-num font-semibold text-ink-700">{{ returnRequestCode(group.first) }}</span>
-            <router-link v-if="group.first.orderId" :to="`/console/orders/${group.first.orderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
-            <span>Kỹ thuật viên: <span class="font-num">{{ technicianRef(group.first) }}</span></span>
-          </div>
+        <li v-for="group in groups" :key="group.id" class="px-5 py-3" data-testid="part-return-group">
+          <details class="group/ret">
+          <summary class="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+            <span class="min-w-0">
+              <span class="block font-num text-sm font-semibold text-ink-900">{{ returnRequestCode(group.first) }}</span>
+              <span class="block truncate text-xs text-ink-500">{{ group.rows.length }} linh kiện · Kỹ thuật viên <span class="font-num">{{ technicianRef(group.first) }}</span></span>
+            </span>
+            <span class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 font-num text-xs font-semibold text-warning-800">Chờ nhận {{ group.rows.reduce((sum, row) => sum + pendingDeclaredQty(row), 0) }}</span>
+          </summary>
+          <div class="mt-2 space-y-3">
+          <router-link v-if="group.first.orderId" :to="`/console/orders/${group.first.orderId}`" class="text-xs text-brand-700 hover:underline">Xem đơn</router-link>
           <div v-for="row in group.rows" :key="returnKey(row)" class="space-y-3 border-t border-ink-100 pt-3">
             <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
               <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
@@ -389,6 +395,8 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
             </div>
             <p v-else class="text-xs text-ink-500">Chỉ quản lý dịch vụ xác nhận được số linh kiện đã nhận.</p>
           </div>
+          </div>
+          </details>
         </li>
       </ul>
 
@@ -451,11 +459,16 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 
       <template v-else>
         <ul class="divide-y divide-ink-100">
-          <li v-for="row in legacyRows" :key="row.partRequestItemId" class="space-y-2.5 px-5 py-4" data-testid="legacy-part-return">
-            <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-              <div class="min-w-0 break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</div>
+          <li v-for="row in legacyRows" :key="row.partRequestItemId" class="px-5 py-3" data-testid="legacy-part-return">
+            <details>
+            <summary class="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--radius-sm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
+              <span class="min-w-0">
+                <span class="block break-words text-sm font-semibold text-ink-900">{{ row.partNameSnapshot }}</span>
+                <span class="block font-num text-xs text-ink-500">{{ legacyRequestCode(row) }}</span>
+              </span>
               <span class="rounded-full border border-warning-200/80 bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-800" data-testid="legacy-receipt-state">Chưa xác định (UNKNOWN)</span>
-            </div>
+            </summary>
+            <div class="mt-2 space-y-2.5">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
               <span class="font-num font-semibold text-ink-700">{{ legacyRequestCode(row) }}</span>
               <router-link :to="`/console/orders/${row.orderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
@@ -469,6 +482,8 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
               </div>
             </dl>
             <LegacyManualReviewForm :row="row" @saved="loadLegacyReview" @refresh="loadLegacyReview" />
+            </div>
+            </details>
           </li>
         </ul>
         <div class="flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 bg-ink-50/50 px-5 py-3">

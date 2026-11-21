@@ -4,7 +4,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import QRCode from 'qrcode';
 import { useAuthStore } from '../../stores/auth';
 import { Copy, Check, X } from 'lucide-vue-next';
-import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
+import { FhMoney, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
@@ -16,7 +16,6 @@ import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsolePagination from '../../components/console/ConsolePagination.vue';
-import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
 import { consoleField } from '../../components/console/console-ui';
 import {
   partRequestsApi,
@@ -55,7 +54,29 @@ const dateFilter = ref<'ALL' | 'today' | '7days' | '30days'>('ALL');
 
 const qrModalRequest = ref<PartRequest | null>(null);
 const inspectionRequest = ref<PartRequest | null>(null);
-const detailModalRequest = ref<PartRequest | null>(null);
+// BUG DETECTOR 258: the chosen request opens in the pane beside the list. It follows the row in
+// `requests`, so a refreshed row updates the pane in place.
+const selectedId = ref<string | null>(null);
+const selected = computed(() => requests.value.find((row) => row.id === selectedId.value) ?? requests.value[0] ?? null);
+const detailPane = ref<HTMLElement | null>(null);
+function selectRequest(row: PartRequest) {
+  selectedId.value = row.id;
+  // Below the lg breakpoint the pane sits under the list.
+  if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1023px)').matches) {
+    requestAnimationFrame(() => detailPane.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  }
+}
+const itemsSummary = (row: PartRequest) => {
+  const items = row.items || [];
+  if (!items.length) return 'Chưa có linh kiện';
+  const first = `${items[0].partNameSnapshot} x ${items[0].quantity}`;
+  return items.length > 1 ? `${first} và ${items.length - 1} linh kiện khác` : first;
+};
+// BUG DETECTOR 258: say which warehouse the parts leave from.
+const warehouseLabel = (row: PartRequest) => {
+  const allocation = allocationFor(row);
+  return allocation?.mode === 'warehouse' && allocation.warehouseName ? allocation.warehouseName : '';
+};
 const cancelTarget = ref<PartRequest | null>(null);
 const copiedToken = ref(false);
 const allocations = ref<Record<string, WarehouseAllocation | null>>({});
@@ -64,8 +85,6 @@ const allocationErrors = ref<Record<string, string>>({});
 const warehouseTokens = ref<Record<string, { pickup: string | null; receipt: string | null }>>({});
 const warehouseQrImages = ref<Record<string, { pickup: string; receipt: string }>>({});
 const handoverTarget = ref<PartRequest | null>(null);
-const receiptModalId = ref<string | null>(null);
-const receiptModalRequest = computed(() => requests.value.find((row) => row.id === receiptModalId.value) ?? null);
 
 // Thợ đã khai trả, quản lý nhận ở trang Hoàn trả linh kiện (BUG DETECTOR 10); ở đây chỉ nhắc số dòng đang chờ.
 const returnsWaiting = ref<number | null>(null);
@@ -73,12 +92,11 @@ const returnsWaitingError = ref(false);
 let returnsWaitingVersion = 0;
 const loadReturnsWaiting = async () => {
   const version = ++returnsWaitingVersion;
-  returnsWaiting.value = null;
-  returnsWaitingError.value = false;
-  if (!canOperate.value) return;
+  if (!canOperate.value) { returnsWaiting.value = null; returnsWaitingError.value = false; return; }
   try {
     const rows = await partRequestsApi.getPendingReturns();
     if (version !== returnsWaitingVersion || !canOperate.value) return;
+    returnsWaitingError.value = false;
     returnsWaiting.value = rows.filter((row) => row.declaredQty - row.managerAcceptedQty > 0 && row.outstandingQty > 0).length;
   } catch (err) {
     if (version !== returnsWaitingVersion || !canOperate.value) return;
@@ -92,12 +110,12 @@ let custodyReadVersion = 0;
 /** Only the current server page, all its orders in one read (it was one read per order, 12/11/2026). */
 async function loadVisibleCustody(rows: PartRequest[], pageVersion: number) {
   const version = ++custodyReadVersion;
-  custodyByOrder.value = {};
-  if (!canOperate.value) return;
+  if (!canOperate.value) { custodyByOrder.value = {}; return; }
   const ids = [...new Set(rows.slice(0, pageSize)
     .filter(row => ['received', 'completed'].includes(row.status.toLowerCase()) && row.items.some(item => item.partSource === 'fixhome'))
     .map(row => row.serviceOrderId).filter(Boolean))];
-  custodyByOrder.value = Object.fromEntries(ids.map(id => [id, { rows: [], state: 'loading' as const }]));
+  // Rows already read stay on screen while the new read runs; only new orders show loading.
+  custodyByOrder.value = Object.fromEntries(ids.map(id => [id, custodyByOrder.value[id] ?? { rows: [], state: 'loading' as const }]));
   const current = () => version === custodyReadVersion && pageVersion === loadVersion && canOperate.value;
   if (!ids.length) return;
   try {
@@ -134,14 +152,6 @@ const showToast = (type: 'success' | 'error', text: string) => {
   }, 4000);
 };
 
-const columns: ConsoleColumn[] = [
-  { key: 'code', label: 'Yêu cầu' },
-  { key: 'items', label: 'Linh kiện' },
-  { key: 'type', label: 'Loại', hideBelow: 'xl' },
-  { key: 'status', label: 'Trạng thái' },
-  { key: 'time', label: 'Tạo lúc', hideBelow: 'xl' },
-  { key: 'actions', label: '', align: 'right' },
-];
 
 const loadData = async () => {
   const version = ++loadVersion;
@@ -175,7 +185,9 @@ const loadData = async () => {
 
 async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
   const pickups = rows.filter((row) => row.fulfillmentMethod === 'pickup');
-  allocations.value = {};
+  const next: Record<string, WarehouseAllocation | null> = {};
+  for (const row of pickups) if (row.id in allocations.value) next[row.id] = allocations.value[row.id];
+  allocations.value = next;
   allocationErrors.value = {};
   // BUG DETECTOR 90: the manager's queue already carries each row's allocation; only rows
   // without one (the admin's global list) are read one by one.
@@ -197,7 +209,6 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
 const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
 const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
 // A closed request (cancelled, completed) or a warranty one has no warehouse code to prepare or reissue: the server refuses it.
-const canHandOver = (request: PartRequest) => canPreparePickupQr(request) && warehouseQrAction(allocationFor(request)!.status) === 'prepare';
 const canPreparePickupQr = (request: PartRequest) => {
   const allocation = allocationFor(request);
   return canOperate.value && warehouseQrOpen(request.status, request.requestType) && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
@@ -211,13 +222,6 @@ async function refreshRequestRow(requestId: string) {
     if (version !== loadVersion) return;
     const current = requests.value.find((row) => row.id === requestId);
     if (!current) return;
-    // The summary cards come from the list call; move this row between them so they match the table.
-    const from = current.status.toLowerCase();
-    const to = String(fresh.status ?? current.status).toLowerCase();
-    const counts = serverStatusCounts.value;
-    if (counts && from !== to) {
-      serverStatusCounts.value = { ...counts, [from]: Math.max(0, (counts[from] ?? 0) - 1), [to]: (counts[to] ?? 0) + 1 };
-    }
     replaceRow({ ...current, ...fresh, warehouseAllocation: fresh.warehouseAllocation ?? current.warehouseAllocation });
   } catch {
     // The command itself succeeded; the next list load shows the status.
@@ -262,12 +266,11 @@ async function prepareWarehouseQr(request: PartRequest) {
     showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
     return;
   }
-  // The pickup code is only passed on to the handover; only the technician's receipt code is drawn.
-  if (!receipt) return;
   try {
-    warehouseQrImages.value[request.id] = { pickup: '', receipt: await QRCode.toDataURL(result.qrToken, { width: 220 }) };
+    const image = await QRCode.toDataURL(result.qrToken, { width: 220 });
+    warehouseQrImages.value[request.id] = receipt ? { pickup: '', receipt: image } : { pickup: image, receipt: '' };
   } catch {
-    // The code is shown as text with a copy button either way.
+    // The code is shown as text with a copy button under the box either way.
   }
 }
 
@@ -324,21 +327,6 @@ async function confirmPhysicalHandover(request: PartRequest) {
   }
 }
 
-/** One step for the manager: make the pickup code, hand over with it, then show the technician's receipt QR. The pickup code never leaves this function. */
-async function handOverToTechnician(request: PartRequest) {
-  if (actionLoading.value) return;
-  await prepareWarehouseQr(request);
-  if (!warehouseTokens.value[request.id]?.pickup) { handoverTarget.value = null; return; }
-  await confirmPhysicalHandover(request);
-  if (allocationFor(request)?.status === 'handed_over' && warehouseTokens.value[request.id]?.receipt) receiptModalId.value = request.id;
-}
-
-/** The receipt code is shown once by the server: reopen it from this session, or issue a new one when the page was reloaded. */
-async function openReceiptCode(request: PartRequest) {
-  if (!warehouseTokens.value[request.id]?.receipt) await prepareWarehouseQr(request);
-  if (warehouseTokens.value[request.id]?.receipt) receiptModalId.value = request.id;
-}
-
 onMounted(() => {
   void loadData();
   void loadReturnsWaiting();
@@ -376,7 +364,16 @@ const stats = computed(() => {
 
 const replaceRow = (updated: PartRequest) => {
   const idx = requests.value.findIndex((r) => r.id === updated.id);
-  if (idx !== -1) requests.value[idx] = updated;
+  if (idx === -1) return;
+  // BUG DETECTOR 212: the summary cards come from the list call; every status change on screen
+  // (ready, delivering, cancel, handover) moves the row between them so they match the list.
+  const from = requests.value[idx].status.toLowerCase();
+  const to = String(updated.status ?? requests.value[idx].status).toLowerCase();
+  const counts = serverStatusCounts.value;
+  if (counts && from !== to) {
+    serverStatusCounts.value = { ...counts, [from]: Math.max(0, (counts[from] ?? 0) - 1), [to]: (counts[to] ?? 0) + 1 };
+  }
+  requests.value[idx] = updated;
 };
 
 const handleMarkReady = async (req: PartRequest) => {
@@ -465,7 +462,6 @@ const faultyReturnLabel = (req: PartRequest) => {
 const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
 const onInspected = (updated: PartRequest) => {
   replaceRow(updated);
-  if (detailModalRequest.value?.id === updated.id) detailModalRequest.value = updated;
   inspectionRequest.value = null;
   showToast('success', 'Đã lưu kết quả kiểm tra linh kiện hỏng.');
 };
@@ -495,14 +491,6 @@ const getStatusBadgeClass = (status: PartRequestStatus | string) => {
   }
 };
 
-const getUsageShortLabel = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'pending': return 'Đang giữ';
-    case 'used': return 'Đã dùng';
-    case 'returned': return 'Ghi nhận không dùng';
-    default: return 'Chưa rõ';
-  }
-};
 
 const getUsageStatusLabel = (status: string) => {
   switch (status?.toLowerCase()) {
@@ -513,14 +501,6 @@ const getUsageStatusLabel = (status: string) => {
   }
 };
 
-const getUsageBadgeClass = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'pending': return 'bg-warning-50 text-warning-800 border-warning-200/80';
-    case 'used': return 'bg-success-50 text-success-700 border-success-200/80 font-semibold';
-    case 'returned': return 'bg-info-50 text-info-600 border-brand-200/50';
-    default: return 'bg-ink-50 text-ink-700 border-ink-200';
-  }
-};
 </script>
 
 <template>
@@ -611,153 +591,173 @@ const getUsageBadgeClass = (status: string) => {
 
     <div class="animate-slide-up-delay-3 space-y-5">
       <ConsoleLoadError v-if="loadError" @retry="loadData" />
-      <ConsoleTable
-        v-else
-        class="part-requests-table"
-        :columns="columns"
-        :rows="requests"
-        :loading="loading"
-        empty-text="Không có yêu cầu linh kiện nào phù hợp."
-      >
-        <template #cell-code="{ row }">
-          <button
-            type="button"
-            class="inline-flex min-h-9 items-center whitespace-nowrap rounded-[var(--radius-sm)] font-num font-semibold text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
-            :data-testid="`part-request-detail-${row.id}`"
-            @click="detailModalRequest = row"
-          >{{ requestCode(row) }}</button>
-          <div>
-            <router-link :to="`/console/orders/${row.serviceOrderId}`" class="whitespace-nowrap text-xs text-ink-500 hover:text-brand-700 hover:underline">Xem đơn</router-link>
+      <!-- BUG DETECTOR 258/243: a short list on the left, the chosen request in full on the right. -->
+      <div v-else class="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <section class="overflow-hidden rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)" aria-label="Danh sách yêu cầu linh kiện">
+          <div v-if="loading && !requests.length" class="space-y-2 p-4" aria-busy="true" aria-label="Đang tải yêu cầu linh kiện">
+            <FhSkeleton v-for="n in 5" :key="n" height="64px" rounded="md" />
           </div>
-        </template>
-
-        <template #cell-items="{ row }">
-          <ul class="part-request-items max-w-72 min-w-40 space-y-0.5">
-            <li v-for="item in (row.items || []).slice(0, 3)" :key="item.id" class="space-y-1 py-1" :data-testid="`manager-part-${item.id}`">
-              <div class="flex items-center justify-between gap-2">
-              <span class="truncate font-medium text-ink-800" :title="item.partNameSnapshot">{{ item.partNameSnapshot }}</span>
-              <span v-if="!custodyFor(row, item.id)" class="font-num text-xs text-ink-600">Yêu cầu/cấp {{ item.quantity }}</span>
-              </div>
-              <template v-for="record in [custodyFor(row, item.id)]" :key="record?.partRequestItemId ?? item.id">
-                <div v-if="record" class="space-y-1 text-xs text-ink-600">
-                  <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }}</p>
-                  <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận trả {{ record.managerAcceptedQty }}</p>
-                  <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-num font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
-                  <p v-else-if="record.outstandingQty > 0" class="font-num">Cần trả kho {{ record.outstandingQty }}</p>
-                </div>
-                <div v-else class="space-y-1 text-xs text-ink-600">
-                  <span class="whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="getUsageBadgeClass(item.usageStatus)">{{ getUsageShortLabel(item.usageStatus) }}</span>
-                  <p>{{ custodyReadLabel(row) }}</p>
-                </div>
-              </template>
+          <p v-else-if="!requests.length" class="px-4 py-6 text-sm text-ink-500">Không có yêu cầu linh kiện nào phù hợp.</p>
+          <ul v-else class="divide-y divide-ink-100" :aria-busy="loading">
+            <li v-for="row in requests" :key="row.id">
+              <button
+                type="button"
+                class="block w-full cursor-pointer px-4 py-3 text-left transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
+                :class="selected?.id === row.id ? 'bg-brand-50/70 shadow-[inset_3px_0_0_var(--color-brand-600)]' : ''"
+                :aria-current="selected?.id === row.id ? 'true' : undefined"
+                :data-testid="`part-request-detail-${row.id}`"
+                @click="selectRequest(row)"
+              >
+                <span class="flex items-center justify-between gap-2">
+                  <span class="font-num font-semibold text-ink-900">{{ requestCode(row) }}</span>
+                  <span class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium" :class="getStatusBadgeClass(displayPartRequestStatus(row))">{{ getStatusLabel(displayPartRequestStatus(row)) }}</span>
+                </span>
+                <span class="mt-1 block truncate text-sm text-ink-700">{{ itemsSummary(row) }}</span>
+                <span class="mt-0.5 flex items-center justify-between gap-2 text-xs text-ink-500">
+                  <span class="truncate">{{ typeLabel(row.requestType) }} · {{ methodLabel(row.fulfillmentMethod) }}<template v-if="warehouseLabel(row)"> · {{ warehouseLabel(row) }}</template></span>
+                  <span class="shrink-0 font-num">{{ vnDateString(row.createdAt) }} {{ vnTimeString(row.createdAt, { hour: '2-digit', minute: '2-digit' }) }}</span>
+                </span>
+              </button>
             </li>
           </ul>
-          <button
-            v-if="(row.items || []).length > 3"
-            type="button"
-            class="mt-0.5 inline-flex min-h-9 items-center whitespace-nowrap rounded-[var(--radius-sm)] text-sm font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
-            @click="detailModalRequest = row"
-          >Thêm <span class="mx-1 font-num">{{ (row.items || []).length - 3 }}</span> linh kiện</button>
-        </template>
+        </section>
 
-        <template #cell-type="{ row }">
-          <div class="whitespace-nowrap font-medium text-ink-800">{{ typeLabel(row.requestType) }}</div>
-          <div class="whitespace-nowrap text-xs text-ink-500">
-            {{ methodLabel(row.fulfillmentMethod) }}<template v-if="row.fulfillmentMethod === 'delivery' && Number(row.shippingFee) > 0">, phí <span class="font-num">{{ Number(row.shippingFee).toLocaleString('vi-VN') }}&nbsp;₫</span></template>
+        <section
+          v-if="selected"
+          ref="detailPane"
+          class="space-y-4 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) lg:sticky lg:top-4 sm:p-5"
+          aria-labelledby="pr-detail-title"
+          :data-testid="`part-request-pane-${selected.id}`"
+        >
+          <header class="flex flex-wrap items-start justify-between gap-3 border-b border-ink-100 pb-3">
+            <div class="min-w-0">
+              <h2 id="pr-detail-title" class="font-num text-base font-semibold text-ink-900">{{ requestCode(selected) }}</h2>
+              <p class="text-sm text-ink-600">{{ typeLabel(selected.requestType) }} · {{ methodLabel(selected.fulfillmentMethod) }}</p>
+              <router-link :to="`/console/orders/${selected.serviceOrderId}`" class="text-sm font-medium text-brand-700 hover:underline">Xem đơn sửa chữa</router-link>
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <FhButton
+                v-if="warehouseTokens[selected.id]?.pickup && canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(selected))"
+                variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = selected"
+              >Xác nhận đã giao trực tiếp</FhButton>
+              <FhButton
+                v-else-if="canPreparePickupQr(selected)"
+                variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(selected)"
+              >{{ allocationFor(selected)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+              <FhButton
+                v-else-if="!canPreparePickupQr(selected) && canOperate && selected.status.toLowerCase() === 'requested' && !isW3Delivery(selected) && (selected.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(selected))"
+                variant="primary" size="sm" :disabled="actionLoading" @click="handleMarkReady(selected)"
+              >Chuẩn bị xong</FhButton>
+              <FhButton
+                v-else-if="!canPreparePickupQr(selected) && canOperate && canDeliver(selected)"
+                variant="primary" size="sm" :disabled="actionLoading" @click="handleMarkDelivering(selected)"
+              >Giao hàng</FhButton>
+              <FhButton v-if="hasQr(selected)" variant="secondary" size="sm" @click="qrModalRequest = selected">Mã QR</FhButton>
+              <ConsoleMoreMenu v-if="canOperate && isOpen(selected)" label="Thao tác khác với yêu cầu">
+                <ConsoleMenuItem danger :disabled="actionLoading" @click="cancelTarget = selected">Huỷ yêu cầu</ConsoleMenuItem>
+              </ConsoleMoreMenu>
+            </div>
+          </header>
+
+          <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 px-4 text-sm">
+            <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Trạng thái</dt><dd class="font-medium text-ink-900">{{ getStatusLabel(displayPartRequestStatus(selected)) }}</dd></div>
+            <div v-if="selected.fulfillmentMethod === 'pickup' || warehouseLabel(selected)" class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Xuất từ kho</dt><dd class="text-right font-medium text-ink-900">{{ warehouseLabel(selected) || 'Chưa phân kho' }}</dd></div>
+            <div v-if="selected.requestType === 'warranty'" class="flex justify-between gap-3 py-2.5">
+              <dt class="text-ink-500">Linh kiện hỏng</dt>
+              <dd class="text-right text-ink-900">
+                {{ selected.faultyInspectionResult ? inspectionLabel(selected.faultyInspectionResult) : faultyReturnLabel(selected) }}
+                <router-link v-if="canOperate && needsInspection(selected)" to="/console/part-returns" class="ml-2 font-medium text-brand-700 hover:underline">Kiểm tra ở Hoàn trả linh kiện</router-link>
+              </dd>
+            </div>
+            <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Tạo lúc</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ vnDateTimeString(selected.createdAt) }}</dd></div>
+            <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ selected.receivedAt ? vnDateTimeString(selected.receivedAt) : 'Chưa nhận' }}</dd></div>
+            <div v-if="selected.fulfillmentMethod === 'delivery'" class="list-none py-2"><ShippingShareBreakdown :snapshot="selected" role="manager" :fulfillment-method="selected.fulfillmentMethod" /></div>
+          </dl>
+
+          <div v-if="selected.fulfillmentMethod === 'pickup'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200/90 p-3.5" :data-testid="`warehouse-allocation-${selected.id}`">
+            <h3 class="text-sm font-semibold text-ink-900">Lấy hàng tại kho</h3>
+            <p v-if="allocationLoading[selected.id] && !allocationFor(selected)" class="text-sm text-ink-500">Đang kiểm tra phân bổ…</p>
+            <p v-else-if="allocationFor(selected)?.mode === 'legacy'" class="text-sm text-ink-600">Yêu cầu lịch sử, chưa tham gia phân bổ kho W2.</p>
+            <p v-else-if="allocationFor(selected)?.status === 'received'" class="text-sm font-medium text-success-700">Kỹ thuật viên đã xác nhận nhận hàng.</p>
+            <p v-else-if="allocationFor(selected)?.status === 'handed_over'" class="text-sm font-medium text-brand-700">Quản lý đã bàn giao thực tế; tồn đã xuất.</p>
+            <p v-else-if="allocationFor(selected)?.status === 'ready'" class="text-sm font-medium text-brand-700">Đã có mã lấy hàng; đang chờ bàn giao thực tế.</p>
+            <p v-else-if="allocationFor(selected)?.status === 'reserved'" class="text-sm font-medium text-brand-700">Đã giữ toàn bộ linh kiện tại một kho.</p>
+            <p v-if="allocationErrors[selected.id]" class="text-sm text-danger-700" role="alert">{{ allocationErrors[selected.id] }}</p>
+            <template v-if="allocationFor(selected)?.mode === 'warehouse'">
+              <p v-if="allocationFor(selected)?.warehouseAddress" class="text-sm text-ink-700">Địa chỉ kho: {{ allocationFor(selected)?.warehouseAddress }}</p>
+              <p
+                v-if="allocationFor(selected)?.distanceReference === 'booking_snapshot' && typeof allocationFor(selected)?.estimatedStraightLineKm === 'number'"
+                class="text-sm text-ink-600"
+              >Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: <span class="font-num font-medium text-ink-900">~{{ allocationFor(selected)?.estimatedStraightLineKm?.toFixed(1) }} km</span>; chưa xác minh đường đi/ETA</p>
+              <p v-else-if="allocationFor(selected)?.reviewRequired" class="text-sm text-ink-600">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
+              <p v-if="allocationFor(selected)?.status === 'stock_unavailable'" class="rounded-[var(--radius-sm)] bg-warning-50 px-3 py-2 text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
+              <p v-if="allocationOwnerMismatch(allocationFor(selected)!)" class="rounded-[var(--radius-sm)] bg-warning-50 px-3 py-2 text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
+              <div v-if="warehouseTokens[selected.id]?.pickup && canOperate && allocationFor(selected)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/70 p-3">
+                <img v-if="warehouseQrImages[selected.id]?.pickup" :src="warehouseQrImages[selected.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-1" />
+                <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[selected.id]?.pickup }}</p><FhButton variant="secondary" size="sm" data-testid="copy-pickup-code" @click="copyToken(warehouseTokens[selected.id]?.pickup ?? '')">{{ copiedInline === warehouseTokens[selected.id]?.pickup ? 'Đã chép mã' : 'Sao chép mã' }}</FhButton></div>
+              </div>
+              <div v-if="warehouseTokens[selected.id]?.receipt && canOperate && allocationFor(selected)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-success-200 bg-success-50/70 p-3">
+                <img v-if="warehouseQrImages[selected.id]?.receipt" :src="warehouseQrImages[selected.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-1" />
+                <div class="min-w-0 flex-1 space-y-1.5"><p class="text-sm font-semibold text-success-800">Đưa mã nhận hàng riêng này cho kỹ thuật viên (hiệu lực 48 giờ).</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[selected.id]?.receipt }}</p><FhButton variant="secondary" size="sm" data-testid="copy-receipt-code" @click="copyToken(warehouseTokens[selected.id]?.receipt ?? '')">{{ copiedInline === warehouseTokens[selected.id]?.receipt ? 'Đã chép mã' : 'Sao chép mã' }}</FhButton></div>
+              </div>
+            </template>
           </div>
-        </template>
 
-        <template #cell-status="{ row }">
-          <span class="inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium" :class="getStatusBadgeClass(displayPartRequestStatus(row))">
-            {{ getStatusLabel(displayPartRequestStatus(row)) }}
-          </span>
-        </template>
+          <DeliveryOperationsPanel
+            v-if="selected.fulfillmentMethod === 'delivery' && selected.requestType === 'additional' && selected.shippingFee >= 0 && isDeliveryPhysicalRequestId(selected.id)"
+            :key="`ops-${selected.id}`"
+            :request-id="selected.id"
+            :fulfillment-method="selected.fulfillmentMethod"
+            :request-type="selected.requestType"
+            :shipping-fee="selected.shippingFee"
+            audience="manager"
+          />
+          <DeliveryTermsPanel
+            v-if="selected.fulfillmentMethod === 'delivery' && selected.requestType === 'additional' && selected.shippingFee > 0 && isDeliveryPhysicalRequestId(selected.id)"
+            :key="`terms-${selected.id}`"
+            :request-id="selected.id"
+            :request-type="selected.requestType"
+            :fulfillment-method="selected.fulfillmentMethod"
+            :shipping-fee="selected.shippingFee"
+            audience="manager"
+            :technician-id="selected.technicianId"
+          />
 
-        <template #cell-time="{ row }">
-          <div class="whitespace-nowrap font-num text-ink-700">{{ vnDateString(row.createdAt) }}</div>
-          <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnTimeString(row.createdAt, { hour: '2-digit', minute: '2-digit' }) }}</div>
-        </template>
-
-        <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end gap-2">
-            <FhButton
-              v-if="canHandOver(row)"
-              variant="primary"
-              size="sm"
-              :disabled="actionLoading"
-              @click="handoverTarget = row"
-            >Đã giao cho thợ</FhButton>
-            <FhButton
-              v-else-if="canPreparePickupQr(row)"
-              variant="primary"
-              size="sm"
-              :disabled="actionLoading"
-              @click="openReceiptCode(row)"
-            >Mã nhận hàng</FhButton>
-            <FhButton
-              v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && !isW3Delivery(row) && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
-              variant="primary"
-              size="sm"
-              :disabled="actionLoading"
-              @click="handleMarkReady(row)"
-            >Chuẩn bị xong</FhButton>
-            <FhButton
-              v-else-if="!canPreparePickupQr(row) && canOperate && canDeliver(row)"
-              variant="primary"
-              size="sm"
-              :disabled="actionLoading"
-              @click="handleMarkDelivering(row)"
-            >Giao hàng</FhButton>
-            <FhButton
-              v-else-if="hasQr(row)"
-              variant="secondary"
-              size="sm"
-              @click="qrModalRequest = row"
-            >Mã QR</FhButton>
-            <ConsoleMoreMenu
-              v-if="(hasQr(row) && canOperate && canDeliver(row)) || (canOperate && isOpen(row))"
-              label="Thao tác khác với yêu cầu"
-            >
-              <ConsoleMenuItem v-if="hasQr(row) && canOperate && canDeliver(row)" @click="qrModalRequest = row">Mã QR</ConsoleMenuItem>
-              <ConsoleMenuItem
-                v-if="canOperate && isOpen(row)"
-                danger
-                :disabled="actionLoading"
-                @click="cancelTarget = row"
-              >Huỷ yêu cầu</ConsoleMenuItem>
-            </ConsoleMoreMenu>
+          <div>
+            <h3 class="mb-2 text-sm font-semibold text-ink-900">Linh kiện (<span class="font-num">{{ (selected.items || []).length }}</span>)</h3>
+            <ul class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90">
+              <li v-for="item in selected.items || []" :key="item.id" class="p-3.5 text-sm" :data-testid="`manager-part-detail-${item.id}`">
+                <div class="space-y-1.5" :data-testid="`manager-part-${item.id}`">
+                <div class="flex items-start justify-between gap-3">
+                  <p class="min-w-0 break-words font-medium text-ink-900">{{ item.partNameSnapshot }}</p>
+                  <span class="shrink-0 font-num text-ink-700">x {{ item.quantity }}</span>
+                </div>
+                <template v-for="record in [custodyFor(selected, item.id)]" :key="record?.partRequestItemId ?? item.id">
+                  <div v-if="record" class="space-y-1 text-xs text-ink-700">
+                    <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả kho {{ record.outstandingQty }}</p>
+                    <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận trả {{ record.managerAcceptedQty }} · Còn phải khai {{ partCustodyQuantities(record).remainingToDeclare }}</p>
+                    <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-num font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                      <span>Giá trị linh kiện đã dùng</span>
+                      <FhMoney v-if="record.usageRecorded !== false" :amount="item.unitPriceSnapshot * record.usedQty" data-testid="manager-part-used-value" />
+                      <span v-else>Chưa chốt sử dụng</span>
+                    </div>
+                  </div>
+                  <div v-else class="space-y-1 text-xs text-ink-600">
+                    <p class="font-num">Số lượng yêu cầu/cấp {{ item.quantity }} · Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /></p>
+                    <p>{{ getUsageStatusLabel(item.usageStatus) }} · {{ custodyReadLabel(selected) }}</p>
+                  </div>
+                </template>
+                </div>
+              </li>
+            </ul>
           </div>
-        </template>
-      </ConsoleTable>
-
-      <section v-for="row in requests.filter((request) => request.fulfillmentMethod === 'pickup')" :key="`warehouse-${row.id}`" class="space-y-2.5 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)" :data-testid="`warehouse-allocation-${row.id}`">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h2 class="font-semibold text-ink-900">Lấy hàng tại kho · <span class="font-num">{{ requestCode(row) }}</span></h2>
-          <span v-if="allocationLoading[row.id]" class="text-sm text-ink-500">Đang kiểm tra phân bổ…</span>
-          <span v-else-if="allocationFor(row)?.mode === 'legacy'" class="text-sm text-ink-600">Yêu cầu lịch sử, chưa tham gia phân bổ kho W2.</span>
-          <span v-else-if="allocationFor(row)?.status === 'received'" class="text-sm font-medium text-success-700">Kỹ thuật viên đã xác nhận nhận hàng.</span>
-          <span v-else-if="allocationFor(row)?.status === 'handed_over'" class="text-sm font-medium text-brand-700">Quản lý đã bàn giao thực tế; tồn đã xuất.</span>
-          <span v-else-if="allocationFor(row)?.status === 'ready'" class="text-sm font-medium text-brand-700">Đã có mã lấy hàng; đang chờ bàn giao thực tế.</span>
-          <span v-else-if="allocationFor(row)?.status === 'reserved'" class="text-sm font-medium text-brand-700">Đã giữ toàn bộ linh kiện tại một kho.</span>
-          <span v-else-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm font-medium text-warning-800">Không có kho đủ linh kiện; thợ tự chuẩn bị.</span>
-          <span v-else-if="allocationErrors[row.id]" class="text-sm text-danger-700">{{ allocationErrors[row.id] }}</span>
-        </div>
-        <template v-if="allocationFor(row)?.mode === 'warehouse'">
-          <p v-if="allocationErrors[row.id]" class="text-sm text-danger-700" role="alert">{{ allocationErrors[row.id] }}</p>
-          <p v-if="allocationFor(row)?.warehouseName" class="text-sm text-ink-700">Kho: <strong class="font-medium text-ink-900">{{ allocationFor(row)?.warehouseName }}</strong><template v-if="allocationFor(row)?.warehouseAddress"> · {{ allocationFor(row)?.warehouseAddress }}</template></p>
-          <p
-            v-if="allocationFor(row)?.distanceReference === 'booking_snapshot' && typeof allocationFor(row)?.estimatedStraightLineKm === 'number'"
-            class="text-sm text-ink-600"
-          >Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: <span class="font-num font-medium text-ink-900">~{{ allocationFor(row)?.estimatedStraightLineKm?.toFixed(1) }} km</span>; chưa xác minh đường đi/ETA</p>
-          <p v-else-if="allocationFor(row)?.reviewRequired" class="text-sm text-ink-600">Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.</p>
-          <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
-          <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
-
-        </template>
-      </section>
+        </section>
+        <p v-else-if="requests.length" class="rounded-[var(--radius-md)] border border-dashed border-ink-200 px-4 py-6 text-sm text-ink-500">Chọn một yêu cầu để xem chi tiết.</p>
+      </div>
 
       <!-- BUG DETECTOR 83: a handover is not a deletion; plain colours and what exactly is handed over. -->
-      <FhConfirmDialog :open="Boolean(handoverTarget)" :danger="false" title="Xác nhận đã giao linh kiện cho kỹ thuật viên?" consequence="Chỉ bấm khi kỹ thuật viên đã cầm đủ các linh kiện dưới đây. Kho sẽ trừ tồn và hiện mã nhận hàng để kỹ thuật viên quét." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && handOverToTechnician(handoverTarget)" @cancel="handoverTarget = null">
+      <FhConfirmDialog :open="Boolean(handoverTarget)" :danger="false" title="Xác nhận đã giao linh kiện cho kỹ thuật viên?" consequence="Chỉ bấm khi kỹ thuật viên đã cầm đủ các linh kiện dưới đây. Kho sẽ trừ tồn và tạo mã nhận hàng cho kỹ thuật viên." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && confirmPhysicalHandover(handoverTarget)" @cancel="handoverTarget = null">
         <dl v-if="handoverTarget" class="space-y-1 text-sm text-ink-800" data-testid="handover-summary">
           <div><dt class="inline text-ink-600">Yêu cầu: </dt><dd class="inline font-num font-medium">{{ requestCode(handoverTarget) }}</dd></div>
           <div v-if="allocationFor(handoverTarget)?.warehouseName"><dt class="inline text-ink-600">Kho: </dt><dd class="inline">{{ allocationFor(handoverTarget)?.warehouseName }}</dd></div>
@@ -833,156 +833,6 @@ const getUsageBadgeClass = (status: string) => {
       </div>
     </Transition>
 
-    <!-- Receipt QR: what the technician scans to confirm receiving the parts handed over at the warehouse -->
-    <Transition name="fh-modal">
-      <div
-        v-if="receiptModalRequest"
-        class="fixed inset-0 z-50 bg-ink-950/50 flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="receipt-title"
-        data-testid="receipt-modal"
-        @click.self="receiptModalId = null"
-        @keydown.esc="receiptModalId = null"
-      >
-        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 shadow-(--shadow-e3) max-w-md w-full p-6 space-y-4">
-          <div class="flex items-start justify-between gap-3 border-b border-ink-100 pb-3">
-            <div>
-              <h3 id="receipt-title" class="text-base font-semibold text-ink-900">Mã nhận hàng cho kỹ thuật viên</h3>
-              <p class="font-num text-sm text-ink-500">{{ requestCode(receiptModalRequest) }}</p>
-            </div>
-            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="receiptModalId = null">
-              <X :size="18" aria-hidden="true" />
-            </button>
-          </div>
-          <div class="flex flex-col items-center gap-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/70 p-4">
-            <img v-if="warehouseQrImages[receiptModalRequest.id]?.receipt" :src="warehouseQrImages[receiptModalRequest.id]?.receipt" alt="QR nhận hàng cho kỹ thuật viên" class="h-48 w-48 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-2" />
-            <div class="flex w-full items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-2">
-              <span class="truncate select-all font-num text-sm font-semibold text-ink-900">{{ warehouseTokens[receiptModalRequest.id]?.receipt }}</span>
-              <FhButton variant="secondary" size="sm" data-testid="copy-receipt-code" @click="copyToken(warehouseTokens[receiptModalRequest.id]?.receipt ?? '')">{{ copiedInline === warehouseTokens[receiptModalRequest.id]?.receipt ? 'Đã chép' : 'Sao chép' }}</FhButton>
-            </div>
-          </div>
-          <p class="text-sm text-ink-600 text-pretty">Kỹ thuật viên quét mã hoặc nhập mã này ở đơn sửa chữa để xác nhận đã nhận linh kiện. Mã có hiệu lực 48 giờ.</p>
-          <div class="flex justify-end border-t border-ink-100 pt-3">
-            <FhButton variant="primary" size="sm" @click="receiptModalId = null">Xong</FhButton>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Request detail -->
-    <Transition name="fh-modal">
-      <div
-        v-if="detailModalRequest"
-        class="fixed inset-0 z-50 bg-ink-950/50 flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pr-detail-title"
-        @click.self="detailModalRequest = null"
-        @keydown.esc="detailModalRequest = null"
-      >
-        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 shadow-(--shadow-e3) max-w-xl w-full flex flex-col max-h-[90dvh] overflow-hidden">
-          <div class="flex items-start justify-between gap-3 border-b border-ink-100 bg-ink-50/70 px-6 py-4 shrink-0">
-            <div>
-              <h3 id="pr-detail-title" class="font-num text-base font-semibold text-ink-900">{{ requestCode(detailModalRequest) }}</h3>
-              <router-link :to="`/console/orders/${detailModalRequest.serviceOrderId}`" class="text-sm font-medium text-brand-700 hover:underline">Xem đơn sửa chữa</router-link>
-            </div>
-            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="detailModalRequest = null">
-              <X :size="18" aria-hidden="true" />
-            </button>
-          </div>
-
-          <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-4 space-y-4">
-            <dl class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 px-4 text-sm">
-              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Loại</dt><dd class="font-medium text-ink-900">{{ typeLabel(detailModalRequest.requestType) }}</dd></div>
-              <div v-if="detailModalRequest.requestType === 'warranty'" class="flex justify-between gap-3 py-2.5">
-                <dt class="text-ink-500">Linh kiện hỏng</dt>
-                <dd class="text-right text-ink-900">
-                  {{ detailModalRequest.faultyInspectionResult ? inspectionLabel(detailModalRequest.faultyInspectionResult) : faultyReturnLabel(detailModalRequest) }}
-                  <router-link v-if="canOperate && needsInspection(detailModalRequest)" to="/console/part-returns" class="ml-2 font-medium text-brand-700 hover:underline">Kiểm tra ở Hoàn trả linh kiện</router-link>
-                </dd>
-              </div>
-              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Hình thức</dt><dd class="font-medium text-ink-900">{{ methodLabel(detailModalRequest.fulfillmentMethod) }}</dd></div>
-              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Trạng thái</dt><dd class="font-medium text-ink-900">{{ getStatusLabel(displayPartRequestStatus(detailModalRequest)) }}</dd></div>
-              <div class="list-none py-2"><ShippingShareBreakdown :snapshot="detailModalRequest" role="manager" :fulfillment-method="detailModalRequest.fulfillmentMethod" /></div>
-              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Đã nhận</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.receivedAt ? vnDateTimeString(detailModalRequest.receivedAt) : 'Chưa nhận' }}</dd></div>
-              <div class="flex justify-between gap-3 py-2.5"><dt class="text-ink-500">Hoàn tất</dt><dd class="whitespace-nowrap font-num text-ink-900">{{ detailModalRequest.completedAt ? vnDateTimeString(detailModalRequest.completedAt) : 'Chưa hoàn tất' }}</dd></div>
-            </dl>
-
-            <DeliveryOperationsPanel
-              v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee >= 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
-              :request-id="detailModalRequest.id"
-              :fulfillment-method="detailModalRequest.fulfillmentMethod"
-              :request-type="detailModalRequest.requestType"
-              :shipping-fee="detailModalRequest.shippingFee"
-              audience="manager"
-            />
-            <DeliveryTermsPanel
-              v-if="detailModalRequest.fulfillmentMethod === 'delivery' && detailModalRequest.requestType === 'additional' && detailModalRequest.shippingFee > 0 && isDeliveryPhysicalRequestId(detailModalRequest.id)"
-              :key="`terms-${detailModalRequest.id}`"
-              :request-id="detailModalRequest.id"
-              :request-type="detailModalRequest.requestType"
-              :fulfillment-method="detailModalRequest.fulfillmentMethod"
-              :shipping-fee="detailModalRequest.shippingFee"
-              audience="manager"
-              :technician-id="detailModalRequest.technicianId"
-            />
-
-            <div>
-              <h4 class="mb-2 text-sm font-semibold text-ink-900">Linh kiện</h4>
-              <ul class="divide-y divide-ink-100 rounded-[var(--radius-sm)] border border-ink-200/90">
-                <li
-                  v-for="item in detailModalRequest.items || []"
-                  :key="item.id"
-                  class="space-y-2 p-3.5 text-sm"
-                  :data-testid="`manager-part-detail-${item.id}`"
-                >
-                  <p class="font-medium text-ink-900">{{ item.partNameSnapshot }}</p>
-                  <template v-for="record in [custodyFor(detailModalRequest, item.id)]" :key="record?.partRequestItemId ?? item.id">
-                    <div v-if="record" class="space-y-2 text-xs text-ink-700">
-                      <p class="font-num">Cấp {{ record.issuedQty }} · Dùng {{ record.usedQty }} · Cần trả kho {{ record.outstandingQty }}</p>
-                      <p class="font-num">Khai trả {{ record.declaredQty }} · Đã nhận {{ record.managerAcceptedQty }}</p>
-                      <p v-if="partCustodyQuantities(record).awaitingManager > 0" class="font-num font-medium text-warning-800">Chờ nhận {{ partCustodyQuantities(record).awaitingManager }}</p>
-                      <p class="font-num">Còn phải khai {{ partCustodyQuantities(record).remainingToDeclare }}</p>
-                      <div class="flex flex-wrap items-baseline justify-between gap-2">
-                        <span>Giá trị linh kiện đã dùng</span>
-                        <FhMoney v-if="record.usageRecorded !== false" :amount="item.unitPriceSnapshot * record.usedQty" data-testid="manager-part-used-value" />
-                        <span v-else>Chưa chốt sử dụng</span>
-                      </div>
-                      <p>Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /> · Giá trị sử dụng được đối chiếu khi lập hóa đơn.</p>
-                    </div>
-                    <div v-else class="space-y-2 text-xs text-ink-600">
-                      <p class="font-num">Số lượng yêu cầu/cấp {{ item.quantity }} · Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /></p>
-                      <p>{{ getUsageStatusLabel(item.usageStatus) }}</p>
-                      <p>{{ custodyReadLabel(detailModalRequest) }}</p>
-                      <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></p>
-                    </div>
-                  </template>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="flex justify-end border-t border-ink-100 bg-ink-50/50 px-6 py-3.5 shrink-0">
-            <FhButton variant="secondary" size="sm" @click="detailModalRequest = null">Đóng</FhButton>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
     <FaultyPartInspectionModal :request="inspectionRequest" @close="inspectionRequest = null" @done="onInspected" />
   </div>
 </template>
-
-<style scoped>
-/* Keep the same cells and actions in one row per request, readable without sideways scrolling. */
-@media (max-width: 639px) {
-  .part-requests-table :deep(thead) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .part-requests-table :deep(tbody > tr) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-  .part-requests-table :deep(tbody > tr > td) { padding: 12px 16px; }
-  .part-requests-table :deep(tbody > tr > td:nth-child(2)) { grid-column: 1 / -1; grid-row: 2; padding-top: 0; }
-  .part-requests-table :deep(tbody > tr > td:nth-child(4)) { grid-column: 2; grid-row: 1; align-self: center; }
-  .part-requests-table :deep(tbody > tr > td:nth-child(6)) { grid-column: 1 / -1; padding-top: 0; }
-  .part-request-items { min-width: 0; max-width: none; }
-}
-</style>

@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 16:13 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-22 00:27 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/part-request-counts-2111
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,11 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-22 00:27 (UTC+7) | ToanAltF4 | fix/part-request-counts-2111 | Ô đếm trạng thái SM đổi theo mọi thao tác trên hàng (chuẩn bị xong, giao hàng, huỷ), trước chỉ đổi khi lấy mã kho
+- 2026-11-22 00:06 (UTC+7) | ToanAltF4 | fix/console-parts-layout-2111 | BUG 242/243/250/255/258: trang yêu cầu linh kiện SM thành danh sách tóm tắt + khung chi tiết, hiện kho xuất; hoàn trả 3 cột thu gọn; làm mới không nhảy bố cục; xem trước giao hàng thu gọn; sửa test chọn buổi lệch tháng
+- 2026-11-21 23:46 (UTC+7) | ToanAltF4 | fix/booking-ai-visit-2111 | BUG 239-241: đặt nhiều máy từ chat AI có nút chính lưu máy này và sang máy kế tiếp, máy cuối lưu và tiếp tục mà không cần Thêm thiết bị; khách có 1 địa chỉ vẫn mở được Thêm địa chỉ mới ở bước 2
+- 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
+- 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
 - 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
 - 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
@@ -658,8 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-12 19:29 (UTC+7) | Lạc Vỹ | LacVy | Dashboard ưu tiên công việc; hồ sơ đổi điều hướng, báo bản nháp chưa lưu và thu gọn lịch xem trước; chưa xác minh giao diện trình duyệt.
 - 2026-11-12 18:58 (UTC+7) | ToanAltF4 | fix/sheet-trace-1211 | SM 46 mã kho: lỗi vẽ QR không thành báo lỗi, mất phản hồi thì đọc lại trạng thái, có nút sao chép mã; hàng đợi hoàn trả đọc warehouseAllocated từ server, bỏ N+1 warehouse-allocation
 - 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
-- 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
-- 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
-- 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
-- 2026-11-12 00:51 (UTC+7) | ToanAltF4 | perf/web-duplicate-reads | Tối ưu tốc độ: thanh bên của thợ đếm việc đang làm bằng 1 request nhỏ (statuses, pageSize=1) thay vì tải cả danh sách đơn; danh sách hội thoại và số thông báo chưa đọc gộp các lần gọi trùng khi mở trang (coalesce).
-- 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được

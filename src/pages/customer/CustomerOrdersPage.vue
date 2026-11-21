@@ -27,10 +27,14 @@ import {
 } from '../../components';
 import { toast } from 'vue-sonner';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
+import type { BookingDraft } from '../../api/booking-drafts.api';
+import BookingDraftBanner from '../../components/booking/BookingDraftBanner.vue';
+import { discardSavedBookingDraft, fetchCurrentBookingDraft } from '../../utils/booking-draft-summary';
+import { isOrderWorkStopped } from '../../utils/order-work-stopped';
 import { visitGroupsApi, type VisitGroupPageDevice, type VisitGroupPageItem } from '../../api/visit-groups.api';
 import RebookDialog from '../../components/customer/RebookDialog.vue';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
-import type { PageResult } from '../../api/paging';
+import { slicePage, type PageResult } from '../../api/paging';
 import { usePagedList } from '../../composables/usePagedList';
 import { queryKeys } from '../../lib/query-keys';
 import { SEARCH_MAX_LENGTH, useQueryChoice, useQueryPage, useQuerySearch, useQueryState } from '../../composables/useQueryState';
@@ -38,7 +42,7 @@ import { useChatStore } from '../../stores/chat.store';
 import { vnDateString, vnDateTimeString } from '../../utils/vn-time';
 import { formatRating } from '../../utils/formatters';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
-import { ORDER_STATES, REQUEST_STATES, canCancelVisit, pickInitialList, staleWaiting, type OrdersTab } from './customer-orders-filters';
+import { ORDER_STATES, REQUEST_STATES, STOPPED_ORDER_STATES, canCancelVisit, pickInitialList, staleWaiting, type OrdersTab } from './customer-orders-filters';
 import { isArrivedWaiting, isVisitArrived, VISIT_DEVICE_ARRIVED_LABEL, VISIT_GROUP_ARRIVED_LABEL } from '../../utils/visit-arrival';
 
 const PAGE_SIZE = 10;
@@ -60,10 +64,63 @@ const { input: searchQuery, search } = useQuerySearch();
 const emptyPage = <T,>(page: number, pageSize: number): Promise<PageResult<T>> =>
   Promise.resolve({ items: [], total: 0, page, pageSize });
 
+async function collectOrdersByStates(statuses: readonly string[], searchText: string): Promise<ServiceOrderItem[]> {
+  const BATCH_SIZE = 100;
+  const first = await ordersApi.getMyOrdersPage(1, BATCH_SIZE, {
+    statuses,
+    search: searchText,
+    excludeVisitGroups: true,
+  });
+  if (first.total <= first.items.length) return first.items;
+  const totalPages = Math.min(Math.ceil(first.total / BATCH_SIZE), 20);
+  const rest = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, idx) =>
+      ordersApi.getMyOrdersPage(idx + 2, BATCH_SIZE, {
+        statuses,
+        search: searchText,
+        excludeVisitGroups: true,
+      }),
+    ),
+  );
+  return [first.items, ...rest.map((r) => r.items)].flat();
+}
+
+async function fetchInProgressOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
+  const first = await ordersApi.getMyOrdersPage(page, pageSize, {
+    statuses: ORDER_STATES.IN_PROGRESS,
+    search: search.value,
+    excludeVisitGroups: true,
+  });
+  if (page === 1 && first.total <= pageSize) {
+    const items = first.items.filter((order) => !isOrderWorkStopped(order));
+    return { items, total: items.length, page, pageSize };
+  }
+  const all = await collectOrdersByStates(ORDER_STATES.IN_PROGRESS, search.value);
+  return slicePage(all.filter((order) => !isOrderWorkStopped(order)), page, pageSize);
+}
+
+async function fetchCancelledOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
+  const [cancelled, candidates] = await Promise.all([
+    collectOrdersByStates(ORDER_STATES.CANCELLED, search.value),
+    collectOrdersByStates(STOPPED_ORDER_STATES, search.value),
+  ]);
+  const seen = new Set<string>();
+  const combined = [...cancelled, ...candidates.filter((order) => isOrderWorkStopped(order))]
+    .filter((order) => {
+      if (seen.has(order.id)) return false;
+      seen.add(order.id);
+      return true;
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id));
+  return slicePage(combined, page, pageSize);
+}
+
 // One request per page: the server filters by state and searches (order code, service,
-// technician; accents ignored), so pages, totals and the newest-first order are exact
-// (was: every state read separately and merged here, search matching only code and service).
+// technician; accents ignored), while stopped-work orders (`workStopped: true`, which keep
+// `en_route`/`under_repair` on the backend) are moved from IN_PROGRESS into CANCELLED on the UI.
 function fetchOrdersPage(page: number, pageSize: number): Promise<PageResult<ServiceOrderItem>> {
+  if (activeTab.value === 'IN_PROGRESS') return fetchInProgressOrdersPage(page, pageSize);
+  if (activeTab.value === 'CANCELLED') return fetchCancelledOrdersPage(page, pageSize);
   return ordersApi.getMyOrdersPage(page, pageSize, {
     statuses: ORDER_STATES[activeTab.value],
     search: search.value,
@@ -153,12 +210,15 @@ const listView = computed<ListView>(() => {
 const WAITING_REQUEST = new Set(['SUBMITTED', 'MATCHING']);
 const WAITING_VISIT = new Set(['submitted', 'matching']);
 
+// The server counts only requests whose arrival window has not ended yet.
+const stillOpen = (endAt: string | null | undefined) => !endAt || new Date(endAt).getTime() > Date.now();
+
 const pendingRequests = computed(() =>
-  bookings.value.filter((b) => !b.visitGroupId && WAITING_REQUEST.has(String(b.status).toUpperCase()))
+  bookings.value.filter((b) => !b.visitGroupId && WAITING_REQUEST.has(String(b.status).toUpperCase()) && stillOpen(b.preferredEndAt))
 );
 
 const pendingVisits = computed(() =>
-  visitGroups.value.filter((v) => WAITING_VISIT.has(String(v.status).toLowerCase()))
+  visitGroups.value.filter((v) => WAITING_VISIT.has(String(v.status).toLowerCase()) && stillOpen(v.scheduledEndAt))
 );
 
 const totalPendingWaitingCount = computed(() => pendingRequests.value.length + pendingVisits.value.length);
@@ -325,7 +385,30 @@ watch([activeTab, activeListAllCount, listView], () => {
   void nextTick(updateTabIndicator);
 });
 
+const savedBookingDraft = ref<BookingDraft | null>(null);
+const discardingSavedDraft = ref(false);
+
+async function loadSavedDraft() {
+  savedBookingDraft.value = await fetchCurrentBookingDraft();
+}
+
+async function discardSavedDraft() {
+  if (!savedBookingDraft.value || discardingSavedDraft.value) return;
+  discardingSavedDraft.value = true;
+  try {
+    if (await discardSavedBookingDraft()) {
+      savedBookingDraft.value = null;
+      toast.success('Đã huỷ bản nháp.');
+    }
+  } catch {
+    toast.error('Chưa huỷ được bản nháp. Vui lòng thử lại.');
+  } finally {
+    discardingSavedDraft.value = false;
+  }
+}
+
 onMounted(() => {
+  void loadSavedDraft();
   if (filterParam.value === 'pending') {
     activeTab.value = 'IN_PROGRESS';
   }
@@ -371,13 +454,18 @@ const getStatusBadge = (status: string) => {
 };
 
 // An order whose technician stepped off before arriving waits for another one:
-// it is not "on the way" when nobody is assigned.
+// it is not "on the way" when nobody is assigned. Stopped work keeps its
+// historical status on the server, so check `workStopped` / `STOPPED` first.
 const awaitingReplacement = (order: ServiceOrderItem) =>
-  ['ACCEPTED', 'EN_ROUTE'].includes(String(order.status).toUpperCase()) && !order.technician;
+  !isOrderWorkStopped(order)
+  && ['ACCEPTED', 'EN_ROUTE'].includes(String(order.status).toUpperCase())
+  && !order.technician;
 const orderPill = (order: ServiceOrderItem) =>
-  awaitingReplacement(order)
-    ? { status: 'PENDING', label: 'Đang tìm thợ thay thế' }
-    : { status: order.status, label: getStatusBadge(order.status).label };
+  isOrderWorkStopped(order)
+    ? { status: 'CANCELLED', label: 'Đã dừng công việc' }
+    : awaitingReplacement(order)
+      ? { status: 'PENDING', label: 'Đang tìm thợ thay thế' }
+      : { status: order.status, label: getStatusBadge(order.status).label };
 
 async function handleChat(order: ServiceOrderItem, event: Event) {
   event.stopPropagation();
@@ -628,13 +716,22 @@ function cancelStale() {
       </div>
     </header>
 
+    <BookingDraftBanner
+      v-if="savedBookingDraft"
+      class="animate-slide-up-delay-1"
+      :draft="savedBookingDraft"
+      :loading="discardingSavedDraft"
+      @resume="router.push({ path: '/app/bookings/new', query: { resumeDraft: '1' } })"
+      @discard="discardSavedDraft"
+    />
+
     <!-- Pending Visits / Quota Limit Warning Banner -->
     <BookingNoticeBanner
       v-if="totalPendingWaitingCount > 0"
       variant="warning"
       :title="totalPendingWaitingCount >= 2 ? 'Bạn đã đạt giới hạn yêu cầu đang chờ' : 'Bạn có yêu cầu đang chờ kỹ thuật viên nhận'"
       :description="`Bạn đang có ${totalPendingWaitingCount} lượt sửa chữa chờ kỹ thuật viên nhận (${pendingRequests.length} yêu cầu đơn lẻ, ${pendingVisits.length} lượt nhiều thiết bị). Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu để đặt tiếp.`"
-      :primary-cta="{ label: 'Quay lại đặt lịch', to: '/app/bookings/new' }"
+      :primary-cta="totalPendingWaitingCount >= 2 ? undefined : { label: 'Quay lại đặt lịch', to: '/app/bookings/new' }"
       data-testid="orders-pending-waiting-banner"
     >
       <div v-if="listView === 'orders' || (pendingRequests.length > 0 && pendingVisits.length > 0)" class="mt-2.5 flex flex-wrap gap-2">
@@ -1213,6 +1310,7 @@ function cancelStale() {
                         <span class="min-w-0 truncate font-medium text-ink-800">{{ order.technician.fullName }}</span>
                         <span v-if="formatRating(order.technician.averageRating)" class="text-ink-500 whitespace-nowrap font-num">★ {{ formatRating(order.technician.averageRating) }}</span>
                       </template>
+                      <span v-else-if="isOrderWorkStopped(order)" class="text-ink-600">Công việc đã dừng · phân công kỹ thuật viên đã được nhả</span>
                       <span v-else-if="awaitingReplacement(order)" class="text-ink-600">Thợ trước đã rút, FixHome đang tìm thợ khác</span>
                       <span v-else class="text-ink-500">Chưa phân công kỹ thuật viên</span>
                     </div>

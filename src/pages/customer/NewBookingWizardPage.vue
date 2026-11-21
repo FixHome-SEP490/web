@@ -23,7 +23,9 @@ import {
   X,
   Play,
 } from 'lucide-vue-next';
-import { FhButton, FhMoney, FhSkeleton } from '../../components';
+import { FhButton, FhConfirmDialog, FhMoney, FhSkeleton } from '../../components';
+import BookingDraftBanner from '../../components/booking/BookingDraftBanner.vue';
+import { describeBookingDraft, formatDraftExpiry, isBookingDraft } from '../../utils/booking-draft-summary';
 import BookingDeviceDetails from '../../components/booking/BookingDeviceDetails.vue';
 import BookingStepDock from '../../components/booking/BookingStepDock.vue';
 import BookingSummary, { type SummaryDevice } from '../../components/booking/BookingSummary.vue';
@@ -117,6 +119,7 @@ const draftNotice = ref('');
 const draftWarning = ref('');
 const restoredPhotoNotice = ref(false);
 const restoredServerDraft = ref(false);
+const confirmDiscardDraftOpen = ref(false);
 const pendingDraftSubmit = ref<{
   draftId: string;
   expectedVersion: number;
@@ -305,14 +308,18 @@ const currentDeviceUnits = computed(() => {
 const visitDeviceCount = computed(() => extraDevices.value.length
   + (editingSavedDeviceKey.value ? 0 : currentDeviceUnits.value));
 const canAddDevice = computed(() => visitDeviceCount.value < visitDeviceLimit.value);
-// Keep the assistant's queue workflow unchanged; the manual last editor saves
-// and advances in one action, without ever opening another draft beyond the cap.
-const canSaveLastAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+// The last editor saves and advances in one action, without ever opening another
+// draft beyond the cap. BUG 239/240 (21/11/2026): the assistant's devices follow
+// the same rule once none is waiting, and while one is waiting the main action
+// saves this one and opens the next, so "Thêm thiết bị" is only for one more machine.
+const aiNextDeviceName = computed(() => (aiVisitWaiting.value ? aiVisitQueue.value[0]?.nameVi.toLowerCase() ?? '' : ''));
+const canSaveAndNextAi = computed(() => aiVisitWaiting.value && !!selectedServiceId.value && !editingSavedDeviceKey.value);
+const canSaveLastAndContinue = computed(() => !isAiFlow && !aiVisitWaiting.value && visitGrouping.value
   && extraDevices.value.length === visitDeviceLimit.value - 1 && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitSession && visitGrouping.value
+const canSaveAndContinue = computed(() => !isAiFlow && !aiVisitWaiting.value && visitGrouping.value
   && extraDevices.value.length > 0 && extraDevices.value.length < visitDeviceLimit.value
   && !!selectedServiceId.value && !editingSavedDeviceKey.value);
-const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value)
+const canContinueFromStep1 = computed(() => !singleSwitchOpen.value && ((!!editingSavedDeviceKey.value || canSaveAndContinue.value || canSaveAndNextAi.value)
   ? isCatalogV2PreviewReady.value && !loading.value && !uploadingPhoto.value
   : !editingSavedDeviceKey.value && (
   selectedServiceId.value
@@ -1437,14 +1444,6 @@ async function loadAddresses() {
   }
 }
 
-function formatDraftExpiry(expiresAt: string): string {
-  const date = new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return 'ngày hết hạn chưa xác định';
-  return new Intl.DateTimeFormat('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(date);
-}
-
 function hasBookingInput(): boolean {
   return !!(selectedServiceId.value || description.value.trim() || extraDevices.value.length
     || (selectedAddressId.value && selectedAddress.value?.isDefault === false) || customerNote.value.trim() || uploadedPhotos.value.length
@@ -1494,8 +1493,12 @@ async function loadCurrentBookingDraft() {
   try {
     const draft = await bookingDraftsApi.current();
     if (isPageDisposed.value) return;
-    currentBookingDraft.value = draft;
-    draftPromptVisible.value = !!draft;
+    const valid = isBookingDraft(draft) ? draft : null;
+    currentBookingDraft.value = valid;
+    draftPromptVisible.value = !!valid;
+    if (valid && route.query.resumeDraft === '1' && !hasBookingInput()) {
+      await resumeBookingDraft();
+    }
   } catch {
     draftNotice.value = 'Chưa tải được bản nháp đã lưu. Bạn vẫn có thể đặt lịch như bình thường.';
   }
@@ -1532,9 +1535,14 @@ async function saveBookingDraft() {
   }
 }
 
-async function discardBookingDraft() {
+function requestDiscardBookingDraft() {
   if (!currentBookingDraft.value || draftBusy.value || pendingDraftSubmit.value) return;
-  if (!window.confirm('Bỏ bản nháp đã lưu? Thông tin này sẽ không còn dùng để tiếp tục đặt lịch.')) return;
+  confirmDiscardDraftOpen.value = true;
+}
+
+async function discardBookingDraft() {
+  confirmDiscardDraftOpen.value = false;
+  if (!currentBookingDraft.value || draftBusy.value || pendingDraftSubmit.value) return;
   draftBusy.value = true;
   draftNotice.value = '';
   try {
@@ -1543,10 +1551,10 @@ async function discardBookingDraft() {
       currentBookingDraft.value = null;
       draftPromptVisible.value = false;
       restoredServerDraft.value = false;
-      toast.success('Đã bỏ bản nháp.');
+      toast.success('Đã huỷ bản nháp.');
     }
   } catch (error: unknown) {
-    draftNotice.value = userFacingError(error, 'Chưa bỏ được bản nháp. Vui lòng thử lại.');
+    draftNotice.value = userFacingError(error, 'Chưa huỷ được bản nháp. Vui lòng thử lại.');
   } finally {
     draftBusy.value = false;
   }
@@ -2054,7 +2062,7 @@ function toggleSymptom(symptom: string) {
 // ── Moving through the wizard ──────────────────────────────────────────────
 function goToStep2() {
   if (step.value !== 1 || singleSwitchOpen.value || loading.value || uploadingPhoto.value) return;
-  if (editingSavedDeviceKey.value) {
+  if (editingSavedDeviceKey.value || canSaveAndNextAi.value) {
     addAnotherDevice();
     return;
   }
@@ -2569,33 +2577,64 @@ async function createAndFindTech() {
       </div>
     </div>
 
-    <div v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry" class="flex flex-wrap items-center justify-between gap-2 animate-slide-up-delay-1">
-      <p v-if="currentBookingDraft" class="text-xs text-ink-600" data-testid="booking-draft-expiry">
-        Bản nháp hết hạn {{ formatDraftExpiry(currentBookingDraft.expiresAt) }}
-      </p>
-      <span v-else></span>
-      <FhButton
-        variant="ghost"
-        size="sm"
-        :loading="draftBusy"
-        :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
-        data-testid="booking-draft-save"
-        @click="saveBookingDraft"
-      >Lưu bản nháp</FhButton>
+    <div
+      v-if="!isAiFlow && !isFailedRepairEntry && !isInterruptionRebookEntry && !(draftPromptVisible && currentBookingDraft && !restoredServerDraft)"
+      class="animate-slide-up-delay-1"
+    >
+      <div
+        v-if="currentBookingDraft"
+        class="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-ink-200/85 bg-white px-3.5 py-2.5 shadow-2xs"
+      >
+        <p class="inline-flex items-center gap-2 text-xs text-ink-600" data-testid="booking-draft-expiry">
+          <span class="h-2 w-2 rounded-full bg-brand-600 shrink-0" aria-hidden="true" />
+          <span>
+            <span class="font-medium text-ink-800">{{ describeBookingDraft(currentBookingDraft) }}</span>
+            · Hết hạn <span class="font-num">{{ formatDraftExpiry(currentBookingDraft.expiresAt) }}</span>
+          </span>
+        </p>
+        <div class="flex flex-wrap items-center gap-2">
+          <FhButton
+            variant="secondary"
+            size="sm"
+            :loading="draftBusy"
+            :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
+            data-testid="booking-draft-save"
+            @click="saveBookingDraft"
+          >Lưu bản nháp</FhButton>
+          <FhButton
+            variant="ghost"
+            size="sm"
+            class="text-ink-600 hover:bg-danger-50/70 hover:text-danger-700"
+            :disabled="draftBusy || loading || !!pendingDraftSubmit"
+            data-testid="booking-draft-bar-discard"
+            @click="requestDiscardBookingDraft"
+          >Huỷ bản nháp</FhButton>
+        </div>
+      </div>
+      <div v-else class="flex justify-end">
+        <FhButton
+          variant="ghost"
+          size="sm"
+          :loading="draftBusy"
+          :disabled="draftBusy || loading || uploadingPhoto || !!pendingDraftSubmit"
+          data-testid="booking-draft-save"
+          @click="saveBookingDraft"
+        >Lưu bản nháp</FhButton>
+      </div>
     </div>
 
-    <section
+    <BookingDraftBanner
       v-if="draftPromptVisible && currentBookingDraft && !restoredServerDraft"
-      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink-200 bg-white p-3 text-sm"
-      data-testid="booking-draft-prompt"
-      aria-label="Bản nháp đã lưu"
-    >
-      <p class="min-w-0 flex-1 text-ink-700">Bạn có bản nháp đặt lịch còn hạn đến {{ formatDraftExpiry(currentBookingDraft.expiresAt) }}.</p>
-      <div class="flex flex-wrap gap-2">
-        <FhButton variant="secondary" size="sm" :loading="draftBusy" :disabled="draftBusy" data-testid="booking-draft-resume" @click="resumeBookingDraft">Tiếp tục đặt lịch</FhButton>
-        <FhButton variant="ghost" size="sm" :disabled="draftBusy || !!pendingDraftSubmit" data-testid="booking-draft-discard" @click="discardBookingDraft">Bỏ bản nháp</FhButton>
-      </div>
-    </section>
+      class="animate-slide-up-delay-1"
+      :draft="currentBookingDraft"
+      :loading="draftBusy"
+      resume-label="Tiếp tục đặt"
+      test-id="booking-draft-prompt"
+      resume-test-id="booking-draft-resume"
+      discard-test-id="booking-draft-discard"
+      @resume="resumeBookingDraft"
+      @discard="discardBookingDraft"
+    />
     <p v-if="draftWarning" role="status" class="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm text-warning-900" data-testid="booking-draft-warning">{{ draftWarning }}</p>
     <p v-if="restoredPhotoNotice" role="note" class="text-xs text-ink-600" data-testid="booking-draft-photo-note">Ảnh không được khôi phục từ bản nháp. Hãy tải lại ảnh cần thiết trước khi gửi yêu cầu.</p>
     <p v-if="draftNotice" role="status" class="text-sm text-ink-600" data-testid="booking-draft-notice">{{ draftNotice }}</p>
@@ -2649,6 +2688,7 @@ async function createAndFindTech() {
             <textarea
               id="booking-description"
               v-model="description"
+              maxlength="5000"
               rows="3"
               class="w-full rounded-[var(--radius-md)] border border-ink-200 bg-white p-3.5 text-xs leading-relaxed text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-600 focus:outline-none sm:text-sm"
               placeholder="Ví dụ: máy lạnh chảy nước ở dàn lạnh, quạt kêu to và không mát…"
@@ -3096,7 +3136,7 @@ async function createAndFindTech() {
                     {{ editingSavedDeviceKey ? 'Đang sửa thiết bị đã lưu' : `Máy ${extraDevices.length + 1}: ${selectedService?.name || 'Thiết bị đang chọn'}` }}
                   </p>
                   <p class="text-xs text-ink-600">
-                    {{ editingSavedDeviceKey ? 'Cập nhật thông tin bên dưới rồi bấm lưu thay đổi.' : canSaveLastAndContinue ? `Đã đủ ${visitDeviceLimit} máy, lưu để tiếp tục sang bước 2.` : 'Bấm thêm vào lượt để lưu máy này và tiếp tục chọn máy khác.' }}
+                    {{ editingSavedDeviceKey ? 'Cập nhật thông tin bên dưới rồi bấm lưu thay đổi.' : canSaveAndNextAi ? `Lưu máy này để mô tả tiếp ${aiNextDeviceName}.` : canSaveLastAndContinue ? `Đã đủ ${visitDeviceLimit} máy, lưu để tiếp tục sang bước 2.` : 'Bấm thêm vào lượt để lưu máy này và tiếp tục chọn máy khác.' }}
                   </p>
                 </div>
               </div>
@@ -3110,7 +3150,7 @@ async function createAndFindTech() {
                   :data-testid="editingSavedDeviceKey ? 'visit-device-edit-save' : 'visit-add-device-step1'"
                   @click="canSaveLastAndContinue ? goToStep2() : addAnotherDevice()"
                 >
-                  <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveLastAndContinue ? `Lưu máy ${visitDeviceLimit} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
+                  <Plus :size="16" class="mr-1.5" /> {{ editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndNextAi ? `Lưu và mô tả ${aiNextDeviceName}` : canSaveLastAndContinue ? `Lưu máy ${visitDeviceLimit} và tiếp tục` : 'Thêm thiết bị này vào lượt' }}
                 </FhButton>
                 <FhButton
                   v-if="editingSavedDeviceKey"
@@ -3198,6 +3238,7 @@ async function createAndFindTech() {
               <textarea
                 id="booking-description"
                 v-model="description"
+                maxlength="5000"
                 rows="3"
                 class="w-full rounded-xl border border-ink-300 bg-white p-3.5 text-base leading-relaxed text-ink-900 placeholder:text-ink-400 focus:border-brand-600 focus:outline-none sm:text-sm"
                 placeholder="Ví dụ: máy chảy nước ở dàn lạnh, lâu chưa vệ sinh"
@@ -3255,7 +3296,7 @@ async function createAndFindTech() {
           :device-text="deviceSummaryText"
           :price="visitSummaryPrice"
           :devices="visitSummaryDevices"
-          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : aiVisitWaiting && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === visitDeviceLimit ? `Tiếp tục với ${visitDeviceLimit} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
+          :cta-label="visitGrouping && editingSavedDeviceKey ? 'Lưu thay đổi' : canSaveAndContinue ? `Lưu máy ${extraDevices.length + 1} và tiếp tục` : canSaveAndNextAi ? `Lưu máy ${extraDevices.length + 1}, sang ${aiNextDeviceName}` : visitGrouping && extraDevices.length && selectedServiceId ? `Lưu máy ${extraDevices.length + 1} trước khi tiếp tục` : visitGrouping && extraDevices.length && !selectedServiceId ? (extraDevices.length === visitDeviceLimit ? `Tiếp tục với ${visitDeviceLimit} thiết bị` : `Tiếp tục với ${extraDevices.length} thiết bị đã lưu`) : visitGrouping && selectedServiceId ? `Tiếp tục với ${visitDeviceCount} thiết bị` : 'Tiếp tục'"
           cta-testid="step1-next"
           :cta-disabled="!canContinueFromStep1"
           @next="goToStep2"
@@ -3290,8 +3331,8 @@ async function createAndFindTech() {
                   </p>
                   <p class="truncate text-sm text-ink-600">{{ selectedAddress ? addressLine(selectedAddress) : 'Vui lòng chọn địa chỉ' }}</p>
                 </div>
-                <button v-if="addresses.length > 1" type="button" class="min-h-11 px-1 text-sm font-semibold text-brand-700 hover:underline" :aria-expanded="isAddressDropdownOpen" @click="toggleAddressDropdown">
-                  {{ isAddressDropdownOpen ? 'Đóng' : 'Đổi' }}
+                <button type="button" class="min-h-11 px-1 text-sm font-semibold text-brand-700 hover:underline" data-testid="booking-address-toggle" :aria-expanded="isAddressDropdownOpen" @click="toggleAddressDropdown">
+                  {{ isAddressDropdownOpen ? 'Đóng' : addresses.length > 1 ? 'Đổi' : 'Đổi hoặc thêm' }}
                 </button>
               </div>
               <div v-if="isAddressDropdownOpen" class="space-y-1.5 rounded-xl border border-ink-200 p-2" role="listbox" aria-label="Sổ địa chỉ">
@@ -3804,6 +3845,17 @@ async function createAndFindTech() {
       :category-name="detailsCategoryName"
       @close="closeServiceDetails"
       @confirm="chooseServiceFromDetails"
+    />
+    <FhConfirmDialog
+      :open="confirmDiscardDraftOpen"
+      :loading="draftBusy"
+      :danger="true"
+      title="Huỷ bản nháp đặt lịch?"
+      consequence="Thông tin đã lưu trong bản nháp sẽ bị xoá và không thể khôi phục."
+      confirm-text="Huỷ bản nháp"
+      cancel-text="Giữ lại"
+      @confirm="discardBookingDraft"
+      @cancel="confirmDiscardDraftOpen = false"
     />
   </div>
 </template>

@@ -212,6 +212,7 @@ async function handleSend() {
   if (!text || sending.value || !canSend.value) return;
 
   sending.value = true;
+  attachError.value = '';
   messageInput.value = '';
   try {
     await chatStore.sendMessage(text);
@@ -219,6 +220,7 @@ async function handleSend() {
   } catch (err) {
     console.error('Failed to send message:', err);
     messageInput.value = text; // restore on error
+    attachError.value = 'Chưa gửi được tin nhắn. Vui lòng thử lại.';
   } finally {
     sending.value = false;
   }
@@ -498,6 +500,7 @@ function handleHeaderClick() {
             <textarea
               v-model="messageInput"
               rows="1"
+              maxlength="2000"
               placeholder="Nhập tin nhắn... (Enter để gửi)"
               class="flex-1 min-w-0 bg-transparent border-none outline-none px-1.5 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 resize-none max-h-24"
               :disabled="sending"

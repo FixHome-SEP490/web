@@ -887,7 +887,7 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     let eligible = false;
     mockGet.mockImplementation(async (path: string) => {
       if (path === '/service-orders/job-test-101') return { data: { data: activeOrder } };
-      if (path === '/service-orders/job-test-101/overrun-release') return { data: { data: { eligible, currentOrderCode: 'SO-099', block: eligible ? null : 'NO_CURRENT_JOB' } } };
+      if (path === '/service-orders/job-test-101/overrun-release') return { data: { data: { eligible, currentOrderCode: 'SO-099', currentOrderId: 'order-current', block: eligible ? null : 'NO_CURRENT_JOB' } } };
       if (path === '/service-orders/job-test-101/cash-settlement') return { data: { data: null } };
       if (path === '/bookings/booking-101') return { data: { data: { id: 'booking-101', media: [] } } };
       return { data: { data: [] } };
@@ -909,9 +909,28 @@ describe('Technician Order Receiving & Execution Workspace', () => {
     await wrapper.get('[data-testid="overrun-release-menu"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[data-testid="overrun-release-dialog"]').text()).toContain('Không trừ điểm uy tín');
+    // Nothing filled in: the server would refuse, so nothing is sent.
     await wrapper.get('[data-testid="overrun-release-confirm"]').trigger('click');
     await flushPromises();
-    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/overrun-release');
+    expect(mockPost.mock.calls.some(([path]) => String(path).endsWith('/overrun-release'))).toBe(false);
+    expect(wrapper.get('[data-testid="overrun-release-dialog"]').text()).toContain('Chọn lý do');
+
+    // The report the server needs (DelayReportDto): reason, 10+ characters, a photo of the current job, confirmation.
+    mockPost.mockImplementation(async (path: string) => path === '/service-orders/order-current/evidence'
+      ? { data: { data: { id: 'ev-1' } } } : { data: { data: {} } });
+    await wrapper.get('[data-testid="overrun-reason-code"]').setValue('repair_longer');
+    await wrapper.get('[data-testid="overrun-reason"]').setValue('Máy lạnh đơn trước cần thay thêm tụ');
+    const photo = new File(['x'], 'job.jpg', { type: 'image/jpeg' });
+    const input = wrapper.get('[data-testid="overrun-photos"]');
+    Object.defineProperty(input.element, 'files', { value: [photo] });
+    await input.trigger('change');
+    await wrapper.get('[data-testid="overrun-confirm"]').setValue(true);
+    await wrapper.get('[data-testid="overrun-release-confirm"]').trigger('click');
+    await flushPromises();
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/order-current/evidence', expect.any(FormData), expect.anything());
+    expect(mockPost).toHaveBeenCalledWith('/service-orders/job-test-101/overrun-release', {
+      reasonCode: 'repair_longer', reason: 'Máy lạnh đơn trước cần thay thêm tụ', evidenceIds: ['ev-1'], confirm: true,
+    });
     expect(mockPost.mock.calls.some(([path]) => String(path).endsWith('/cancel'))).toBe(false);
     wrapper.unmount();
   });

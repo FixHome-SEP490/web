@@ -338,6 +338,11 @@ async function handleCreateTechnician() {
     createTechError.value = 'Nhập họ tên và email.';
     return;
   }
+  const nameLength = createTechForm.value.fullName.trim().length;
+  if (nameLength < 2 || nameLength > 200) {
+    createTechError.value = 'Họ tên từ 2 đến 200 ký tự.';
+    return;
+  }
   const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '').replace(/^\+84/, '0');
   if (phone && !/^0[35789]\d{8}$/.test(phone)) {
     createTechError.value = 'Số điện thoại phải là số di động Việt Nam 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09.';
@@ -575,7 +580,7 @@ async function handleCreateTechnician() {
             <form class="space-y-3" @submit.prevent="handleCreateTechnician">
               <label :class="consoleLabel">
                 Họ và tên
-                <input v-model="createTechForm.fullName" type="text" autocomplete="name" :class="consoleField" class="h-10" />
+                <input v-model="createTechForm.fullName" type="text" maxlength="200" autocomplete="name" :class="consoleField" class="h-10" />
               </label>
               <label :class="consoleLabel">
                 Email đăng nhập
