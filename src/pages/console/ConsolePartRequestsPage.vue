@@ -64,6 +64,8 @@ const allocationErrors = ref<Record<string, string>>({});
 const warehouseTokens = ref<Record<string, { pickup: string | null; receipt: string | null }>>({});
 const warehouseQrImages = ref<Record<string, { pickup: string; receipt: string }>>({});
 const handoverTarget = ref<PartRequest | null>(null);
+const receiptModalId = ref<string | null>(null);
+const receiptModalRequest = computed(() => requests.value.find((row) => row.id === receiptModalId.value) ?? null);
 
 // Thợ đã khai trả, quản lý nhận ở trang Hoàn trả linh kiện (BUG DETECTOR 10); ở đây chỉ nhắc số dòng đang chờ.
 const returnsWaiting = ref<number | null>(null);
@@ -195,6 +197,7 @@ async function loadWarehouseAllocations(rows: PartRequest[], version: number) {
 const allocationFor = (request: PartRequest) => allocations.value[request.id] ?? null;
 const allocationOwnerMismatch = (allocation: WarehouseAllocation) => canOperate.value && !!allocation.responsibleUserId && allocation.responsibleUserId !== auth.user?.id;
 // A closed request (cancelled, completed) or a warranty one has no warehouse code to prepare or reissue: the server refuses it.
+const canHandOver = (request: PartRequest) => canPreparePickupQr(request) && warehouseQrAction(allocationFor(request)!.status) === 'prepare';
 const canPreparePickupQr = (request: PartRequest) => {
   const allocation = allocationFor(request);
   return canOperate.value && warehouseQrOpen(request.status, request.requestType) && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
@@ -259,11 +262,12 @@ async function prepareWarehouseQr(request: PartRequest) {
     showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
     return;
   }
+  // The pickup code is only passed on to the handover; only the technician's receipt code is drawn.
+  if (!receipt) return;
   try {
-    const image = await QRCode.toDataURL(result.qrToken, { width: 220 });
-    warehouseQrImages.value[request.id] = receipt ? { pickup: '', receipt: image } : { pickup: image, receipt: '' };
+    warehouseQrImages.value[request.id] = { pickup: '', receipt: await QRCode.toDataURL(result.qrToken, { width: 220 }) };
   } catch {
-    // The code is shown as text with a copy button under the box either way.
+    // The code is shown as text with a copy button either way.
   }
 }
 
@@ -318,6 +322,21 @@ async function confirmPhysicalHandover(request: PartRequest) {
     // The code is shown as text under the box either way; the technician can type it.
     warehouseQrImages.value[request.id] = { pickup: '', receipt: '' };
   }
+}
+
+/** One step for the manager: make the pickup code, hand over with it, then show the technician's receipt QR. The pickup code never leaves this function. */
+async function handOverToTechnician(request: PartRequest) {
+  if (actionLoading.value) return;
+  await prepareWarehouseQr(request);
+  if (!warehouseTokens.value[request.id]?.pickup) { handoverTarget.value = null; return; }
+  await confirmPhysicalHandover(request);
+  if (allocationFor(request)?.status === 'handed_over' && warehouseTokens.value[request.id]?.receipt) receiptModalId.value = request.id;
+}
+
+/** The receipt code is shown once by the server: reopen it from this session, or issue a new one when the page was reloaded. */
+async function openReceiptCode(request: PartRequest) {
+  if (!warehouseTokens.value[request.id]?.receipt) await prepareWarehouseQr(request);
+  if (warehouseTokens.value[request.id]?.receipt) receiptModalId.value = request.id;
 }
 
 onMounted(() => {
@@ -662,19 +681,19 @@ const getUsageBadgeClass = (status: string) => {
         <template #cell-actions="{ row }">
           <div class="flex items-center justify-end gap-2">
             <FhButton
-              v-if="warehouseTokens[row.id]?.pickup && canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))"
+              v-if="canHandOver(row)"
               variant="primary"
               size="sm"
               :disabled="actionLoading"
               @click="handoverTarget = row"
-            >Xác nhận đã giao trực tiếp</FhButton>
+            >Đã giao cho thợ</FhButton>
             <FhButton
               v-else-if="canPreparePickupQr(row)"
               variant="primary"
               size="sm"
               :disabled="actionLoading"
-              @click="prepareWarehouseQr(row)"
-            >{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
+              @click="openReceiptCode(row)"
+            >Mã nhận hàng</FhButton>
             <FhButton
               v-else-if="!canPreparePickupQr(row) && canOperate && row.status.toLowerCase() === 'requested' && !isW3Delivery(row) && (row.fulfillmentMethod === 'delivery' || canMarkLegacyPickupReady(row))"
               variant="primary"
@@ -734,20 +753,11 @@ const getUsageBadgeClass = (status: string) => {
           <p v-if="allocationFor(row)?.status === 'stock_unavailable'" class="text-sm text-warning-800">Không có kho FixHome nào đủ toàn bộ linh kiện yêu cầu. Không giữ tồn hoặc tạo QR; thợ tự chuẩn bị theo nguồn linh kiện của mình.</p>
           <p v-if="allocationOwnerMismatch(allocationFor(row)!)" class="text-sm text-warning-800">Kho này do quản lý khác phụ trách. Chuyển cho đúng quản lý để tiếp tục.</p>
 
-          <FhButton v-if="canPreparePickupQr(row)" variant="primary" size="sm" :disabled="actionLoading" @click="prepareWarehouseQr(row)">{{ allocationFor(row)?.status === 'handed_over' ? 'Cấp lại mã nhận' : 'Chuẩn bị mã kho' }}</FhButton>
-          <div v-if="warehouseTokens[row.id]?.pickup && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-brand-200 bg-brand-50/70 p-3">
-            <img v-if="warehouseQrImages[row.id]?.pickup" :src="warehouseQrImages[row.id]?.pickup" alt="QR lấy hàng dùng một lần" class="h-36 w-36 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-1" />
-            <div class="min-w-0 flex-1 space-y-2"><p class="text-sm font-semibold text-ink-900">Mã lấy hàng một lần · hết hạn trong 15 phút</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.pickup }}</p><div class="flex flex-wrap gap-2"><FhButton variant="secondary" size="sm" data-testid="copy-pickup-code" @click="copyToken(warehouseTokens[row.id]?.pickup ?? '')">{{ copiedInline === warehouseTokens[row.id]?.pickup ? 'Đã chép mã' : 'Sao chép mã' }}</FhButton><FhButton v-if="canConfirmWarehouseHandover(auth.userRole, auth.user?.id, allocationFor(row))" variant="primary" size="sm" :disabled="actionLoading" @click="handoverTarget = row">Xác nhận đã giao trực tiếp</FhButton></div></div>
-          </div>
-          <div v-if="warehouseTokens[row.id]?.receipt && canOperate && allocationFor(row)?.responsibleUserId === auth.user?.id" class="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-success-200 bg-success-50/70 p-3">
-            <img v-if="warehouseQrImages[row.id]?.receipt" :src="warehouseQrImages[row.id]?.receipt" alt="QR xác nhận nhận hàng riêng cho kỹ thuật viên" class="h-36 w-36 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-1" />
-            <div class="min-w-0 flex-1 space-y-1.5"><p class="text-sm font-semibold text-success-800">Đưa mã nhận hàng riêng này cho kỹ thuật viên (hiệu lực 48 giờ).</p><p class="break-all font-num text-xs text-ink-700">{{ warehouseTokens[row.id]?.receipt }}</p><FhButton variant="secondary" size="sm" data-testid="copy-receipt-code" @click="copyToken(warehouseTokens[row.id]?.receipt ?? '')">{{ copiedInline === warehouseTokens[row.id]?.receipt ? 'Đã chép mã' : 'Sao chép mã' }}</FhButton></div>
-          </div>
         </template>
       </section>
 
       <!-- BUG DETECTOR 83: a handover is not a deletion; plain colours and what exactly is handed over. -->
-      <FhConfirmDialog :open="Boolean(handoverTarget)" :danger="false" title="Xác nhận đã giao linh kiện cho kỹ thuật viên?" consequence="Chỉ bấm khi kỹ thuật viên đã cầm đủ các linh kiện dưới đây. Kho sẽ trừ tồn và tạo mã nhận hàng cho kỹ thuật viên." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && confirmPhysicalHandover(handoverTarget)" @cancel="handoverTarget = null">
+      <FhConfirmDialog :open="Boolean(handoverTarget)" :danger="false" title="Xác nhận đã giao linh kiện cho kỹ thuật viên?" consequence="Chỉ bấm khi kỹ thuật viên đã cầm đủ các linh kiện dưới đây. Kho sẽ trừ tồn và hiện mã nhận hàng để kỹ thuật viên quét." confirm-text="Đã giao thực tế" :loading="actionLoading" @confirm="handoverTarget && handOverToTechnician(handoverTarget)" @cancel="handoverTarget = null">
         <dl v-if="handoverTarget" class="space-y-1 text-sm text-ink-800" data-testid="handover-summary">
           <div><dt class="inline text-ink-600">Yêu cầu: </dt><dd class="inline font-num font-medium">{{ requestCode(handoverTarget) }}</dd></div>
           <div v-if="allocationFor(handoverTarget)?.warehouseName"><dt class="inline text-ink-600">Kho: </dt><dd class="inline">{{ allocationFor(handoverTarget)?.warehouseName }}</dd></div>
@@ -818,6 +828,43 @@ const getUsageBadgeClass = (status: string) => {
           <div class="flex justify-end gap-2 border-t border-ink-100 pt-3">
             <FhButton v-if="canOperate" variant="secondary" size="sm" :disabled="actionLoading" @click="regenerateQr">Tạo lại mã</FhButton>
             <FhButton variant="primary" size="sm" @click="qrModalRequest = null">Đóng</FhButton>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Receipt QR: what the technician scans to confirm receiving the parts handed over at the warehouse -->
+    <Transition name="fh-modal">
+      <div
+        v-if="receiptModalRequest"
+        class="fixed inset-0 z-50 bg-ink-950/50 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receipt-title"
+        data-testid="receipt-modal"
+        @click.self="receiptModalId = null"
+        @keydown.esc="receiptModalId = null"
+      >
+        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 shadow-(--shadow-e3) max-w-md w-full p-6 space-y-4">
+          <div class="flex items-start justify-between gap-3 border-b border-ink-100 pb-3">
+            <div>
+              <h3 id="receipt-title" class="text-base font-semibold text-ink-900">Mã nhận hàng cho kỹ thuật viên</h3>
+              <p class="font-num text-sm text-ink-500">{{ requestCode(receiptModalRequest) }}</p>
+            </div>
+            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="receiptModalId = null">
+              <X :size="18" aria-hidden="true" />
+            </button>
+          </div>
+          <div class="flex flex-col items-center gap-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/70 p-4">
+            <img v-if="warehouseQrImages[receiptModalRequest.id]?.receipt" :src="warehouseQrImages[receiptModalRequest.id]?.receipt" alt="QR nhận hàng cho kỹ thuật viên" class="h-48 w-48 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-2" />
+            <div class="flex w-full items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-ink-200 bg-white p-2">
+              <span class="truncate select-all font-num text-sm font-semibold text-ink-900">{{ warehouseTokens[receiptModalRequest.id]?.receipt }}</span>
+              <FhButton variant="secondary" size="sm" data-testid="copy-receipt-code" @click="copyToken(warehouseTokens[receiptModalRequest.id]?.receipt ?? '')">{{ copiedInline === warehouseTokens[receiptModalRequest.id]?.receipt ? 'Đã chép' : 'Sao chép' }}</FhButton>
+            </div>
+          </div>
+          <p class="text-sm text-ink-600 text-pretty">Kỹ thuật viên quét mã hoặc nhập mã này ở đơn sửa chữa để xác nhận đã nhận linh kiện. Mã có hiệu lực 48 giờ.</p>
+          <div class="flex justify-end border-t border-ink-100 pt-3">
+            <FhButton variant="primary" size="sm" @click="receiptModalId = null">Xong</FhButton>
           </div>
         </div>
       </div>
