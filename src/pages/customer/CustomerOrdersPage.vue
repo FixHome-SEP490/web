@@ -153,12 +153,15 @@ const listView = computed<ListView>(() => {
 const WAITING_REQUEST = new Set(['SUBMITTED', 'MATCHING']);
 const WAITING_VISIT = new Set(['submitted', 'matching']);
 
+// The server counts only requests whose arrival window has not ended yet.
+const stillOpen = (endAt: string | null | undefined) => !endAt || new Date(endAt).getTime() > Date.now();
+
 const pendingRequests = computed(() =>
-  bookings.value.filter((b) => !b.visitGroupId && WAITING_REQUEST.has(String(b.status).toUpperCase()))
+  bookings.value.filter((b) => !b.visitGroupId && WAITING_REQUEST.has(String(b.status).toUpperCase()) && stillOpen(b.preferredEndAt))
 );
 
 const pendingVisits = computed(() =>
-  visitGroups.value.filter((v) => WAITING_VISIT.has(String(v.status).toLowerCase()))
+  visitGroups.value.filter((v) => WAITING_VISIT.has(String(v.status).toLowerCase()) && stillOpen(v.scheduledEndAt))
 );
 
 const totalPendingWaitingCount = computed(() => pendingRequests.value.length + pendingVisits.value.length);
@@ -634,7 +637,7 @@ function cancelStale() {
       variant="warning"
       :title="totalPendingWaitingCount >= 2 ? 'Bạn đã đạt giới hạn yêu cầu đang chờ' : 'Bạn có yêu cầu đang chờ kỹ thuật viên nhận'"
       :description="`Bạn đang có ${totalPendingWaitingCount} lượt sửa chữa chờ kỹ thuật viên nhận (${pendingRequests.length} yêu cầu đơn lẻ, ${pendingVisits.length} lượt nhiều thiết bị). Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu để đặt tiếp.`"
-      :primary-cta="{ label: 'Quay lại đặt lịch', to: '/app/bookings/new' }"
+      :primary-cta="totalPendingWaitingCount >= 2 ? undefined : { label: 'Quay lại đặt lịch', to: '/app/bookings/new' }"
       data-testid="orders-pending-waiting-banner"
     >
       <div v-if="listView === 'orders' || (pendingRequests.length > 0 && pendingVisits.length > 0)" class="mt-2.5 flex flex-wrap gap-2">

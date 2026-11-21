@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { tidyAddressText } from '../../utils/address-text';
 import { addressFieldError, normalizeAddressText } from '../../utils/address-input';
+import { containsUnsafeText } from '../../utils/input-validation';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
@@ -270,6 +271,15 @@ const handleAddTimeOff = async () => {
   }
   if (newTimeOff.value.startDate > newTimeOff.value.endDate) {
     showFeedback('Ngày kết thúc phải từ ngày bắt đầu trở đi.', 'error');
+    return;
+  }
+  const offReason = (newTimeOff.value.reason ?? '').trim();
+  if (offReason.length > 500) {
+    showFeedback('Lý do tối đa 500 ký tự.', 'error');
+    return;
+  }
+  if (offReason && containsUnsafeText(offReason)) {
+    showFeedback('Lý do chứa ký tự không hợp lệ, vui lòng gõ lại.', 'error');
     return;
   }
   savingTimeOff.value = true;
@@ -1459,6 +1469,7 @@ const openAvatarModal = () => {
                 id="tp-off-reason"
                 v-model="newTimeOff.reason"
                 type="text"
+                maxlength="500"
                 placeholder="VD: Việc gia đình"
                 class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"
               />
