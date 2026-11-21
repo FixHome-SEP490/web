@@ -168,6 +168,28 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
     wrapper.unmount();
   });
 
+  it('checks the personal form against the server rules before sending', async () => {
+    const wrapper = await mountPage();
+    await wrapper.get('#tp-bio').setValue('x'.repeat(2001));
+    await buttonsWith(wrapper, 'Lưu thay đổi')[0].trigger('click');
+    await flushPromises();
+    expect(technicianProfileApi.updateMyProfile).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Giới thiệu tối đa 2000 ký tự.');
+    wrapper.unmount();
+  });
+
+  it('saves a warranty of 0 days as 0, not as "not set"', async () => {
+    technicianProfileApi.setSkillPricing.mockResolvedValue({ ...OFFERING });
+    const wrapper = await mountPage();
+    await wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Dịch vụ và giá công'))!.trigger('click');
+    const warranty = wrapper.find('#tp-warranty-s-1');
+    await warranty.setValue('0');
+    await buttonsWith(wrapper, 'Lưu')[0].trigger('click');
+    await flushPromises();
+    expect(technicianProfileApi.setSkillPricing).toHaveBeenCalledWith('s-1', expect.objectContaining({ typicalWarrantyDays: 0 }));
+    wrapper.unmount();
+  });
+
   it('does not discard a personal draft when saving the weekly schedule', async () => {
     const wrapper = await mountPage();
     await wrapper.get('#tp-bio').setValue('Bản nháp cần giữ lại');

@@ -131,7 +131,7 @@ describe('T2 prefilled rebook metadata', () => {
     { confirmationPath: 'https://example.test/interruption-rebook' },
     { confirmationPath: `/api/v1/bookings/${orderId}/interruption-rebook` },
     { targetKind: 'visit_group' },
-    { sourceCount: 0 }, { sourceCount: 4 }, { sourceCount: 1.5 }, { sourceCount: '1' },
+    { sourceCount: 0 }, { sourceCount: 6 }, { sourceCount: 1.5 }, { sourceCount: '1' },
     { draftPath: undefined }, { confirmationPath: undefined }, { targetKind: undefined }, { sourceCount: undefined },
   ])('fails closed on malformed or foreign T2 metadata %j', async patch => {
     get.mockResolvedValue(envelope(t2(patch)));

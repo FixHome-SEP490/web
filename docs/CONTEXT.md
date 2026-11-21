@@ -623,7 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
-- 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; thêm BookingDraftBanner.vue & giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
+- 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
 - 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
 - 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
@@ -662,4 +662,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-12 17:15 (UTC+7) | ToanAltF4 | fix/f3-parts-sourcing | F3: ghi chú vàng 'Linh kiện chưa có nguồn cấp' cho khách (khoá Duyệt báo giá, Kiểm tra lại kho) và thợ (hướng dẫn gửi lại báo giá); xử lý 409 PARTS_SOURCE_UNAVAILABLE
 - 2026-11-12 13:40 (UTC+7) | ToanAltF4 | fix/ai-booking-description-1211 | Bước Xác nhận của form đặt qua AI hiện mô tả sẽ gửi (đã bỏ câu sai rồi), không phải câu gõ ở bước 1
 - 2026-11-12 12:38 (UTC+7) | ToanAltF4 | perf/order-detail-parallel | Trang chi tiết đơn khách gọi các API cùng lúc; trang bảo hành khách đọc GET /warranties/mine một lần (lỗi thì đọc từng đơn như cũ); trang yêu cầu linh kiện SM đọc GET /part-returns/by-orders một lần cho cả trang
-- 2026-11-12 02:52 (UTC+7) | ToanAltF4 | fix/warehouse-qr-closed-request | Sửa BUG 94: phiếu linh kiện đã huỷ, đã hoàn tất hoặc phiếu bảo hành không còn hiện nút Chuẩn bị mã kho / Cấp lại mã nhận (backend vốn từ chối 409).
