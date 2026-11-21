@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { Eye, EyeOff, CheckCircle2, Circle, User, Wrench, ShieldCheck } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import { userFacingError } from '../../utils/user-facing-error';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 import {
   extractApiErrorMessage,
@@ -127,6 +128,8 @@ const handleRegister = async () => {
       err,
       'Đăng ký tài khoản thất bại. Email hoặc Số điện thoại có thể đã tồn tại.',
     );
+    // Lỗi từ máy chủ (email/SĐT đã đăng ký…) trước đây chỉ gán vào biến mà không hiện ra.
+    toast.error(userFacingError(err, errorMessage.value));
   }
   finally {
     setTimeout(() => {
