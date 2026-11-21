@@ -219,6 +219,9 @@ describe('customer visit page', () => {
       return new Promise((_resolve, fail) => { reject = fail; });
     });
     let w = await mountPage(true);
+    // The voucher sheet starts closed (BUG DETECTOR 207): open it the way the customer does.
+    await w.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
     await w.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
     await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
@@ -256,7 +259,8 @@ describe('customer visit page', () => {
     await flushPromises();
     freshPreview.mockRejectedValue({ response: { status: 409 } });
     await checkBlocked();
-    await w.get('[data-testid="voucher-selection-close"]').trigger('click');
+    // After a remount the sheet stays closed (BUG DETECTOR 207); nothing to close then.
+    if (w.find('[data-testid="voucher-selection-sheet"]').exists()) await w.get('[data-testid="voucher-selection-close"]').trigger('click');
     await checkBlocked();
     w.unmount();
     w = await mountPage(true);
