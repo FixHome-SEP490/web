@@ -222,13 +222,6 @@ async function refreshRequestRow(requestId: string) {
     if (version !== loadVersion) return;
     const current = requests.value.find((row) => row.id === requestId);
     if (!current) return;
-    // The summary cards come from the list call; move this row between them so they match the table.
-    const from = current.status.toLowerCase();
-    const to = String(fresh.status ?? current.status).toLowerCase();
-    const counts = serverStatusCounts.value;
-    if (counts && from !== to) {
-      serverStatusCounts.value = { ...counts, [from]: Math.max(0, (counts[from] ?? 0) - 1), [to]: (counts[to] ?? 0) + 1 };
-    }
     replaceRow({ ...current, ...fresh, warehouseAllocation: fresh.warehouseAllocation ?? current.warehouseAllocation });
   } catch {
     // The command itself succeeded; the next list load shows the status.
@@ -371,7 +364,16 @@ const stats = computed(() => {
 
 const replaceRow = (updated: PartRequest) => {
   const idx = requests.value.findIndex((r) => r.id === updated.id);
-  if (idx !== -1) requests.value[idx] = updated;
+  if (idx === -1) return;
+  // BUG DETECTOR 212: the summary cards come from the list call; every status change on screen
+  // (ready, delivering, cancel, handover) moves the row between them so they match the list.
+  const from = requests.value[idx].status.toLowerCase();
+  const to = String(updated.status ?? requests.value[idx].status).toLowerCase();
+  const counts = serverStatusCounts.value;
+  if (counts && from !== to) {
+    serverStatusCounts.value = { ...counts, [from]: Math.max(0, (counts[from] ?? 0) - 1), [to]: (counts[to] ?? 0) + 1 };
+  }
+  requests.value[idx] = updated;
 };
 
 const handleMarkReady = async (req: PartRequest) => {
