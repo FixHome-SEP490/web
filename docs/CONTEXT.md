@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 14:46 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/sm-part-stats-2111
+> Cập nhật lần cuối: 2026-11-21 15:10 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
 - 2026-11-21 14:46 (UTC+7) | ToanAltF4 | fix/sm-part-stats-2111 | SM yêu cầu linh kiện: ô đếm trạng thái đổi theo dòng sau Chuẩn bị mã kho (BUG DETECTOR 212)
 - 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
 - 2026-11-21 04:13 (UTC+7) | ToanAltF4 | fix/web-retest-2111d | Console Huỷ đơn: lý do hệ thống ghi tiếng Anh (khách từ chối báo giá) hiện tiếng Việt
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-11 21:59 (UTC+7) | ToanAltF4 | fix/legacy-review-warranty | Khối Linh kiện lịch sử cần xác minh đọc được dòng phiếu bảo hành (BUG 92), trước đó cả khối báo Chưa tải được
 - 2026-11-11 21:38 (UTC+7) | ToanAltF4 | fix/warehouse-status-label | Nhãn trạng thái kho đang hoạt động hiện Đang hoạt động thay vì Thành công (BUG 91); test chặn truyền chữ vào giữa thẻ FhStatusPill
 - 2026-11-11 21:20 (UTC+7) | ToanAltF4 | fix/warehouse-log-w2-kinds | Nhật ký kho đọc được dòng W2 (giữ/nhả/xuất/hoàn, người thao tác có thể trống); bản #234 hiện Chưa tải được vì hàm chuẩn hoá chỉ nhận nhập kho/điều chỉnh
-- 2026-11-11 19:32 (UTC+7) | ToanAltF4 | fix/bug-detector-1111-web | Sửa BUG DETECTOR 67 (đăng nhập không đi theo redirect của vai trò khác), 78 (đổi kho nhanh không ghi đè tồn), 79 (thử lại điều chỉnh tồn theo đúng kho), 80 (nhãn nhật ký kho W2), 83 (popup bàn giao rõ nội dung), 84 (đọc lại trạng thái khi bàn giao lỗi), 85 (bàn giao xong không báo lỗi vì QR), 89 (thống kê trạng thái từ server), 90 (dùng phân kho gửi kèm, bỏ N request)

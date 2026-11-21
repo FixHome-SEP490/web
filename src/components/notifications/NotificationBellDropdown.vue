@@ -148,6 +148,10 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/console/warranty');
       return;
     }
+    if (itemType === 'OFFICE_VISIT_BOOKED') {
+      router.push('/console/office-visits');
+      return;
+    }
     if (itemType.startsWith('CHECKIN_FACE_')) {
       router.push('/console/checkin-faces');
       return;

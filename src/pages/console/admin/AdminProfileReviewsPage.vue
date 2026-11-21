@@ -176,6 +176,9 @@ const markMissed = () =>
 const resetMissed = () =>
   detail.value && act(() => adminOfficeVisitsApi.resetMissed(detail.value!.technicianId), 'Đã cho phép thợ đặt lại lịch.', 'Chưa cho phép đặt lại được.');
 
+const reopen = () =>
+  detail.value && act(() => adminOfficeVisitsApi.reopenReview(detail.value!.technicianId), 'Đã mở lại hồ sơ, thợ đặt lịch gặp lại.', 'Chưa mở lại được hồ sơ.');
+
 const approve = async () => {
   if (!detail.value || busy.value) return;
   const technicianId = detail.value.technicianId;
@@ -534,6 +537,7 @@ const confirmReject = async () => {
               <span v-else />
               <div class="flex flex-wrap justify-end gap-2">
                 <FhButton variant="secondary" size="sm" @click="closeDetail">Đóng</FhButton>
+                <FhButton v-if="detail.stage === 'profile_rejected'" variant="secondary" size="sm" :disabled="busy" @click="reopen">Mở lại hồ sơ</FhButton>
                 <FhButton variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
                 <FhButton variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
               </div>
