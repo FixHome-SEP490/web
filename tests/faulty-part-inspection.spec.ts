@@ -5,7 +5,7 @@ enableAutoUnmount(afterEach);
 const { api, auth } = vi.hoisted(() => ({
   api: {
     getAll: vi.fn(), getWarehouseTasks: vi.fn(), getWarehouseAllocation: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getReturnsByOrderId: vi.fn(),
-    markReady: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(), getById: vi.fn(),
+    markReady: vi.fn(), markDelivering: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(), getById: vi.fn(),
   },
   auth: { hasRole: vi.fn(() => true), user: { id: 'sm-1' }, userRole: 'SERVICE_MANAGER' },
 }));
@@ -159,6 +159,27 @@ describe('faulty part inspection on the manager page', () => {
     expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị8');
     expect(card('Sẵn sàng')).toBe('Sẵn sàng1');
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+    draw.mockRestore();
+  });
+
+  it('moves the summary cards when a delivery request is marked ready and then delivering', async () => {
+    const request = { ...warranty({ id: 'pr-ship', requestType: 'pre_repair' }), fulfillmentMethod: 'delivery', status: 'requested' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 3, statusCounts: { requested: 3, ready: 0, delivering: 0 } });
+    api.markReady.mockResolvedValue({ ...request, status: 'ready', qrToken: 'FH-PR-x' });
+    api.markDelivering.mockResolvedValue({ ...request, status: 'delivering', qrToken: 'FH-PR-x' });
+    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
+    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị xong')!.trigger('click');
+    await flushPromises();
+    expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị2');
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng1');
+    await wrapper.findAll('button').find((b) => b.text() === 'Giao hàng')!.trigger('click');
+    await flushPromises();
+    expect(card('Sẵn sàng')).toBe('Sẵn sàng0');
+    expect(card('Đang giao')).toBe('Đang giao1');
     draw.mockRestore();
   });
 
