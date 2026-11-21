@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useId } from 'vue';
 import { AlertTriangle, X } from 'lucide-vue-next';
 import FhButton from './FhButton.vue';
 
@@ -19,6 +20,10 @@ withDefaults(defineProps<Props>(), {
   loading: false,
 });
 
+// Screen readers announce the box as a modal dialog named by its title.
+const titleId = `fh-confirm-title-${useId()}`;
+const consequenceId = `fh-confirm-consequence-${useId()}`;
+
 const emit = defineEmits<{
   (e: 'confirm'): void;
   (e: 'cancel'): void;
@@ -33,6 +38,10 @@ const emit = defineEmits<{
         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-900/60 backdrop-blur-xs"
       >
         <div
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="titleId"
+          :aria-describedby="consequenceId"
           class="fh-modal-panel bg-white rounded-lg border border-ink-200 shadow-(--shadow-e3) max-w-md w-full overflow-hidden p-6 space-y-4"
         >
         <!-- Header -->
@@ -44,11 +53,13 @@ const emit = defineEmits<{
             >
               <AlertTriangle :size="22" :stroke-width="1.75" />
             </div>
-            <h3 class="text-h2 font-semibold text-ink-900">
+            <h3 :id="titleId" class="text-h2 font-semibold text-ink-900">
               {{ title }}
             </h3>
           </div>
           <button
+            type="button"
+            aria-label="Đóng"
             class="text-ink-400 hover:text-ink-700 p-1 rounded transition-colors"
             @click="emit('cancel')"
           >
@@ -61,7 +72,7 @@ const emit = defineEmits<{
           class="p-3.5 rounded-sm text-sm border"
           :class="danger ? 'bg-danger-50/70 border-danger-200 text-danger-900' : 'bg-warning-50/70 border-warning-200 text-warning-900'"
         >
-          <p class="font-medium">
+          <p :id="consequenceId" class="font-medium">
             {{ consequence }}
           </p>
         </div>

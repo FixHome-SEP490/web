@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-21 04:13 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-retest-2111d
+> Cập nhật lần cuối: 2026-11-21 12:46 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/web-voucher-dialogs-2111
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
 - 2026-11-21 04:13 (UTC+7) | ToanAltF4 | fix/web-retest-2111d | Console Huỷ đơn: lý do hệ thống ghi tiếng Anh (khách từ chối báo giá) hiện tiếng Việt
 - 2026-11-21 04:03 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Ví thợ và ví khách: báo rõ khi tên chủ tài khoản có số/ký hiệu thay vì lỗi lưu chung chung
 - 2026-11-21 04:02 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Lượt nhiều máy: tóm tắt hoá đơn cả lượt hiện đúng số tiền máy đã sửa (dòng hoá đơn từ API không có invoiceId)
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-11 21:20 (UTC+7) | ToanAltF4 | fix/warehouse-log-w2-kinds | Nhật ký kho đọc được dòng W2 (giữ/nhả/xuất/hoàn, người thao tác có thể trống); bản #234 hiện Chưa tải được vì hàm chuẩn hoá chỉ nhận nhập kho/điều chỉnh
 - 2026-11-11 19:32 (UTC+7) | ToanAltF4 | fix/bug-detector-1111-web | Sửa BUG DETECTOR 67 (đăng nhập không đi theo redirect của vai trò khác), 78 (đổi kho nhanh không ghi đè tồn), 79 (thử lại điều chỉnh tồn theo đúng kho), 80 (nhãn nhật ký kho W2), 83 (popup bàn giao rõ nội dung), 84 (đọc lại trạng thái khi bàn giao lỗi), 85 (bàn giao xong không báo lỗi vì QR), 89 (thống kê trạng thái từ server), 90 (dùng phân kho gửi kèm, bỏ N request)
 - 2026-11-11 16:42 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UI/UX, Design System FhEmptyState, thêm tranh 3D minh họa cho toàn bộ empty states Khách hàng và Thợ
-- 2026-11-09 02:48 (UTC+7) | Hgnv11 | dev | Console Admin tách Xác nhận danh tính khỏi Duyệt hồ sơ (cấp độ kỹ năng có nhãn, lịch hẹn, từ chối kèm lý do) và thêm trang Trụ sở nhận hồ sơ; phía thợ web chưa làm

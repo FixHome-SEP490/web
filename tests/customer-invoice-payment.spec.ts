@@ -66,6 +66,9 @@ describe('customer invoice payment UI', () => {
     let w = await mountPage(true);
     await w.findAll('button').find(b => b.text() === 'Thanh toán ngay')!.trigger('click');
     await flushPromises();
+    // The voucher sheet starts closed (BUG DETECTOR 207): open it the way the customer does.
+    await w.get('[data-testid="open-voucher-chooser"]').trigger('click');
+    await flushPromises();
     await w.get('[data-testid="voucher-selection-option"]').trigger('click');
     await flushPromises();
     await w.get('[data-testid="checkout-voucher-apply"]').trigger('click');
@@ -104,7 +107,8 @@ describe('customer invoice payment UI', () => {
     await flushPromises();
     freshPreview.mockRejectedValue({ response: { status: 409 } });
     await checkBlocked();
-    await w.get('[data-testid="voucher-selection-close"]').trigger('click');
+    // After a remount the sheet stays closed (BUG DETECTOR 207); nothing to close then.
+    if (w.find('[data-testid="voucher-selection-sheet"]').exists()) await w.get('[data-testid="voucher-selection-close"]').trigger('click');
     await checkBlocked();
     w.unmount();
     w = await mountPage(true);

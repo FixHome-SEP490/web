@@ -5,7 +5,7 @@ enableAutoUnmount(afterEach);
 const { api, auth } = vi.hoisted(() => ({
   api: {
     getAll: vi.fn(), getWarehouseTasks: vi.fn(), getWarehouseAllocation: vi.fn(), getPendingReturns: vi.fn(), getLegacyManualReview: vi.fn(), getReturnsByOrderId: vi.fn(),
-    markReady: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(),
+    markReady: vi.fn(), recordFaultyInspection: vi.fn(), prepareWarehouseQr: vi.fn(), confirmWarehouseHandover: vi.fn(), getById: vi.fn(),
   },
   auth: { hasRole: vi.fn(() => true), user: { id: 'sm-1' }, userRole: 'SERVICE_MANAGER' },
 }));
@@ -102,6 +102,38 @@ describe('faulty part inspection on the manager page', () => {
     expect(inlineHandover).toBeTruthy();
     expect(api.markReady).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Mã lấy hàng một lần · hết hạn trong 15 phút');
+  });
+
+  it('updates the status column right after preparing the code and after the handover, without a reload (BUG DETECTOR 208)', async () => {
+    const request = warranty({ id: 'pr-live', requestType: 'pre_repair' });
+    const allocation = { partRequestId: request.id, mode: 'warehouse', status: 'reserved', warehouseId: 'wh-20', warehouseName: 'Kho 20', responsibleUserId: 'sm-1' };
+    api.getWarehouseTasks.mockResolvedValue({ data: [request], total: 1 });
+    api.getWarehouseAllocation.mockResolvedValue(allocation);
+    api.prepareWarehouseQr.mockResolvedValue({ allocation: { ...allocation, status: 'ready' }, qrToken: 'pickup-token' });
+    api.confirmWarehouseHandover.mockResolvedValue({ allocation: { ...allocation, status: 'handed_over' }, qrToken: 'receipt-token' });
+    api.getById.mockResolvedValueOnce({ ...request, status: 'ready' }).mockResolvedValueOnce({ ...request, status: 'received' });
+    const QRCode = (await import('qrcode')).default as unknown as { toDataURL: (...args: unknown[]) => Promise<string> };
+    const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
+
+    const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
+    await flushPromises();
+    expect(wrapper.get('table').text()).toContain('Chờ chuẩn bị');
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
+    await flushPromises();
+    expect(api.getById).toHaveBeenCalledWith(request.id);
+    expect(wrapper.get('table').text()).toContain('Sẵn sàng giao');
+    expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+
+    await wrapper.get('table').findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
+    await flushPromises();
+    expect(api.confirmWarehouseHandover).toHaveBeenCalledOnce();
+    expect(api.getById).toHaveBeenCalledTimes(2);
+    expect(wrapper.get('table').text()).toContain('Đã nhận / Đang dùng');
+    expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
+    draw.mockRestore();
   });
 
   it('shows a reissued code after handover as the technician receipt, without a dead handover button', async () => {

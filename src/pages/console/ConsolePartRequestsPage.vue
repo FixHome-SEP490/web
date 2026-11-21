@@ -200,6 +200,19 @@ const canPreparePickupQr = (request: PartRequest) => {
   return canOperate.value && warehouseQrOpen(request.status, request.requestType) && !!allocation && allocation.mode === 'warehouse' && !!warehouseQrAction(allocation.status) && allocation.responsibleUserId === auth.user?.id;
 };
 
+/** The warehouse commands answer with the allocation only; read the request back once so its status column follows without a page reload. */
+async function refreshRequestRow(requestId: string) {
+  const version = loadVersion;
+  try {
+    const fresh = await partRequestsApi.getById(requestId);
+    if (version !== loadVersion) return;
+    const current = requests.value.find((row) => row.id === requestId);
+    if (current) replaceRow({ ...current, ...fresh, warehouseAllocation: fresh.warehouseAllocation ?? current.warehouseAllocation });
+  } catch {
+    // The command itself succeeded; the next list load shows the status.
+  }
+}
+
 async function prepareWarehouseQr(request: PartRequest) {
   if (!canPreparePickupQr(request) || actionLoading.value) return;
   actionLoading.value = true;
@@ -233,6 +246,7 @@ async function prepareWarehouseQr(request: PartRequest) {
   warehouseTokens.value[request.id] = receipt ? { pickup: null, receipt: result.qrToken } : { pickup: result.qrToken, receipt: null };
   warehouseQrImages.value[request.id] = { pickup: '', receipt: '' };
   actionLoading.value = false;
+  void refreshRequestRow(request.id);
   if (!result.qrToken) {
     showToast('error', 'Mã chỉ hiển thị một lần. Nếu không còn, tạo mã mới để xoay mã cũ.');
     return;
@@ -284,6 +298,7 @@ async function confirmPhysicalHandover(request: PartRequest) {
   warehouseTokens.value[request.id] = { pickup: null, receipt: result.qrToken };
   handoverTarget.value = null;
   actionLoading.value = false;
+  void refreshRequestRow(request.id);
   if (!result.qrToken) {
     showToast('error', 'Kho đã ghi nhận bàn giao; mã nhận hàng chỉ được hiển thị một lần và hiện không còn trong phiên. Bấm "Cấp lại mã nhận" để lấy mã mới.');
     return;
