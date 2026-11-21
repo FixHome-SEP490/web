@@ -235,6 +235,8 @@ describe('AI booking form', () => {
     await wrapper.get('[data-testid="step2-next"]').trigger('click');
     await flushPromises();
     const shown = wrapper.get('[data-testid="confirm-description"]').text();
+    // flow-2211: one long unbroken word must wrap instead of running over the Sửa button.
+    expect(wrapper.get('[data-testid="confirm-description"]').classes()).toContain('wrap-anywhere');
     expect(shown).toBe('Máy lạnh kêu lạch cạch, không mát. máy vẫn mát nhưng chảy nước');
     expect(shown).not.toContain('sai rồi');
     await button(wrapper, 'Tìm kỹ thuật viên').trigger('click');
