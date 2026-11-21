@@ -74,7 +74,11 @@ describe('faulty part inspection on the manager page', () => {
       warranty({ id: 'a', faultyInspectionResult: 'manufacturer' }),
       { ...warranty({ id: 'b' }), requestType: 'additional' },
     ]);
-    expect(wrapper.findAll('button').filter((b) => b.text() === 'Chuẩn bị xong')).toHaveLength(2);
+    // BUG DETECTOR 258: actions sit in the pane of the chosen request; each request offers READY.
+    for (const id of ['a', 'b']) {
+      await wrapper.get(`[data-testid="part-request-detail-${id}"]`).trigger('click');
+      expect(wrapper.get(`[data-testid="part-request-pane-${id}"]`).findAll('button').filter((b) => b.text() === 'Chuẩn bị xong')).toHaveLength(1);
+    }
     expect(button(wrapper, 'Kiểm tra linh kiện hỏng')).toBeUndefined();
   });
 
@@ -91,14 +95,14 @@ describe('faulty part inspection on the manager page', () => {
 
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
     expect(api.getAll).not.toHaveBeenCalled();
-    expect(wrapper.get('table').text()).toContain('Chuẩn bị mã kho');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Chuẩn bị mã kho');
     expect(wrapper.text()).toContain('Khoảng cách đường thẳng ước tính từ vị trí đặt lịch: ~1.4 km; chưa xác minh đường đi/ETA');
     expect(wrapper.findAll('button').some((button) => button.text() === 'Chuẩn bị xong')).toBe(false);
 
     await wrapper.findAll('button').find((button) => button.text() === 'Chuẩn bị mã kho')!.trigger('click');
     await flushPromises();
     expect(api.prepareWarehouseQr).toHaveBeenCalledWith(request.id, expect.objectContaining({ idempotencyKey: expect.any(String) }));
-    const inlineHandover = wrapper.get('table').findAll('button').find((button) => button.text() === 'Xác nhận đã giao trực tiếp');
+    const inlineHandover = wrapper.get('[data-testid^="part-request-pane-"]').findAll('button').find((button) => button.text() === 'Xác nhận đã giao trực tiếp');
     expect(inlineHandover).toBeTruthy();
     expect(api.markReady).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Mã lấy hàng một lần · hết hạn trong 15 phút');
@@ -117,21 +121,21 @@ describe('faulty part inspection on the manager page', () => {
 
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
     await flushPromises();
-    expect(wrapper.get('table').text()).toContain('Chờ chuẩn bị');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Chờ chuẩn bị');
 
     await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
     await flushPromises();
     expect(api.getById).toHaveBeenCalledWith(request.id);
-    expect(wrapper.get('table').text()).toContain('Sẵn sàng giao');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Sẵn sàng giao');
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
 
-    await wrapper.get('table').findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
+    await wrapper.get('[data-testid^="part-request-pane-"]').findAll('button').find((b) => b.text() === 'Xác nhận đã giao trực tiếp')!.trigger('click');
     await flushPromises();
     await wrapper.findAll('button').find((b) => b.text() === 'Đã giao thực tế')!.trigger('click');
     await flushPromises();
     expect(api.confirmWarehouseHandover).toHaveBeenCalledOnce();
     expect(api.getById).toHaveBeenCalledTimes(2);
-    expect(wrapper.get('table').text()).toContain('Đã nhận / Đang dùng');
+    expect(wrapper.get('[data-testid^="part-request-pane-"]').text()).toContain('Đã nhận / Đang dùng');
     expect(api.getWarehouseTasks).toHaveBeenCalledOnce();
     draw.mockRestore();
   });
