@@ -207,7 +207,7 @@ describe('read-only delivery presentation', () => {
     let resolveA!: (value: unknown) => void;
     vi.spyOn(apiClient, 'get').mockImplementationOnce(() => new Promise(resolve => { resolveA = resolve; }))
       .mockResolvedValueOnce(envelope(preview(otherId)))
-      .mockResolvedValueOnce(envelope({ ...preview(), eligibility: 'INELIGIBLE', reason: 'LEGACY_OR_NOT_ENROLLED' }));
+      .mockResolvedValueOnce(envelope({ ...preview(), eligibility: 'INELIGIBLE', reason: 'SCOPE_OR_PARTS_SOURCE_UNVERIFIED' }));
     const w = mount(DeliveryPhysicalPreview, { props });
     expect(w.attributes('aria-busy')).toBe('true');
     await w.setProps({ requestId: otherId }); await flushPromises();
@@ -215,6 +215,12 @@ describe('read-only delivery presentation', () => {
     expect(w.text()).toContain('Chưa đủ điều kiện');
     resolveA(envelope(preview())); await flushPromises();
     expect(w.text()).toContain('Chưa đủ điều kiện'); expect(w.text()).not.toContain('Cần hỗ trợ'); w.unmount();
+  });
+  it('hides the panel for a delivery outside the paid-delivery flow (flow-2211)', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue(envelope({ ...preview(), eligibility: 'INELIGIBLE', reason: 'LEGACY_OR_NOT_ENROLLED' }));
+    const w = mount(DeliveryPhysicalPreview, { props }); await flushPromises();
+    expect(w.find('[data-testid="delivery-physical-preview"]').exists()).toBe(false);
+    expect(w.text()).not.toContain('Chưa đủ điều kiện'); w.unmount();
   });
   it('clears status on forbidden refresh and never exposes transport text', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValueOnce(envelope(preview())).mockRejectedValue({ response: { status: 403 }, message: 'private database error' });
@@ -244,7 +250,7 @@ describe('read-only delivery presentation', () => {
   it('does not publish a pending read after unmount', async () => {
     let resolve!: (value: unknown) => void;
     vi.spyOn(apiClient, 'get').mockImplementationOnce(() => new Promise(r => { resolve = r; }))
-      .mockResolvedValue(envelope({ ...preview(), eligibility: 'INELIGIBLE', reason: 'LEGACY_OR_NOT_ENROLLED' }));
+      .mockResolvedValue(envelope({ ...preview(), eligibility: 'INELIGIBLE', reason: 'SCOPE_OR_PARTS_SOURCE_UNVERIFIED' }));
     const old = mount(DeliveryPhysicalPreview, { props }); old.unmount();
     const current = mount(DeliveryPhysicalPreview, { props }); await flushPromises();
     resolve(envelope(preview())); await flushPromises();
