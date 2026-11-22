@@ -25,6 +25,7 @@ import {
   type WarrantyClaimStatus,
 } from '../../utils/warranty-claim';
 import { getSupportErrorMessage } from './support-cases.utils';
+import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
 
 const authStore = useAuthStore();
 const canDecide = computed(() => authStore.userRole === 'SERVICE_MANAGER');
@@ -54,9 +55,9 @@ const windowDays = ref(90);
 
 let latestRequest = 0;
 
-async function loadQueue() {
+async function loadQueue(quiet = false) {
   const requestId = ++latestRequest;
-  loading.value = true;
+  if (!quiet) loading.value = true;
   error.value = '';
   try {
     const result = await warrantyManagerApi.listQueue({
@@ -159,6 +160,8 @@ watch(tab, (next) => {
 });
 watch(windowDays, () => void loadStats());
 onMounted(() => void loadQueue());
+// A claim moved (technician accepted, customer answered): the queue follows without reload.
+useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') void loadQueue(true); });
 </script>
 
 <template>
@@ -216,7 +219,7 @@ onMounted(() => void loadQueue());
       </div>
 
       <div class="animate-slide-up-delay-2 space-y-5">
-        <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue" />
+        <ConsoleLoadError v-if="error" :message="error" @retry="loadQueue()" />
         <ConsoleTable
           v-else
           :columns="queueColumns"

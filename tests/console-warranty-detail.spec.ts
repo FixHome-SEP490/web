@@ -187,6 +187,8 @@ describe('service manager warranty claim page', () => {
 
   it('shows a retryable error when the claim cannot be loaded', async () => {
     const wrapper = await mountPage(Object.assign(new Error('x'), { response: { status: 500, data: { message: 'Lỗi máy chủ.' } } }));
-    expect(wrapper.text()).toContain('Lỗi máy chủ.');
+    // A 5xx never shows the server wording (PO 22/11/2026).
+    expect(wrapper.text()).not.toContain('Lỗi máy chủ.');
+    expect(wrapper.text()).toContain('Không thể tải yêu cầu bảo hành');
   });
 });

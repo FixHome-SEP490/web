@@ -64,7 +64,7 @@ import AiConversationThread from '../../components/chat/AiConversationThread.vue
 import { useFillViewport } from '../../composables/useFillViewport';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { SLOT_SHORT, isSessionUpcoming, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
-import { userFacingError } from '../../utils/user-facing-error';
+import { toUserFacingMessage, userFacingError } from '../../utils/user-facing-error';
 import { formatCurrencyVND } from '../../utils/formatters';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
@@ -149,8 +149,8 @@ function isPendingVisitLimitError(error: unknown): { isLimit: boolean; message: 
   if (code === 'PENDING_VISIT_LIMIT_REACHED') {
     return {
       isLimit: true,
-      message: typeof message === 'string' && message.trim()
-        ? message.trim()
+      message: typeof message === 'string' && toUserFacingMessage(message, '')
+        ? toUserFacingMessage(message, '')
         : 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.',
     };
   }
@@ -163,7 +163,7 @@ function isPendingVisitLimitError(error: unknown): { isLimit: boolean; message: 
       lower.includes('pending_visit_limit_reached') ||
       lower.includes('giới hạn yêu cầu đang chờ')
     ) {
-      return { isLimit: true, message: message.trim() };
+      return { isLimit: true, message: toUserFacingMessage(message, 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.') };
     }
   }
 
@@ -3681,7 +3681,7 @@ async function createAndFindTech() {
           </div>
           <div v-if="selectedServiceId && !extraDevices.length && bookingDescription" class="flex gap-4 px-5 py-4 sm:px-6">
             <span class="w-24 shrink-0 text-ink-500 sm:w-28">Tình trạng</span>
-            <p class="min-w-0 flex-1 text-ink-900 text-pretty" data-testid="confirm-description">{{ bookingDescription }}</p>
+            <p class="min-w-0 flex-1 whitespace-pre-line text-ink-900 text-pretty wrap-anywhere" data-testid="confirm-description">{{ bookingDescription }}</p>
             <button v-if="!isAiFlow" type="button" class="min-h-11 min-w-11 self-start rounded-lg px-2 font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" @click="step = 1">Sửa</button>
           </div>
           <div v-if="selectedServiceId && !extraDevices.length && uploadedPhotos.length" class="flex gap-4 px-5 py-4 sm:px-6">

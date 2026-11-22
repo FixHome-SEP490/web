@@ -14,6 +14,7 @@
 // back, since the changes made meanwhile were not heard.
 import type { QueryClient, QueryKey } from '@tanstack/vue-query';
 import { queryKeys } from '../lib/query-keys';
+import { publishOrderChanges } from './order-change-bus';
 import {
   chatSocketService,
   type BookingUpdatedEvent,
@@ -58,6 +59,8 @@ export function onOrderLocation(orderId: string, listener: (event: OrderLocation
 export function onBookingChange(bookingId: string, listener: (event: BookingUpdatedEvent) => void): () => void {
   return register(bookingListeners, bookingId, listener);
 }
+
+export { eventsTouch, onAnyOrderChange } from './order-change-bus';
 
 /** Called (once per burst) when an order's status or holder changed, for counters kept outside the query cache. */
 export function onOrderListsChange(listener: () => void): () => void {
@@ -188,6 +191,7 @@ export function startLiveUpdates(client: QueryClient): () => void {
     for (const event of bookingEvents) {
       for (const listener of [...(bookingListeners.get(event.bookingId) ?? [])]) listener(event);
     }
+    publishOrderChanges(orderEvents);
 
     const keys: QueryKey[] = [];
     if (lists) keys.push(...ORDER_LIST_KEYS);

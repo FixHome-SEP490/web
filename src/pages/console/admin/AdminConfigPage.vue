@@ -209,8 +209,17 @@ const openEdit = (config: ConfigRow) => {
   showEditModal.value = true;
 };
 
+const PHONE_KEYS = new Set(['office.support_phone', 'support.hotline']);
+
 const validateValue = (config: ConfigRow, value: string): string => {
   const trimmed = value.trim();
+  // Số điện thoại hỗ trợ được để trống (không hiện nút gọi); có giá trị thì phải đúng dạng số điện thoại.
+  if (PHONE_KEYS.has(config.key)) {
+    const compact = trimmed.replace(/[\s.]/g, '');
+    return compact === '' || /^(\+84|0)\d{9,10}$|^1[89]00\d{4,6}$/.test(compact)
+      ? ''
+      : 'Số điện thoại không hợp lệ. Ví dụ: 0901234567, +84901234567 hoặc 19001234.';
+  }
   if (!trimmed) return 'Giá trị không được để trống.';
   if ((config.valueType === 'int' || config.valueType === 'bigint') && !/^-?\d+$/.test(trimmed)) {
     return 'Giá trị phải là số nguyên.';

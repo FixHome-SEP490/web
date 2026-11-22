@@ -47,38 +47,26 @@ const part = computed(() => {
   const request = claim.value?.partRequest;
   return request && ['received', 'completed'].includes(String(request.status).toLowerCase()) ? request : null;
 });
+// The replacement is not in hand yet: the technician receives it on the order's parts section.
+const partToCollect = computed(() => {
+  const status = String(claim.value?.partRequest?.status ?? '').toLowerCase();
+  if (status === 'requested') return 'Kho đang chuẩn bị linh kiện thay thế.';
+  if (status === 'ready') return 'Linh kiện thay thế đã sẵn sàng. Mở mục linh kiện của đơn để nhận.';
+  if (status === 'delivering') return 'Linh kiện thay thế đang được giao tới bạn. Mở mục linh kiện của đơn để nhận.';
+  return '';
+});
 const partOverdue = computed(() => !!part.value && !part.value.faultyReturnedAt && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
 
 // The free replacement part: received with the code, then declared fitted or returned before the warranty can be reported done.
 // The faulty part may still be handed in afterwards.
-const incoming = computed(() => {
-  const request = claim.value?.partRequest;
-  return request && ['requested', 'ready', 'delivering'].includes(String(request.status).toLowerCase()) ? request : null;
-});
 const partsPending = computed(() => {
   const request = claim.value?.partRequest;
   if (!request || String(request.status).toLowerCase() === 'cancelled') return false;
   return !part.value || !!part.value.items?.some((item) => item.usageStatus === 'pending');
 });
-const receiveCode = ref('');
 
 async function reloadClaim() {
   claim.value = await warrantyClaimsApi.get(claimId.value);
-}
-async function receiveReplacement() {
-  if (!incoming.value || busy.value || !receiveCode.value.trim()) return;
-  busy.value = true;
-  notice.value = null;
-  try {
-    await partRequestsApi.receiveByQr(incoming.value.id, { qrToken: receiveCode.value.trim() });
-    receiveCode.value = '';
-    notice.value = { type: 'success', text: 'Đã xác nhận nhận linh kiện thay thế. Hãy khai đã lắp hoặc trả lại.' };
-    await reloadClaim();
-  } catch (reason) {
-    notice.value = { type: 'error', text: getSupportErrorMessage(reason, 'Mã không hợp lệ hoặc không khớp. Vui lòng thử lại.') };
-  } finally {
-    busy.value = false;
-  }
 }
 async function markUsage(itemId: string, usageStatus: 'used' | 'returned') {
   if (!part.value || busy.value) return;
@@ -369,32 +357,32 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <!-- Replacement part: receive it, then declare it fitted or returned -->
+          <!-- Warranty replacement part still to collect: go straight to where it is received -->
           <section
-            v-if="incoming || part"
+            v-if="partToCollect && claim.order?.id"
+            class="rounded-2xl border border-ink-200/90 bg-white p-5 shadow-2xs space-y-3"
+            data-testid="warranty-part-pickup"
+          >
+            <h2 class="text-base font-semibold text-ink-900">Linh kiện bảo hành</h2>
+            <p class="text-sm text-ink-700 leading-relaxed">{{ partToCollect }}</p>
+            <router-link
+              :to="{ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } }"
+              class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
+              :class="focusRing"
+              data-testid="warranty-part-pickup-link"
+            >
+              <PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành
+            </router-link>
+          </section>
+
+          <!-- Replacement part in hand: declare it fitted or returned -->
+          <section
+            v-if="part?.items?.length"
             class="bg-white rounded-2xl border border-ink-200/90 p-5 shadow-2xs space-y-3"
             data-testid="replacement-part"
           >
             <h2 class="text-base font-semibold text-ink-900">Linh kiện thay thế</h2>
-            <template v-if="incoming">
-              <p class="text-ink-700 leading-relaxed">
-                <template v-if="String(incoming.status).toLowerCase() === 'requested'">Kho đang chuẩn bị linh kiện thay thế.</template>
-                <template v-else>Linh kiện đã sẵn sàng. Nhập mã nhận hàng để xác nhận bạn đã nhận.</template>
-              </p>
-              <div v-if="String(incoming.status).toLowerCase() !== 'requested'" class="flex gap-2">
-                <input
-                  v-model="receiveCode"
-                  type="text"
-                  autocomplete="off"
-                  aria-label="Mã nhận hàng"
-                  placeholder="Mã nhận hàng"
-                  class="min-w-0 flex-1 h-11 rounded-xl border border-ink-200 bg-white px-3 text-sm text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                  @keydown.enter="receiveReplacement"
-                />
-                <FhButton variant="primary" size="md" :loading="busy" :disabled="busy || !receiveCode.trim()" @click="receiveReplacement">Đã nhận</FhButton>
-              </div>
-            </template>
-            <ul v-if="part?.items?.length" class="divide-y divide-ink-100 rounded-xl border border-ink-200/80">
+            <ul class="divide-y divide-ink-100 rounded-xl border border-ink-200/80">
               <li v-for="item in part.items" :key="item.id" class="flex flex-wrap items-center justify-between gap-2 p-3" :data-testid="`replacement-item-${item.id}`">
                 <span class="min-w-0 break-words font-medium text-ink-900">{{ item.name }} <span class="font-num text-ink-600">× {{ item.quantity }}</span></span>
                 <span v-if="item.usageStatus === 'pending'" class="flex gap-2">

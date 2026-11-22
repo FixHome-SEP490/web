@@ -11,6 +11,7 @@ import ConsolePagination from '../../../components/console/ConsolePagination.vue
 import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
+import { validateEmail, validateFullName } from '../../../utils/input-validation';
 import { adminControlsApi } from '../../../api/admin-controls.api';
 import { warehousesApi, type Warehouse } from '../../../api/warehouses.api';
 import {
@@ -338,9 +339,15 @@ async function handleCreateTechnician() {
     createTechError.value = 'Nhập họ tên và email.';
     return;
   }
-  const nameLength = createTechForm.value.fullName.trim().length;
-  if (nameLength < 2 || nameLength > 200) {
-    createTechError.value = 'Họ tên từ 2 đến 200 ký tự.';
+  // Cùng luật họ tên với máy chủ; trước đây emoji hay thẻ HTML chỉ nhận lỗi chung "Chưa tạo được tài khoản".
+  const nameError = validateFullName(createTechForm.value.fullName);
+  if (nameError) {
+    createTechError.value = nameError + '.';
+    return;
+  }
+  const emailError = validateEmail(createTechForm.value.email);
+  if (emailError) {
+    createTechError.value = emailError + '.';
     return;
   }
   const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '').replace(/^\+84/, '0');
