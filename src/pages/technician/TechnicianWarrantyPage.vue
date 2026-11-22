@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
+import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, User, X } from 'lucide-vue-next';
 import { ConsoleTabs, FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
@@ -28,7 +28,6 @@ const {
   loading,
   error,
   load,
-  refreshing,
   prefetch,
 } = usePagedList<StaffWarrantyClaim>({
   key: () => queryKeys.warranty.technicianClaims({}),
@@ -161,10 +160,6 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
           <p class="text-xs sm:text-sm text-ink-600">Tiếp nhận lịch kiểm tra và xử lý các yêu cầu bảo hành từ khách hàng.</p>
         </div>
-        <FhButton variant="secondary" size="sm" class="h-10 shrink-0" :disabled="loading" aria-label="Tải lại" @click="load">
-          <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
-          <span class="hidden sm:inline">Tải lại</span>
-        </FhButton>
       </div>
     </header>
 

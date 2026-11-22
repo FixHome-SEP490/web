@@ -2,7 +2,14 @@ import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
+const liveMock = vi.hoisted(() => ({ onOrder: null as null | (() => void) }));
+vi.mock('../src/services/live-updates', async (original) => ({
+  ...(await original<typeof import('../src/services/live-updates')>()),
+  onOrderChange: (_orderId: string, listener: () => void) => { liveMock.onOrder = listener; return () => {}; },
+  onResync: () => () => {},
+  whileOffline: () => () => {},
+}));
 vi.mock('../src/api/client', async (original) => ({
   ...(await original<typeof import('../src/api/client')>()),
   default: apiClientMock,
@@ -196,5 +203,54 @@ describe('technician warranty claim page', () => {
     const wrapper = await mountPage(claim({ status: 'rejected' }));
     expect(button(wrapper, 'Nhận yêu cầu')).toBeUndefined();
     expect(wrapper.text()).not.toContain('Đang chờ');
+  });
+});
+
+describe('replacement part and live updates on the technician warranty page', () => {
+  const part = (status: string, usage: string[]) => ({
+    id: 'pr-1', status, faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false,
+    items: usage.map((usageStatus, i) => ({ id: `it-${i}`, name: 'Van xả', quantity: 1, usageStatus })),
+  });
+
+  it('keeps "Báo đã bảo hành xong" off until the replacement part is declared fitted', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: part('received', ['pending']) as never }));
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="complete-blocked-by-parts"]').exists()).toBe(true);
+
+    apiClientMock.patch.mockResolvedValueOnce({ data: { data: { id: 'it-0', usageStatus: 'used' } } });
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'in_progress', partRequest: part('received', ['used']) as never }) } });
+    await button(wrapper, 'Đã lắp')!.trigger('click');
+    await flushPromises();
+
+    expect(apiClientMock.patch).toHaveBeenCalledWith('/part-requests/pr-1/items/it-0/usage', { usageStatus: 'used' });
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="complete-blocked-by-parts"]').exists()).toBe(false);
+  });
+
+  it('receives the replacement part with its code, and a returned part also lets the warranty finish', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: part('ready', ['pending']) as never }));
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeDefined();
+    await wrapper.get('input[aria-label="Mã nhận hàng"]').setValue(' CODE-1 ');
+    apiClientMock.post.mockResolvedValueOnce({ data: { data: { id: 'pr-1' } } });
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'in_progress', partRequest: part('received', ['returned']) as never }) } });
+    await button(wrapper, 'Đã nhận')!.trigger('click');
+    await flushPromises();
+
+    expect(apiClientMock.post).toHaveBeenCalledWith('/part-requests/pr-1/receive', { qrToken: 'CODE-1' });
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeUndefined();
+  });
+
+  it('has no part gate when the claim has no replacement part', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress' }));
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeUndefined();
+  });
+
+  it('reads the claim again by itself when its order changes, without a reload button', async () => {
+    const wrapper = await mountPage(claim({ status: 'accepted' }));
+    expect(button(wrapper, 'Tải lại')).toBeUndefined();
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'inspected' }) } });
+    liveMock.onOrder!();
+    await flushPromises();
+    expect(wrapper.text()).toContain('Chờ quản lý duyệt kết luận');
   });
 });

@@ -3,8 +3,17 @@ import { computed, ref } from 'vue';
 import FhButton from '../FhButton.vue';
 import { ordersApi, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
-import { formatDateTimeVN } from '../../utils/formatters';
-import { claimDisplayMeta, warrantyClaimToneClasses } from '../../utils/warranty-claim';
+import { formatCurrencyVND, formatDateTimeVN } from '../../utils/formatters';
+import {
+  claimDisplayMeta,
+  claimOutcomeLabels,
+  inspectionResultLabels,
+  notCoveredReasonLabels,
+  warrantyClaimToneClasses,
+  type ClaimOutcome,
+  type InspectionResult,
+  type NotCoveredReason,
+} from '../../utils/warranty-claim';
 
 const props = defineProps<{
   claim: WarrantyClaimView;
@@ -111,6 +120,37 @@ async function respond(decision: 'agree' | 'dispute') {
     <p v-if="claim.inspectionScheduledAt" class="text-ink-800">
       <span class="font-semibold">Lịch kiểm tra:</span> {{ formatDateTimeVN(claim.inspectionScheduledAt) }}
     </p>
+    <section v-if="claim.inspection" class="space-y-2 rounded-[var(--radius-sm)] border border-ink-200/80 bg-ink-50/70 p-3" data-testid="claim-inspection">
+      <h4 class="font-semibold text-ink-900">Kết quả kiểm tra</h4>
+      <p class="text-ink-900">
+        <span class="font-semibold">Kết luận:</span>
+        {{ inspectionResultLabels[claim.inspection.result as InspectionResult] ?? 'Chưa xác định' }}
+      </p>
+      <p v-if="claim.inspection.result === 'not_covered' && claim.inspection.reasonCode" class="text-ink-800">
+        <span class="font-semibold">Lý do:</span>
+        {{ notCoveredReasonLabels[claim.inspection.reasonCode as NotCoveredReason] ?? 'Lý do khác' }}
+      </p>
+      <p v-if="claim.inspection.findings" class="whitespace-pre-line text-ink-800">
+        <span class="font-semibold">Chẩn đoán của kỹ thuật viên:</span> {{ claim.inspection.findings }}
+      </p>
+      <div v-if="claim.inspection.evidenceRefs?.length" class="flex flex-wrap gap-2">
+        <a v-for="url in claim.inspection.evidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
+          <img :src="url" alt="Ảnh kiểm tra" class="w-14 h-14 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
+        </a>
+      </div>
+      <p v-if="claim.inspection.reServiceNotes" class="whitespace-pre-line text-ink-800">
+        <span class="font-semibold">Đã xử lý:</span> {{ claim.inspection.reServiceNotes }}
+      </p>
+      <div v-if="claim.inspection.reServiceEvidenceRefs?.length" class="flex flex-wrap gap-2">
+        <a v-for="url in claim.inspection.reServiceEvidenceRefs" :key="url" :href="url" target="_blank" rel="noopener noreferrer">
+          <img :src="url" alt="Ảnh sau xử lý" class="w-14 h-14 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
+        </a>
+      </div>
+      <p v-if="claim.outcomeCode" class="text-ink-900">
+        <span class="font-semibold">Kết cục:</span> {{ claimOutcomeLabels[claim.outcomeCode as ClaimOutcome] }}
+        <template v-if="claim.outcomeCode === 'unfixed' && claim.refundAmount"> · Đã hoàn {{ formatCurrencyVND(claim.refundAmount) }} vào ví</template>
+      </p>
+    </section>
     <p class="text-xs text-ink-500">
       Gửi lúc {{ formatDateTimeVN(claim.submittedAt) }}
       <template v-if="claim.resolvedAt"> · Hoàn tất lúc {{ formatDateTimeVN(claim.resolvedAt) }}</template>
