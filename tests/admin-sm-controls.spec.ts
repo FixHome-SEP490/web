@@ -8,10 +8,11 @@ const api = vi.hoisted(() => ({
   list: vi.fn(), update: vi.fn(),
   listSmPermissions: vi.fn(), setSmPermission: vi.fn(), broadcast: vi.fn(), notifyUser: vi.fn(),
   listBroadcasts: vi.fn(), recallBroadcast: vi.fn(),
+  listSmAccounts: vi.fn(), getSmAccountPermissions: vi.fn(), setSmAccountPermission: vi.fn(), resetSmAccountPermissions: vi.fn(),
 }));
 vi.mock('../src/api/admin-users.api', () => ({ adminUsersApi: { getUsers: api.getUsers, getUser: api.getUser, createTechnician: api.createTechnician, updateStatus: api.updateStatus } }));
 vi.mock('../src/api/warehouses.api', () => ({ warehousesApi: { list: api.list, update: api.update } }));
-vi.mock('../src/api/admin-controls.api', () => ({ adminControlsApi: { listSmPermissions: api.listSmPermissions, setSmPermission: api.setSmPermission, broadcast: api.broadcast, notifyUser: api.notifyUser, listBroadcasts: api.listBroadcasts, recallBroadcast: api.recallBroadcast } }));
+vi.mock('../src/api/admin-controls.api', () => ({ adminControlsApi: { listSmPermissions: api.listSmPermissions, setSmPermission: api.setSmPermission, broadcast: api.broadcast, notifyUser: api.notifyUser, listBroadcasts: api.listBroadcasts, recallBroadcast: api.recallBroadcast, listSmAccounts: api.listSmAccounts, getSmAccountPermissions: api.getSmAccountPermissions, setSmAccountPermission: api.setSmAccountPermission, resetSmAccountPermissions: api.resetSmAccountPermissions } }));
 import AdminUsersPage from '../src/pages/console/admin/AdminUsersPage.vue';
 import AdminBroadcastPage from '../src/pages/console/admin/AdminBroadcastPage.vue';
 import AdminSmPermissionsPage from '../src/pages/console/admin/AdminSmPermissionsPage.vue';
@@ -30,6 +31,7 @@ beforeEach(() => {
   api.getUsers.mockResolvedValue({ data: [sm], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } });
   api.getUser.mockResolvedValue(sm);
   api.listBroadcasts.mockResolvedValue([]);
+  api.listSmAccounts.mockResolvedValue([]);
   api.list.mockResolvedValue([wh('w1', 'Kho Thủ Đức', 'sm-1'), wh('w2', 'Kho Quận 7', 'sm-2')]);
 });
 
@@ -145,5 +147,48 @@ describe('Service manager permissions (BUG 177)', () => {
     expect(admin).toEqual(expect.arrayContaining(['/console/admin/sm-permissions', '/console/admin/broadcast']));
     const smPaths = consoleNavigation('SERVICE_MANAGER').flatMap((g) => g.items.map((i) => i.path));
     expect(smPaths).not.toContain('/console/admin/sm-permissions');
+  });
+});
+
+describe("Permissions of one service manager account (BUG 261)", () => {
+  const perm = (code: string, granted: boolean, roleGranted = true, overridden = false) =>
+    ({ code, group: "Hỗ trợ", label: code, granted, roleGranted, overridden });
+  const sm5 = { id: "sm-5", fullName: "Quản lý 5", email: "sm5@fixhome.vn", isActive: true, customized: false };
+
+  it("switches one permission for the chosen account only, then resets it to the role", async () => {
+    api.listSmPermissions.mockResolvedValue([perm("support:read_all", true)]);
+    api.listSmAccounts.mockResolvedValue([sm5, { ...sm5, id: "sm-hcm", fullName: "SM HCM", email: "sm.hcm@fixhome.vn" }]);
+    api.getSmAccountPermissions.mockResolvedValue({ user: sm5, permissions: [perm("support:read_all", true)] });
+    api.setSmAccountPermission.mockResolvedValue({ user: { ...sm5, customized: true }, permissions: [perm("support:read_all", false, true, true)] });
+    api.resetSmAccountPermissions.mockResolvedValue({ user: sm5, permissions: [perm("support:read_all", true)] });
+    const w = mount(AdminSmPermissionsPage);
+    await flushPromises();
+    await w.get("[data-testid=\"sm-perm-target\"]").setValue("sm-5");
+    await flushPromises();
+    expect(api.getSmAccountPermissions).toHaveBeenCalledWith("sm-5");
+    expect(w.get("[data-testid=\"sm-perm-reset\"]").attributes("disabled")).toBeDefined();
+    await w.get("[data-testid=\"sm-perm-support:read_all\"]").trigger("click");
+    await flushPromises();
+    expect(api.setSmAccountPermission).toHaveBeenCalledWith("sm-5", "support:read_all", false);
+    expect(api.setSmPermission).not.toHaveBeenCalled();
+    expect(w.get("[data-testid=\"sm-perm-own-support:read_all\"]").text()).toContain("Đặt riêng");
+    expect(w.get("[data-testid=\"sm-perm-target\"]").text()).toContain("đặt riêng");
+    await w.get("[data-testid=\"sm-perm-reset\"]").trigger("click");
+    await flushPromises();
+    expect(api.resetSmAccountPermissions).toHaveBeenCalledWith("sm-5");
+    expect(w.text()).toContain("về quyền mặc định theo vai trò");
+    expect(w.find("[data-testid=\"sm-perm-own-support:read_all\"]").exists()).toBe(false);
+  });
+
+  it("hides the pages of a permission the account no longer has", () => {
+    const paths = (perms?: string[]) => consoleNavigation("SERVICE_MANAGER", perms).flatMap((g) => g.items.map((i) => i.path));
+    const all = paths(["support:read_all", "strike:read_all"]);
+    expect(all).toEqual(expect.arrayContaining(["/console/support", "/console/warranty", "/console/reputation"]));
+    const narrowed = paths(["strike:read_all"]);
+    expect(narrowed).not.toContain("/console/support");
+    expect(narrowed).not.toContain("/console/warranty");
+    expect(narrowed).toContain("/console/reputation");
+    expect(narrowed).toContain("/console/orders");
+    expect(paths()).toEqual(all);
   });
 });

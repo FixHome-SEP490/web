@@ -15,7 +15,7 @@ const route = useRoute();
 const authStore = useAuthStore();
 
 const role = computed(() => authStore.userRole);
-const navigation = computed(() => consoleNavigation(role.value));
+const navigation = computed(() => consoleNavigation(role.value, authStore.permissions));
 const roleLabel = computed(() => consoleRoleLabels[role.value as ConsoleRole] ?? '');
 
 // Console screens follow changes live too (part counters, orders, warranty): the same socket

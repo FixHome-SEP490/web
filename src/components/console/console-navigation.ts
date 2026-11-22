@@ -37,6 +37,8 @@ export interface ConsoleNavItem {
   label: string;
   path: string;
   icon: Component;
+  /** Shown only when the account has this permission (BUG 261: per-account SM permissions). */
+  permission?: string;
 }
 
 export interface ConsoleNavGroup {
@@ -46,7 +48,8 @@ export interface ConsoleNavGroup {
 
 export type ConsoleRole = 'SERVICE_MANAGER' | 'ADMIN';
 
-const item = (label: string, path: string, icon: Component): ConsoleNavItem => ({ label, path, icon });
+const item = (label: string, path: string, icon: Component, permission?: string): ConsoleNavItem =>
+  permission ? { label, path, icon, permission } : { label, path, icon };
 
 const overview = item('Tổng quan', '/console', LayoutDashboard);
 const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
@@ -64,21 +67,30 @@ const warehouses = item('Kho linh kiện', '/console/warehouses', Warehouse);
  * Sidebar of the console, one list per role (PO 10/10/2026): grouped by job,
  * every page once, short labels. Pages a role may not open are not listed.
  */
-export function consoleNavigation(role: ConsoleRole | string | null | undefined): ConsoleNavGroup[] {
+export function consoleNavigation(
+  role: ConsoleRole | string | null | undefined,
+  permissions?: readonly string[],
+): ConsoleNavGroup[] {
   if (role === 'SERVICE_MANAGER') {
-    return [
-      { group: 'Vận hành', items: [overview, orders, checkinFaces, warehouses, partRequests, partReturns, payouts, serviceAreas] },
+    // BUG 261: with the account permissions given, a page whose permission the admin
+    // turned off for this account (or for the role) is not listed.
+    const allowed = (i: ConsoleNavItem) => !permissions || !i.permission || permissions.includes(i.permission);
+    const groups: ConsoleNavGroup[] = [
+      {
+        group: 'Vận hành',
+        items: [overview, orders, checkinFaces, warehouses, partRequests, partReturns, payouts, serviceAreas],
+      },
       {
         group: 'Hỗ trợ',
         items: [
-          support,
-          warranty,
+          item(support.label, support.path, support.icon, 'support:read_all'),
+          item(warranty.label, warranty.path, warranty.icon, 'support:read_all'),
           item('Huỷ đơn', '/console/cancellations', Ban),
-          item('Điểm uy tín', '/console/reputation', Gauge),
+          item('Điểm uy tín', '/console/reputation', Gauge, 'strike:read_all'),
         ],
       },
-      { group: 'Kỹ thuật viên', items: [officeVisits] },
     ];
+    return groups.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length > 0);
   }
   if (role === 'ADMIN') {
     return [

@@ -379,7 +379,7 @@ const routes: RouteRecordRaw[] = [
         path: 'reputation',
         name: 'console-reputation',
         component: () => import('../pages/console/ConsoleReputationPage.vue'),
-        meta: { title: 'Điểm uy tín', roles: ['SERVICE_MANAGER'] },
+        meta: { title: 'Điểm uy tín', roles: ['SERVICE_MANAGER'], permission: 'strike:read_all' },
       },
       {
         path: 'support',
@@ -392,7 +392,7 @@ const routes: RouteRecordRaw[] = [
         name: 'console-warranty',
         component: () => import('../pages/console/ConsoleWarrantyPage.vue'),
         // The admin reads the queue and the rates; only a service manager decides (PO 09/10/2026).
-        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        meta: { title: 'Yêu cầu bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'], permission: 'support:read_all' },
       },
       {
         path: 'warranty/:id',

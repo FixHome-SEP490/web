@@ -8,6 +8,43 @@ export interface SmPermission {
   granted: boolean;
 }
 
+/** BUG 261: one service manager account and whether it has its own permissions. */
+export interface SmAccount {
+  id: string;
+  fullName: string;
+  email: string;
+  isActive: boolean;
+  customized: boolean;
+}
+
+export interface SmAccountPermission extends SmPermission {
+  roleGranted: boolean;
+  overridden: boolean;
+}
+
+export interface SmAccountPermissions {
+  user: SmAccount;
+  permissions: SmAccountPermission[];
+}
+
+function toAccount(row: unknown): SmAccount {
+  const r = (row ?? {}) as Record<string, unknown>;
+  return { id: String(r.id), fullName: String(r.fullName ?? ''), email: String(r.email ?? ''), isActive: r.isActive !== false, customized: r.customized === true };
+}
+
+function toAccountPermissions(body: unknown): SmAccountPermissions {
+  const data = payload(body) as Record<string, unknown> | null;
+  if (!data || !Array.isArray(data.permissions)) throw new Error('Backend returned an invalid account permission list.');
+  const base = toPermissions(data.permissions);
+  return {
+    user: toAccount(data.user),
+    permissions: base.map((p, i) => {
+      const r = (data.permissions as Record<string, unknown>[])[i];
+      return { ...p, roleGranted: r.roleGranted === true, overridden: r.overridden === true };
+    }),
+  };
+}
+
 export interface SentBroadcast {
   key: string;
   title: string;
@@ -43,6 +80,24 @@ export const adminControlsApi = {
   async setSmPermission(code: string, granted: boolean): Promise<SmPermission[]> {
     const res = await apiClient.put<unknown>(`/admin/rbac/service-manager/permissions/${encodeURIComponent(code)}`, { granted });
     return toPermissions(res.data);
+  },
+  async listSmAccounts(): Promise<SmAccount[]> {
+    const res = await apiClient.get<unknown>('/admin/rbac/service-manager/accounts');
+    const data = payload(res.data);
+    if (!Array.isArray(data)) throw new Error('Backend returned an invalid account list.');
+    return data.map(toAccount);
+  },
+  async getSmAccountPermissions(userId: string): Promise<SmAccountPermissions> {
+    const res = await apiClient.get<unknown>(`/admin/rbac/service-manager/accounts/${encodeURIComponent(userId)}/permissions`);
+    return toAccountPermissions(res.data);
+  },
+  async setSmAccountPermission(userId: string, code: string, granted: boolean): Promise<SmAccountPermissions> {
+    const res = await apiClient.put<unknown>(`/admin/rbac/service-manager/accounts/${encodeURIComponent(userId)}/permissions/${encodeURIComponent(code)}`, { granted });
+    return toAccountPermissions(res.data);
+  },
+  async resetSmAccountPermissions(userId: string): Promise<SmAccountPermissions> {
+    const res = await apiClient.delete<unknown>(`/admin/rbac/service-manager/accounts/${encodeURIComponent(userId)}/permissions`);
+    return toAccountPermissions(res.data);
   },
   async broadcast(input: { title: string; message: string; audience: BroadcastAudience }): Promise<number> {
     const res = await apiClient.post<unknown>('/notifications/broadcast', input);
