@@ -207,6 +207,18 @@ describe('Technician Part Returns Feature', () => {
       wrapper.unmount();
     });
 
+    it('counts settled parts from the server, which the open list never carries', async () => {
+      const base = apiClientMock.get.getMockImplementation()!;
+      apiClientMock.get.mockImplementation((url: string) => url === '/part-returns/mine'
+        ? Promise.resolve({ data: { data: [mockRecord1, mockRecord3, mockRecord4], meta: { completedQty: 12 } } })
+        : base(url));
+      const wrapper = mount(TechnicianPartReturnsPage);
+      await flushPromises();
+      expect(wrapper.find('[data-testid="top-completed-count"]').text()).toBe('12');
+      expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('12 linh kiện');
+      wrapper.unmount();
+    });
+
     it('filters by status tab when clicking on filter buttons', async () => {
       const wrapper = mount(TechnicianPartReturnsPage);
       await flushPromises();

@@ -106,3 +106,15 @@ export function paymentChannels(amount: number | null, blocked = false): Array<'
   if (amount === 0) return ['no-charge'];
   return amount! < 5000 ? ['wallet', 'cash'] : ['wallet', 'cash', 'vnpay'];
 }
+
+/**
+ * Voucher lines of a final bill: the discount the server committed and what the
+ * customer pays after it. Null when the invoice carries no voucher discount.
+ */
+export function invoiceVoucherLines(invoice: Record<string, unknown> | null | undefined): { discount: number; due: number } | null {
+  if (!invoice) return null;
+  const discount = Number(invoice.voucherDiscount);
+  const due = Number(invoice.amountDue);
+  if (!Number.isSafeInteger(discount) || discount <= 0 || !Number.isSafeInteger(due) || due < 0) return null;
+  return { discount, due };
+}

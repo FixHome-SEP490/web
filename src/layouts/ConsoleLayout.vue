@@ -3,6 +3,7 @@ import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { AppSidebar } from '../components';
+import { chatSocketService } from '../services/chat-socket.service';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import {
   consoleNavigation,
@@ -16,6 +17,14 @@ const authStore = useAuthStore();
 const role = computed(() => authStore.userRole);
 const navigation = computed(() => consoleNavigation(role.value));
 const roleLabel = computed(() => consoleRoleLabels[role.value as ConsoleRole] ?? '');
+
+// Console screens follow changes live too (part counters, orders, warranty): the same socket
+// the customer and technician use; the server sends staff only ids and states.
+watch(
+  () => authStore.token,
+  (token) => { if (token) void chatSocketService.connect(token); },
+  { immediate: true },
+);
 
 // Browser tab follows the page: "{Tiêu đề} | FixHome".
 watch(

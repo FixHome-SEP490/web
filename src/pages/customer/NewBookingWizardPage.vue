@@ -64,7 +64,7 @@ import AiConversationThread from '../../components/chat/AiConversationThread.vue
 import { useFillViewport } from '../../composables/useFillViewport';
 import { mediaApi, ALLOWED_MEDIA_MIME_TYPES, MAX_MEDIA_SIZE_BYTES } from '../../api/media.api';
 import { SLOT_SHORT, isSessionUpcoming, sessionDayLabel, upcomingSessions, type BookingMode, type BookingSlot } from '../../utils/booking-session';
-import { userFacingError } from '../../utils/user-facing-error';
+import { toUserFacingMessage, userFacingError } from '../../utils/user-facing-error';
 import { formatCurrencyVND } from '../../utils/formatters';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
@@ -149,8 +149,8 @@ function isPendingVisitLimitError(error: unknown): { isLimit: boolean; message: 
   if (code === 'PENDING_VISIT_LIMIT_REACHED') {
     return {
       isLimit: true,
-      message: typeof message === 'string' && message.trim()
-        ? message.trim()
+      message: typeof message === 'string' && toUserFacingMessage(message, '')
+        ? toUserFacingMessage(message, '')
         : 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.',
     };
   }
@@ -163,7 +163,7 @@ function isPendingVisitLimitError(error: unknown): { isLimit: boolean; message: 
       lower.includes('pending_visit_limit_reached') ||
       lower.includes('giới hạn yêu cầu đang chờ')
     ) {
-      return { isLimit: true, message: message.trim() };
+      return { isLimit: true, message: toUserFacingMessage(message, 'Bạn đang có 2 lượt sửa chữa chờ kỹ thuật viên nhận. Hãy xem các yêu cầu hiện tại hoặc hủy một yêu cầu trước khi đặt tiếp.') };
     }
   }
 

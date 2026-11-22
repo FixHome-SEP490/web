@@ -79,8 +79,10 @@ const totalAwaitingManager = computed(() =>
   orderGroups.value.reduce((sum, g) => sum + g.awaitingManagerQty, 0),
 );
 
+// The open list never carries settled parts, so the server counts them (null: older server).
+const serverCompletedQty = ref<number | null>(null);
 const totalCompleted = computed(() =>
-  orderGroups.value.reduce((sum, g) => sum + g.completedQty, 0),
+  serverCompletedQty.value ?? orderGroups.value.reduce((sum, g) => sum + g.completedQty, 0),
 );
 
 const countNeedDeclareOrders = computed(() =>
@@ -158,7 +160,9 @@ const loadData = async (preferredOrderId?: string) => {
     // 1. Fetch technician's active returns
     let mineRecords: PartCustodyReturnRecord[] = [];
     try {
-      mineRecords = await partRequestsApi.getMyReturns();
+      const summary = await partRequestsApi.getMyReturnsSummary();
+      mineRecords = summary.records;
+      serverCompletedQty.value = summary.completedQty;
     } catch (err) {
       if (isPartReturnsUnavailableError(err)) {
         isUnavailable.value = true;

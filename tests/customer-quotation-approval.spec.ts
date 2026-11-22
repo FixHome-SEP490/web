@@ -177,7 +177,9 @@ describe.each(['solo', 'visit'] as const)('%s quotation approval', kind => {
     http.post.mockRejectedValue({ response: { status, data: { message: 'Bạn chưa thể duyệt báo giá này.' } } });
     await w.get(approveSelector).trigger('click');
     await flushPromises();
-    expect(w.text()).toContain('Bạn chưa thể duyệt báo giá này.');
+    // A 5xx is a system failure: the server wording is dropped (PO 22/11/2026).
+    if (status >= 500) expect(w.text()).not.toContain('Bạn chưa thể duyệt báo giá này.');
+    else expect(w.text()).toContain('Bạn chưa thể duyệt báo giá này.');
     expect(w.text()).not.toContain('Đã duyệt báo giá');
     expect(http.get.mock.calls.filter(([url]) => url === `/service-orders/${targetId}`).length).toBeGreaterThan(1);
     expect(http.post).toHaveBeenCalledTimes(1);

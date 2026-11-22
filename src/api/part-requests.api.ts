@@ -666,10 +666,19 @@ export const partRequestsApi = {
    * Capped at 100 rows on backend. Returns [] or throws if unavailable.
    */
   async getMyReturns(): Promise<PartCustodyReturnRecord[]> {
-    const res = await apiClient.get<{ data: PartCustodyReturnRecord[] }>(
+    return (await partRequestsApi.getMyReturnsSummary()).records;
+  },
+
+  /** Open obligations plus how many parts are already settled ("Đã hoàn tất"), in one call. */
+  async getMyReturnsSummary(): Promise<{ records: PartCustodyReturnRecord[]; completedQty: number | null }> {
+    const res = await apiClient.get<{ data: PartCustodyReturnRecord[]; meta?: { completedQty?: unknown } }>(
       '/part-returns/mine',
     );
-    return res.data.data || [];
+    const completed = Number(res.data.meta?.completedQty);
+    return {
+      records: res.data.data || [],
+      completedQty: Number.isSafeInteger(completed) && completed >= 0 ? completed : null,
+    };
   },
 
   /**

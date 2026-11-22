@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-22 02:36 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/console-forms-2211
+> Cập nhật lần cuối: 2026-11-22 11:35 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/final-2211
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-22 11:35 (UTC+7) | ToanAltF4 | fix/final-2211 | Hoá đơn hiện giảm voucher và số thực trả; mô tả bảo hành phải có chữ hoặc số; ô Đã hoàn tất của thợ đọc meta.completedQty; lối Nhận linh kiện bảo hành ở trang bảo hành thợ; console nối socket, trang linh kiện/trả linh kiện/bảo hành/chi tiết đơn của SM tự làm mới; lỗi 5xx không còn in câu của máy chủ, câu chung 'Có lỗi xảy ra, vui lòng thử lại sau.', bỏ (HTTP n) ở hàng hỗ trợ
 - 2026-11-22 02:36 (UTC+7) | ToanAltF4 | fix/console-forms-2211 | Gộp dev vào fix/console-forms-2211 (CONTEXT.md: giữ dòng nhật ký hai bên)
 - 2026-11-22 02:02 (UTC+7) | ToanAltF4 | fix/flow-2211-customer-text | Mô tả dài liền ở bước Kiểm tra lần cuối xuống dòng thay vì đè nút Sửa; ghi chú tự nhận việc trên tiến trình đơn hiện tiếng Việt thay câu tiếng Anh
 - 2026-11-22 01:47 (UTC+7) | ToanAltF4 | fix/flow-2211-parts-warranty | Thợ ghi được linh kiện bảo hành đã dùng/hoàn trả sau khi đơn xong (trước đó không báo hoàn tất bảo hành được), nhãn Bảo hành, ẩn lý do tiếng Anh; số lượng yêu cầu linh kiện nguyên 1-100, Hủy bỏ xoá nháp, mã bàn giao tối đa 128; ẩn khung W3 Chưa đủ điều kiện với đơn giao kiểu cũ
@@ -662,4 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-13 10:28 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (#247) vào LacVy: tích hợp giao diện chi tiết việc thợ (`invoiceShipping`, `TechnicianPrivateNote`, `QuotationPartsSourcingNote`) theo layout mới và hợp nhất nhật ký context; đã kiểm tra `typecheck`, `lint`, trình duyệt CHƯA KIỂM CHỨNG.
 - 2026-11-13 00:37 (UTC+7) | ToanAltF4 | feat/price-variants-tech-note-1211 | ADMIN 47 sửa mức giá theo thiết bị trong hộp Sửa dịch vụ; TECH 42 ghi chú riêng của thợ trên trang việc (lưu server)
 - 2026-11-12 23:54 (UTC+7) | ToanAltF4 | fix/web-console-followup-1211 | Sửa dịch vụ: bỏ giá rỗng (fixedPrice null) khỏi payload, API từ chối null (W-7 lần 2)
-- 2026-11-12 23:30 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX hàng loạt cho Thợ (Jobs/JobDetail/Stepper/Warranty/Onboarding/Profile; bỏ `TechnicianEarningsChart.vue`), Khách (Orders/OrderDetail/BookingDetail/CustomerVisit + skeleton/Dashboard) và Công khai (Services/LandingServices); `typecheck`, `lint` và test liên quan PASS, trình duyệt CHƯA KIỂM CHỨNG.

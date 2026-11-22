@@ -101,8 +101,6 @@ async function loadCases() {
       : 'Chưa tải được danh sách hỗ trợ. Kiểm tra kết nối rồi thử lại.';
     error.value = userFacingError(failure, fallback);
     if (status === 403) error.value += ' Cần tài khoản quản lý dịch vụ hoặc quản trị viên có quyền xem tất cả yêu cầu hỗ trợ.';
-    // Only the numeric transport status is diagnostic; never expose response bodies or parser internals.
-    if (status !== undefined) error.value += ` (HTTP ${status})`;
   } finally {
     if (requestId === latestRequest) loading.value = false;
   }
