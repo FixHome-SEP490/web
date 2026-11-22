@@ -12,6 +12,8 @@ import { queryKeys } from './query-keys';
 
 export interface ConsoleDashboardData {
   ops: OperationalDashboard;
+  /** Recent orders for the dashboard table and daily trend chart. */
+  allOrders?: ServiceOrderItem[];
   /** Up to five orders in progress. */
   watchOrders: ServiceOrderItem[];
 }
@@ -49,6 +51,7 @@ export const sharedQueries = {
       const [ops, orders] = await Promise.all([dashboardApi.getOperational(), ordersApi.getConsoleOrders()]);
       return {
         ops,
+        allOrders: orders,
         watchOrders: orders.filter((o) => ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'].includes(o.status)).slice(0, 5),
       };
     },
