@@ -34,6 +34,10 @@ import {
 import { FhButton, FhMoney, FhSkeleton, FhStatusPill } from '../../components';
 import { bookingsApi, type BookingItem } from '../../api/bookings.api';
 import { ordersApi, type OrderWarrantyGroup, type ServiceOrderItem } from '../../api/orders.api';
+import type { BookingDraft } from '../../api/booking-drafts.api';
+import BookingDraftBanner from '../../components/booking/BookingDraftBanner.vue';
+import { discardSavedBookingDraft, fetchCurrentBookingDraft } from '../../utils/booking-draft-summary';
+import { isOrderWorkStopped } from '../../utils/order-work-stopped';
 import { profileApi, type UserAddress } from '../../api/profile.api';
 import { catalogApi, type ServiceItem } from '../../api/catalog.api';
 import {
@@ -49,6 +53,7 @@ import {
   type VoucherPolicy,
 } from '../../api/vouchers.api';
 import { vnClock, vnDateString } from '../../utils/vn-time';
+import { VISIT_DEVICE_ARRIVED_LABEL } from '../../utils/visit-arrival';
 import { formatCurrencyVND, formatRating } from '../../utils/formatters';
 import { claimDisplayMeta, isOpenClaim, warrantyClaimToneClasses } from '../../utils/warranty-claim';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -65,7 +70,32 @@ const chatStore = useChatStore();
 const searchQuery = ref('');
 const selectedAddress = ref('');
 const claimingVoucherCode = ref<string | null>(null);
+const savedBookingDraft = ref<BookingDraft | null>(null);
+const discardingSavedDraft = ref(false);
 const isSignedIn = computed(() => authStore.isAuthenticated);
+
+async function refreshSavedDraft() {
+  savedBookingDraft.value = isSignedIn.value ? await fetchCurrentBookingDraft() : null;
+}
+
+async function discardSavedDraft() {
+  if (!savedBookingDraft.value || discardingSavedDraft.value) return;
+  discardingSavedDraft.value = true;
+  try {
+    if (await discardSavedBookingDraft()) {
+      savedBookingDraft.value = null;
+      toast.success('Đã huỷ bản nháp.');
+    }
+  } catch {
+    toast.error('Chưa huỷ được bản nháp. Vui lòng thử lại.');
+  } finally {
+    discardingSavedDraft.value = false;
+  }
+}
+
+watch(isSignedIn, () => {
+  void refreshSavedDraft();
+}, { immediate: true });
 
 // Each block is cached: a return visit shows it at once and reads it again in the background.
 const ordersQuery = useCachedQuery(sharedQueries.customerRecentOrders);
@@ -284,8 +314,8 @@ async function handleClaimVoucher(code: string) {
 
 const IN_PROGRESS = ['EN_ROUTE', 'UNDER_REPAIR', 'ACCEPTED', 'IN_PROGRESS'];
 
-// Active in-progress order (if any)
-const activeOrder = computed(() => orders.value.find((o) => IN_PROGRESS.includes(o.status)));
+// Active in-progress order (if any), excluding orders whose work has stopped.
+const activeOrder = computed(() => orders.value.find((o) => !isOrderWorkStopped(o) && IN_PROGRESS.includes(o.status)));
 
 const activeOrderStepIndex = computed(() => {
   const status = String(activeOrder.value?.status ?? '').toUpperCase();
@@ -299,9 +329,16 @@ const activeOrderProgressSteps = ['Đã nhận đơn', 'Đang di chuyển', 'Đa
 
 const recentOrders = computed(() => orders.value.slice(0, 3));
 
+// A device of a multi-device visit (bugs 181/182) opens its visit, where every device shows,
+// and one check-in covers the visit while each order stays EN_ROUTE until its repair starts.
+const orderLink = (order: ServiceOrderItem) => (order.visitGroupId ? `/app/visits/${order.visitGroupId}` : `/app/orders/${order.id}`);
+const arrivedWaiting = (order: ServiceOrderItem) => String(order.status).toUpperCase() === 'EN_ROUTE' && !!order.arrivalVerified;
+const orderPillLabel = (order: ServiceOrderItem) =>
+  isOrderWorkStopped(order) ? 'Đã dừng công việc' : arrivedWaiting(order) ? VISIT_DEVICE_ARRIVED_LABEL : '';
+
 const statTiles = computed(() => [
   { label: 'Tổng đơn', value: orders.value.length },
-  { label: 'Đang xử lý', value: orders.value.filter((o) => IN_PROGRESS.includes(o.status)).length },
+  { label: 'Đang xử lý', value: orders.value.filter((o) => !isOrderWorkStopped(o) && IN_PROGRESS.includes(o.status)).length },
   { label: 'Hoàn thành', value: orders.value.filter((o) => o.status === 'COMPLETED').length },
 ]);
 
@@ -488,7 +525,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-600" />
                 </span>
                 <h2 class="text-sm font-semibold text-ink-900">
-                  {{ String(activeOrder.status).toUpperCase() === 'EN_ROUTE' ? 'Kỹ thuật viên đang đến' : 'Đơn đang thực hiện' }}
+                  {{ arrivedWaiting(activeOrder) ? 'Kỹ thuật viên đã đến' : String(activeOrder.status).toUpperCase() === 'EN_ROUTE' ? 'Kỹ thuật viên đang đến' : 'Đơn đang thực hiện' }}
                 </h2>
                 <span class="text-xs text-ink-500 font-num">#{{ activeOrder.code }}</span>
                 <span
@@ -498,7 +535,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                   Đặt lịch gấp
                 </span>
               </div>
-              <FhStatusPill :status="activeOrder.status" />
+              <FhStatusPill :status="activeOrder.status" :label="orderPillLabel(activeOrder)" />
             </div>
 
             <div class="min-w-0 space-y-2">
@@ -576,8 +613,8 @@ async function handleChatForOrder(order: ServiceOrderItem) {
               <MessageSquare :size="15" :stroke-width="1.75" />
               Nhắn tin
             </FhButton>
-            <FhButton variant="primary" size="sm" class="pe-2.5" @click="router.push(`/app/orders/${activeOrder.id}`)">
-              {{ String(activeOrder.status).toUpperCase() === 'EN_ROUTE' ? 'Theo dõi vị trí' : 'Xem tiến độ' }}
+            <FhButton variant="primary" size="sm" class="pe-2.5" @click="router.push(orderLink(activeOrder))">
+              {{ String(activeOrder.status).toUpperCase() === 'EN_ROUTE' && !arrivedWaiting(activeOrder) ? 'Theo dõi vị trí' : 'Xem tiến độ' }}
               <ChevronRight :size="15" :stroke-width="1.75" />
             </FhButton>
           </div>
@@ -745,6 +782,15 @@ async function handleChatForOrder(order: ServiceOrderItem) {
       </section>
     </div>
 
+    <BookingDraftBanner
+      v-if="savedBookingDraft"
+      class="rounded-[var(--radius-lg)]"
+      :draft="savedBookingDraft"
+      :loading="discardingSavedDraft"
+      @resume="router.push({ path: '/app/bookings/new', query: { resumeDraft: '1' } })"
+      @discard="discardSavedDraft"
+    />
+
     <!-- Recent orders back in its original position directly below Hero -->
     <section
       v-if="loading"
@@ -816,7 +862,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
           <article
             class="h-full rounded-[var(--radius-md)] border border-ink-200/80 bg-white hover:bg-ink-50/50 hover:border-brand-200 transition-[background-color,border-color] duration-150 ease-out p-4 flex flex-col justify-between gap-3"
           >
-            <router-link :to="`/app/orders/${order.id}`" class="flex items-start gap-3.5 min-w-0 group">
+            <router-link :to="orderLink(order)" class="flex items-start gap-3.5 min-w-0 group">
               <div
                 class="w-14 h-14 rounded-[10px] bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden"
               >
@@ -836,7 +882,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                   >
                     {{ order.serviceName }}
                   </span>
-                  <FhStatusPill :status="order.status" class="shrink-0" />
+                  <FhStatusPill :status="isOrderWorkStopped(order) ? 'CANCELLED' : order.status" :label="orderPillLabel(order)" class="shrink-0" />
                 </div>
 
                 <span class="block text-xs text-ink-500 font-num whitespace-nowrap truncate">
@@ -867,7 +913,7 @@ async function handleChatForOrder(order: ServiceOrderItem) {
                   Đặt lại
                 </button>
                 <router-link
-                  :to="`/app/orders/${order.id}`"
+                  :to="orderLink(order)"
                   class="inline-flex items-center gap-0.5 font-semibold text-brand-600 hover:text-brand-700 whitespace-nowrap group"
                 >
                   Chi tiết

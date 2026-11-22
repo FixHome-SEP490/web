@@ -20,6 +20,7 @@ import { REFERENCE_STALE_TIME } from '../../lib/query-client';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { formatCurrencyVND, toBankAccountName } from '../../utils/formatters';
 import { userFacingError, withoutCodes } from '../../utils/user-facing-error';
+import { validateBankAccountName } from '../../utils/input-validation';
 
 const KYC_LINK = '/app/kyc';
 
@@ -98,6 +99,11 @@ async function saveBank() {
   }
   if (!accountName) {
     bankError.value = 'Vui lòng nhập tên chủ tài khoản.';
+    return;
+  }
+  const nameError = validateBankAccountName(accountName);
+  if (nameError) {
+    bankError.value = `${nameError}.`;
     return;
   }
   bankSaving.value = true;

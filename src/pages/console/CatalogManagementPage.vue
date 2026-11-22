@@ -209,7 +209,7 @@ const openEditCategory = (cat: ServiceCategory) => {
 };
 
 const saveCategory = async () => {
-  if (!categoryForm.value.name || !categoryForm.value.code) {
+  if (!categoryForm.value.name?.trim() || !categoryForm.value.code?.trim()) {
     formError.value = 'Điền tên và mã danh mục.';
     return;
   }
@@ -284,7 +284,7 @@ const openEditService = (svc: ServiceItem) => {
 };
 
 const saveService = async () => {
-  if (!serviceForm.value.name || !serviceForm.value.code || !serviceForm.value.categoryId) {
+  if (!serviceForm.value.name?.trim() || !serviceForm.value.code?.trim() || !serviceForm.value.categoryId) {
     formError.value = 'Chọn danh mục, điền tên và mã dịch vụ.';
     return;
   }
@@ -497,12 +497,12 @@ const handleConfirm = async () => {
             <div class="flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
               <label :class="consoleLabel">
                 Tên danh mục
-                <input v-model="categoryForm.name" type="text" :class="consoleField" placeholder="Ví dụ: Điện lạnh" />
+                <input v-model="categoryForm.name" type="text" maxlength="200" :class="consoleField" placeholder="Ví dụ: Điện lạnh" />
               </label>
               <div class="grid grid-cols-2 gap-3">
                 <label :class="consoleLabel">
                   Mã (in hoa, không dấu)
-                  <input v-model="categoryForm.code" type="text" :disabled="isEditingCategory" :class="consoleField" class="font-num disabled:bg-ink-100" placeholder="DIEN_LANH" />
+                  <input v-model="categoryForm.code" type="text" maxlength="200" :disabled="isEditingCategory" :class="consoleField" class="font-num disabled:bg-ink-100" placeholder="DIEN_LANH" />
                 </label>
                 <label :class="consoleLabel">
                   Đường dẫn
@@ -568,12 +568,12 @@ const handleConfirm = async () => {
               </label>
               <label :class="consoleLabel">
                 Tên dịch vụ
-                <input v-model="serviceForm.name" type="text" :class="consoleField" placeholder="Ví dụ: Vệ sinh máy lạnh treo tường" />
+                <input v-model="serviceForm.name" type="text" maxlength="200" :class="consoleField" placeholder="Ví dụ: Vệ sinh máy lạnh treo tường" />
               </label>
               <div class="grid grid-cols-2 gap-3">
                 <label :class="consoleLabel">
                   Mã (in hoa, không dấu)
-                  <input v-model="serviceForm.code" type="text" :disabled="isEditingService" :class="consoleField" class="font-num disabled:bg-ink-100" placeholder="VE_SINH_ML" />
+                  <input v-model="serviceForm.code" type="text" maxlength="200" :disabled="isEditingService" :class="consoleField" class="font-num disabled:bg-ink-100" placeholder="VE_SINH_ML" />
                 </label>
                 <label :class="consoleLabel">
                   Đường dẫn

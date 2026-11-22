@@ -27,6 +27,7 @@ import {
   TicketPercent,
   Warehouse,
   Building2,
+  CalendarClock,
   ClipboardCheck,
   KeyRound,
   Megaphone,
@@ -51,7 +52,8 @@ const overview = item('Tổng quan', '/console', LayoutDashboard);
 const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
-const support = item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
+const officeVisits = item('Lịch hẹn trụ sở', '/console/office-visits', CalendarClock);
+const support =item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
 const checkinFaces = item('Xác nhận khuôn mặt', '/console/checkin-faces', ScanFace);
 const payouts = item('Chi hộ và rút tiền', '/console/wallets', Wallet);
@@ -75,6 +77,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
           item('Điểm uy tín', '/console/reputation', Gauge),
         ],
       },
+      { group: 'Kỹ thuật viên', items: [officeVisits] },
     ];
   }
   if (role === 'ADMIN') {
@@ -88,6 +91,7 @@ export function consoleNavigation(role: ConsoleRole | string | null | undefined)
         items: [
           item('Duyệt danh tính', '/console/technicians', UserCheck),
           item('Duyệt hồ sơ', '/console/admin/profile-reviews', ClipboardCheck),
+          officeVisits,
           item('Trụ sở nhận hồ sơ', '/console/admin/visit-offices', Building2),
           item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award),
           item('Tra cứu', '/console/admin/technician-directory', UserSearch),

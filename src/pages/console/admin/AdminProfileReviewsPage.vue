@@ -169,12 +169,8 @@ const act = async (task: () => Promise<unknown>, success: string, fallback: stri
   }
 };
 
-const markAttended = () =>
-  scheduledVisit.value && act(() => adminOfficeVisitsApi.markAttended(scheduledVisit.value!.id), 'Đã ghi nhận buổi gặp.', 'Chưa ghi nhận được buổi gặp.');
-const markMissed = () =>
-  scheduledVisit.value && act(() => adminOfficeVisitsApi.markMissed(scheduledVisit.value!.id), 'Đã ghi nhận thợ vắng buổi hẹn.', 'Chưa ghi nhận được.');
-const resetMissed = () =>
-  detail.value && act(() => adminOfficeVisitsApi.resetMissed(detail.value!.technicianId), 'Đã cho phép thợ đặt lại lịch.', 'Chưa cho phép đặt lại được.');
+const reopen = () =>
+  detail.value && act(() => adminOfficeVisitsApi.reopenReview(detail.value!.technicianId), 'Đã mở lại hồ sơ, thợ đặt lịch gặp lại.', 'Chưa mở lại được hồ sơ.');
 
 const approve = async () => {
   if (!detail.value || busy.value) return;
@@ -360,17 +356,13 @@ const confirmReject = async () => {
                 </p>
                 <p v-else-if="attendedVisit" class="text-sm font-medium text-success-700">Đã gặp trực tiếp ({{ attendedVisit.officeName }}, <span class="font-num">{{ formatTime(attendedVisit.scheduledAt) }}</span>).</p>
                 <p v-else class="text-sm text-ink-500">Thợ chưa đặt lịch.</p>
-                <div class="flex flex-wrap gap-2">
-                  <FhButton v-if="scheduledVisit" variant="primary" size="sm" :disabled="busy" @click="markAttended">Đã gặp</FhButton>
-                  <FhButton v-if="scheduledVisit" variant="secondary" size="sm" :disabled="busy" @click="markMissed">Thợ vắng</FhButton>
-                  <FhButton v-if="detail.stage === 'visit_blocked'" variant="secondary" size="sm" :disabled="busy" @click="resetMissed">Cho phép đặt lại</FhButton>
-                </div>
+                <p v-if="!attendedVisit" class="text-xs text-ink-500">Quản lý dịch vụ ghi nhận buổi gặp (đã gặp, vắng, cho đặt lại) ở mục "Lịch hẹn trụ sở".</p>
               </section>
 
               <section class="space-y-2">
                 <h4 class="text-sm font-semibold text-ink-900">Kỹ năng và cấp độ</h4>
                 <p class="text-xs text-ink-500">Xác nhận cấp độ dựa trên bản công chứng bằng cấp. Bỏ chọn "Xác nhận" nếu chưa đủ căn cứ.</p>
-                <ul class="divide-y divide-ink-100 rounded-[var(--radius-md)] border border-ink-200 bg-white">
+                <ul class="max-h-80 divide-y divide-ink-100 overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-ink-200 bg-white">
                   <li v-for="skill in detail.skills" :key="skill.id" class="flex flex-wrap items-center gap-3 px-4 py-2.5">
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-ink-900">{{ skill.serviceName }}</div>
@@ -530,12 +522,13 @@ const confirmReject = async () => {
             </div>
 
             <footer class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-ink-200 bg-ink-25/60 px-6 py-4">
-              <p v-if="!attendedVisit" class="text-xs text-ink-500">Chỉ duyệt hồ sơ sau khi đã gặp trực tiếp tại trụ sở.</p>
+              <p v-if="detail.stage !== 'profile_review'" class="text-xs text-ink-500">Chỉ duyệt hồ sơ sau khi đã gặp trực tiếp tại trụ sở.</p>
               <span v-else />
               <div class="flex flex-wrap justify-end gap-2">
                 <FhButton variant="secondary" size="sm" @click="closeDetail">Đóng</FhButton>
-                <FhButton variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
-                <FhButton variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
+                <FhButton v-if="detail.stage === 'profile_rejected'" variant="secondary" size="sm" :disabled="busy" @click="reopen">Mở lại hồ sơ</FhButton>
+                <FhButton v-if="detail.stage !== 'profile_rejected' && detail.stage !== 'approved'" variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
+                <FhButton v-if="detail.stage === 'profile_review'" variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
               </div>
             </footer>
           </section>
@@ -607,7 +600,7 @@ const confirmReject = async () => {
       @cancel="showReject = false"
     >
       <label class="block text-sm font-medium text-ink-700" for="profile-reject-reason">Lý do từ chối</label>
-      <textarea id="profile-reject-reason" v-model="rejectReason" rows="3" class="mt-1.5" :class="consoleTextarea" placeholder="Ví dụ: bản công chứng bằng cấp không rõ"></textarea>
+      <textarea id="profile-reject-reason" v-model="rejectReason" maxlength="2000" rows="3" class="mt-1.5" :class="consoleTextarea" placeholder="Ví dụ: bản công chứng bằng cấp không rõ"></textarea>
       <Transition name="fh-fade-slide">
         <p v-if="rejectError" class="mt-1 text-sm text-danger-600" role="alert">{{ rejectError }}</p>
       </Transition>

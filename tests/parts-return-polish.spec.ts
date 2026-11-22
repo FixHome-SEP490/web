@@ -136,7 +136,7 @@ describe('Manager custody projection and refresh', () => {
     expect(text(row)).toContain(pending ? 'Chờ nhận 1' : 'Đã nhận trả 1');
     await w.get('[data-testid="part-request-detail-pr-1"]').trigger('click');
     const item = w.get('[data-testid="manager-part-detail-item-pr-1"]');
-    expect(text(item)).toContain(`Khai trả 1 · Đã nhận ${accepted}`);
+    expect(text(item)).toContain(`Khai trả 1 · Đã nhận trả ${accepted}`);
     if (pending) expect(text(item)).toContain('Chờ nhận 1');
     else expect(text(item)).not.toContain('Chờ nhận 1');
     expect(item.get('[data-testid="manager-part-used-value"]').attributes('data-money')).toBe('50000');
@@ -264,6 +264,29 @@ describe('Manager custody projection and refresh', () => {
     resync.forEach(fn => fn());
     await vi.advanceTimersByTimeAsync(200); await flushPromises();
     expect((w.get('input[type="number"]').element as HTMLInputElement).value).toBe('1');
+    w.unmount();
+  });
+});
+
+describe('BUG DETECTOR 250/258: manager list and detail pane', () => {
+  it('lists short rows, opens the chosen one beside the list and keeps the page still on refresh', async () => {
+    const second = { ...request('pr-2', 'so-2'), status: 'requested', items: [{ ...request('pr-2').items[0], id: 'item-pr-2', partNameSnapshot: 'Bo mạch' }] };
+    api.getAll.mockResolvedValue({ data: [request(), second], total: 2 });
+    const w = mountManager();
+    await flushPromises();
+    expect(w.find('[data-testid="part-request-pane-pr-1"]').exists()).toBe(true);
+    expect(text(w.get('[data-testid="part-request-detail-pr-2"]'))).toContain('Bo mạch x 2');
+    await w.get('[data-testid="part-request-detail-pr-2"]').trigger('click');
+    expect(w.find('[data-testid="part-request-pane-pr-2"]').exists()).toBe(true);
+    expect(w.find('[data-testid="manager-part-detail-item-pr-2"]').exists()).toBe(true);
+    // A background refresh keeps the returns banner on screen while it reads again.
+    expect(w.find('[data-testid="part-returns-link"]').exists()).toBe(true);
+    const next = deferred<ReturnType<typeof ledger>[]>();
+    api.getPendingReturns.mockReturnValueOnce(next.promise);
+    await focusRefresh();
+    expect(w.find('[data-testid="part-returns-link"]').exists()).toBe(true);
+    next.resolve([ledger()]); await flushPromises();
+    expect(w.find('[data-testid="part-returns-link"]').exists()).toBe(true);
     w.unmount();
   });
 });

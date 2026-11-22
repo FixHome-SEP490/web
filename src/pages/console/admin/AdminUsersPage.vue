@@ -11,6 +11,7 @@ import ConsolePagination from '../../../components/console/ConsolePagination.vue
 import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
+import { validateEmail, validateFullName } from '../../../utils/input-validation';
 import { adminControlsApi } from '../../../api/admin-controls.api';
 import { warehousesApi, type Warehouse } from '../../../api/warehouses.api';
 import {
@@ -338,6 +339,17 @@ async function handleCreateTechnician() {
     createTechError.value = 'Nhập họ tên và email.';
     return;
   }
+  // Cùng luật họ tên với máy chủ; trước đây emoji hay thẻ HTML chỉ nhận lỗi chung "Chưa tạo được tài khoản".
+  const nameError = validateFullName(createTechForm.value.fullName);
+  if (nameError) {
+    createTechError.value = nameError + '.';
+    return;
+  }
+  const emailError = validateEmail(createTechForm.value.email);
+  if (emailError) {
+    createTechError.value = emailError + '.';
+    return;
+  }
   const phone = createTechForm.value.phoneNumber.replace(/\s+/g, '').replace(/^\+84/, '0');
   if (phone && !/^0[35789]\d{8}$/.test(phone)) {
     createTechError.value = 'Số điện thoại phải là số di động Việt Nam 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09.';
@@ -575,7 +587,7 @@ async function handleCreateTechnician() {
             <form class="space-y-3" @submit.prevent="handleCreateTechnician">
               <label :class="consoleLabel">
                 Họ và tên
-                <input v-model="createTechForm.fullName" type="text" autocomplete="name" :class="consoleField" class="h-10" />
+                <input v-model="createTechForm.fullName" type="text" maxlength="200" autocomplete="name" :class="consoleField" class="h-10" />
               </label>
               <label :class="consoleLabel">
                 Email đăng nhập

@@ -104,12 +104,18 @@ function normalizeServiceArea(payload: unknown): TechnicianServiceAreaView {
   };
 }
 
+/** "HH:mm"; một vài lịch cũ lưu hết ngày là "24:00", máy chủ chỉ nhận "23:59" (cùng nghĩa, ô chọn hiện "24:00"). */
+function scheduleTime(value: unknown): string {
+  const text = String(value ?? '').slice(0, 5);
+  return text === '24:00' ? '23:59' : text;
+}
+
 function normalizeSchedule(payload: unknown): TechnicianScheduleView {
   const schedule = isRecord(payload) ? payload : {};
   return {
     dayOfWeek: Number(schedule.dayOfWeek ?? 0),
-    startTime: String(schedule.startTime ?? ''),
-    endTime: String(schedule.endTime ?? ''),
+    startTime: scheduleTime(schedule.startTime),
+    endTime: scheduleTime(schedule.endTime),
   };
 }
 
@@ -253,11 +259,11 @@ export const technicianProfileApi = {
     serviceId: string,
     mimeType: string,
   ): Promise<{ storageObjectPath: string; uploadUrl: string }> {
-    const res = await apiClient.post<{ storageObjectPath: string; uploadUrl: string }>(
+    const res = await apiClient.post<{ data: { storageObjectPath: string; uploadUrl: string } }>(
       `/technicians/me/services/${serviceId}/verification/documents/upload-url`,
       { mimeType },
     );
-    return res.data;
+    return res.data.data;
   },
 
   /** Uploads raw bytes straight to Supabase Storage — different origin, must
@@ -275,11 +281,11 @@ export const technicianProfileApi = {
     serviceId: string,
     doc: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
   ): Promise<SkillVerificationView> {
-    const res = await apiClient.post<unknown>(
+    const res = await apiClient.post<{ data: unknown }>(
       `/technicians/me/services/${serviceId}/verification/documents`,
       doc,
     );
-    return normalizeSkillVerification(res.data);
+    return normalizeSkillVerification(res.data.data);
   },
 
   // ---- Lịch làm việc ----

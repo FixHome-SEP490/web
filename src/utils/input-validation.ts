@@ -38,7 +38,13 @@ export function validateFullName(value: string): string {
   return '';
 }
 
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The bank account holder follows the server's person-name rule (letters, spaces, ' - .). */
+export function validateBankAccountName(value: string): string {
+  const message = validateFullName(value);
+  return message ? message.replace('Họ tên', 'Tên chủ tài khoản') : '';
+}
+
+const EMAIL_SHAPE =/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateEmail(value: string): string {
   const trimmed = value.trim();

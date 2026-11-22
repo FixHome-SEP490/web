@@ -23,9 +23,9 @@ interface ProvinceOption {
 }
 
 const DEFAULT_PROVINCES: ProvinceOption[] = [
-  { code: '01', name: 'Hà Nội' },
-  { code: '79', name: 'TP. Hồ Chí Minh' },
-  { code: '48', name: 'Đà Nẵng' },
+  { code: '01', name: 'Thành phố Hà Nội' },
+  { code: '79', name: 'Thành phố Hồ Chí Minh' },
+  { code: '48', name: 'Thành phố Đà Nẵng' },
 ];
 
 const loading = ref(true);
@@ -53,7 +53,7 @@ const showModal = ref(false);
 const isEditing = ref(false);
 const areaForm = ref<Partial<ServiceArea>>({
   provinceCode: '01',
-  provinceName: 'Hà Nội',
+  provinceName: 'Thành phố Hà Nội',
   districtCode: '',
   districtName: '',
   isActive: true,
@@ -98,21 +98,19 @@ onMounted(() => {
   void loadProvinces();
 });
 
+// Tên tỉnh lấy theo khu vực đã có trước (để khu vực mới cùng tỉnh mang đúng một tên), rồi theo danh mục tỉnh, cuối cùng mới tới tên dự phòng.
 const provinceOptions = computed<ProvinceOption[]>(() => {
   const byCode = new Map<string, ProvinceOption>();
-  for (const item of DEFAULT_PROVINCES) {
-    byCode.set(item.code, item);
-  }
-  for (const item of loadedProvinces.value) {
-    if (!byCode.has(item.code)) {
-      byCode.set(item.code, item);
-    }
-  }
   for (const area of serviceAreas.value) {
     const code = area.provinceCode?.trim();
     const name = area.provinceName?.trim();
     if (code && name && !byCode.has(code)) {
       byCode.set(code, { code, name });
+    }
+  }
+  for (const item of [...loadedProvinces.value, ...DEFAULT_PROVINCES]) {
+    if (!byCode.has(item.code)) {
+      byCode.set(item.code, item);
     }
   }
   const currentCode = areaForm.value.provinceCode?.trim();
@@ -148,7 +146,7 @@ const openAddArea = () => {
   formError.value = '';
   areaForm.value = {
     provinceCode: '01',
-    provinceName: 'Hà Nội',
+    provinceName: provinceOptions.value.find((prov) => prov.code === '01')?.name ?? 'Thành phố Hà Nội',
     districtCode: '',
     districtName: '',
     isActive: true,
@@ -171,7 +169,7 @@ const onProvinceChange = () => {
 };
 
 const saveArea = async () => {
-  if (!areaForm.value.provinceCode || !areaForm.value.districtCode || !areaForm.value.districtName) {
+  if (!areaForm.value.provinceCode?.trim() || !areaForm.value.districtCode?.trim() || !areaForm.value.districtName?.trim()) {
     formError.value = 'Điền đủ tỉnh, mã và tên quận, huyện.';
     return;
   }
@@ -180,11 +178,16 @@ const saveArea = async () => {
   formError.value = '';
   try {
     if (isEditing.value && areaForm.value.id) {
-      await serviceAreasApi.updateServiceArea(areaForm.value.id, areaForm.value);
+      // Chỉ gửi các trường sửa được; id, createdAt, updatedAt làm máy chủ từ chối cả yêu cầu.
+      await serviceAreasApi.updateServiceArea(areaForm.value.id, {
+        provinceCode: areaForm.value.provinceCode,
+        provinceName: areaForm.value.provinceName,
+        districtName: areaForm.value.districtName?.trim(),
+      });
     } else {
       await serviceAreasApi.createServiceArea({
         provinceCode: areaForm.value.provinceCode!,
-        provinceName: areaForm.value.provinceName || 'Hà Nội',
+        provinceName: areaForm.value.provinceName || 'Thành phố Hà Nội',
         districtCode: areaForm.value.districtCode!,
         districtName: areaForm.value.districtName!,
         isActive: areaForm.value.isActive ?? true,

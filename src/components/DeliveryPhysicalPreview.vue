@@ -26,6 +26,10 @@ const steps = ['Giữ linh kiện tại kho', 'Xuất linh kiện cho đơn vị
 // W-16: on the paid path the server reports the recorded step; each step up to it is done.
 const STEP_REACHED: Record<string, number> = { RESERVED: 1, ISSUED_TO_COURIER: 2, DISPATCH_RECORDED: 3, TECHNICIAN_RECEIVED: 4 };
 const progress = computed(() => preview.value?.progress ?? null);
+// A delivery outside the new paid-delivery flow follows the usual part status
+// (ready, delivering, received); "not eligible" here only confused people.
+const legacyRequest = computed(() => state.value === 'ready' && !progress.value
+  && preview.value?.eligibility !== 'PENDING_ASSISTANCE' && preview.value?.reason === 'LEGACY_OR_NOT_ENROLLED');
 const reached = computed(() => STEP_REACHED[progress.value?.status ?? ''] ?? 0);
 const money = (value: number | null) => (value === null ? 'Chưa xác định' : `${value.toLocaleString('vi-VN')} ₫`);
 async function load() {
@@ -51,14 +55,13 @@ onUnmounted(() => { generation++; });
 </script>
 
 <template>
-  <section v-if="visible" :aria-labelledby="titleId" :aria-busy="state === 'loading'"
+  <section v-if="visible && !legacyRequest" :aria-labelledby="titleId" :aria-busy="state === 'loading'"
     class="min-w-0 space-y-3 rounded-xl border border-ink-200 bg-ink-25 p-4 text-sm text-ink-700"
     data-testid="delivery-physical-preview">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <h4 :id="titleId" class="font-semibold text-ink-900">Trạng thái giao linh kiện</h4>
       <span class="text-xs font-medium text-ink-600">Chỉ xem</span>
     </div>
-    <p class="break-all text-xs text-ink-600">Mã yêu cầu: {{ requestId }}</p>
     <div role="status" aria-live="polite">
       <template v-if="state === 'loading'">
         <span class="sr-only">Đang kiểm tra trạng thái giao linh kiện…</span>
@@ -84,7 +87,11 @@ onUnmounted(() => { generation++; });
         <li v-for="(step, index) in steps" :key="step">{{ step }}: <span class="font-medium">{{ index < reached ? 'Đã xong' : 'Chưa tới' }}</span></li>
       </ul>
     </template>
-    <template v-else-if="state === 'ready' && preview">
+    <!-- BUG DETECTOR 242: one status line up front; the rest opens on demand. -->
+    <details v-else-if="state === 'ready' && preview" class="min-w-0">
+      <summary class="min-h-11 cursor-pointer py-3 font-medium text-brand-700 focus-visible:outline-2 focus-visible:outline-brand-600">Xem chi tiết giao nhận</summary>
+      <div class="space-y-3">
+      <p class="break-all text-xs text-ink-600">Mã yêu cầu: {{ requestId }}</p>
       <p>Thông tin chỉ để tham khảo tại thời điểm kiểm tra, chưa xác nhận giao nhận hoặc phê duyệt chi phí.</p>
       <dl class="grid gap-3 sm:grid-cols-2">
         <div><dt class="font-medium text-ink-900">Chứng từ giao nhận</dt><dd>{{ preview.evidence === 'NOT_RECORDED' ? 'Chưa ghi nhận' : 'Đã ghi nhận, chưa được xác minh độc lập' }}</dd></div>
@@ -96,13 +103,15 @@ onUnmounted(() => { generation++; });
       <ul class="space-y-1" aria-label="Các bước giao nhận chưa mở">
         <li v-for="step in steps" :key="step">{{ step }}: <span class="font-medium">Chưa mở</span></li>
       </ul>
-      <details class="min-w-0">
-        <summary class="min-h-11 cursor-pointer py-3 font-medium text-ink-900 focus-visible:outline-2 focus-visible:outline-brand-600">Điều kiện chưa xác minh</summary>
+      <div class="min-w-0">
+        <p class="font-medium text-ink-900">Điều kiện chưa xác minh</p>
         <ul class="list-disc space-y-1 pl-5">
           <li v-for="blocker in preview.blockers" :key="blocker">{{ deliveryPhysicalBlockerLabels[blocker] }}</li>
         </ul>
-      </details>
-    </template>
+      </div>
+      </div>
+    </details>
+    <p v-if="state === 'ready' && preview && progress" class="break-all text-xs text-ink-600">Mã yêu cầu: {{ requestId }}</p>
     <FhButton v-if="state === 'ready' || state === 'error'" variant="secondary" @click="load">
       {{ state === 'error' ? 'Thử lại' : 'Kiểm tra lại' }}
     </FhButton>

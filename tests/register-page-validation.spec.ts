@@ -22,6 +22,7 @@ vi.mock('../src/stores/auth', () => ({
   useAuthStore: () => ({ register: mockRegister, loading: false }),
 }));
 
+import { toast } from 'vue-sonner';
 import RegisterPage from '../src/pages/auth/RegisterPage.vue';
 
 /** `router-link` chỉ dùng để điều hướng, không liên quan tới phần đang kiểm. */
@@ -77,5 +78,19 @@ describe('RegisterPage — lỗi họ tên hiện trên giao diện', () => {
     await flushPromises();
 
     expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('báo cho người dùng khi máy chủ từ chối vì email đã đăng ký (QA 22/11/2026)', async () => {
+    mockRegister.mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { error: { code: 'CONFLICT', message: 'Email is already registered' } } } });
+    const wrapper = mount(RegisterPage, mountOptions);
+    const inputs = wrapper.findAll('input');
+    await inputs.find((i) => i.attributes('placeholder') === 'Nguyễn Văn A')!.setValue('Nguyễn Văn An');
+    await inputs.find((i) => i.attributes('placeholder') === 'customer@example.com')!.setValue('trung@fixhome.vn');
+    await inputs.find((i) => i.attributes('placeholder') === 'Tạo mật khẩu')!.setValue('Password123!');
+    await inputs.find((i) => i.attributes('placeholder') === 'Nhập lại mật khẩu')!.setValue('Password123!');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+    expect(mockRegister).toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.');
   });
 });

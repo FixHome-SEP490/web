@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Camera, CheckCircle2, AlertCircle, ShieldCheck, ShieldQuestion, X } from 'lucide-vue-next';
-import { FhButton, FhCard, FhConfirmDialog, FhSkeleton } from '../../components';
+import { FhButton, FhCard, FhSkeleton } from '../../components';
 import { userFacingError } from '../../utils/user-facing-error';
 import {
   technicianVerificationApi,
@@ -90,9 +90,6 @@ const submitting = ref(false);
 const verification = ref<MyVerification | null>(null);
 const loadError = ref<string | null>(null);
 const actionMessage = ref<{ type: 'success' | 'error'; text: string } | null>(null);
-
-const showWithdrawConfirm = ref(false);
-const withdrawing = ref(false);
 
 // Live camera capture for the face liveness video (input[capture] silently
 // falls back to a plain file picker on desktop browsers, so we drive
@@ -330,27 +327,6 @@ const handleSubmit = async () => {
   }
 };
 
-const confirmWithdraw = async () => {
-  if (withdrawing.value) return;
-  withdrawing.value = true;
-  try {
-    await technicianVerificationApi.withdraw();
-    verification.value = null;
-    resetSlots();
-    actionMessage.value = {
-      type: 'success',
-      text: 'Đã rút hồ sơ. Vui lòng nộp lại ảnh và video mới.',
-    };
-  } catch (err) {
-    actionMessage.value = {
-      type: 'error',
-      text: userFacingError(err, 'Không thể rút hồ sơ. Vui lòng thử lại.'),
-    };
-  } finally {
-    withdrawing.value = false;
-    showWithdrawConfirm.value = false;
-  }
-};
 </script>
 
 <template>
@@ -419,9 +395,6 @@ const confirmWithdraw = async () => {
               Đã nộp: {{ submittedDocuments.join(', ') }}
             </p>
           </div>
-        </div>
-        <div class="mt-5 pt-4 border-t border-ink-100 flex justify-end">
-          <FhButton variant="secondary" @click="showWithdrawConfirm = true">Nộp lại</FhButton>
         </div>
       </FhCard>
 
@@ -586,16 +559,5 @@ const confirmWithdraw = async () => {
         </FhButton>
       </div>
     </div>
-
-    <FhConfirmDialog
-      :open="showWithdrawConfirm"
-      :loading="withdrawing"
-      title="Rút hồ sơ đang chờ duyệt?"
-      consequence="Ảnh CCCD và video xác minh đã nộp sẽ bị xoá. Bạn cần nộp lại từ đầu."
-      confirm-text="Rút và nộp lại"
-      cancel-text="Quay lại"
-      @confirm="confirmWithdraw"
-      @cancel="showWithdrawConfirm = false"
-    />
   </div>
 </template>

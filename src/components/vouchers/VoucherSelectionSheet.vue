@@ -662,7 +662,7 @@ onBeforeUnmount(() => {
               :loading="applying"
               @click="activeReservation ? requestClose() : emit('apply')"
             >
-              {{ applying ? 'Đang giữ chỗ…' : activeReservation ? 'Quay lại thanh toán' : serverPreview?.paymentAvailable === true ? 'Áp dụng voucher' : 'Máy chủ chưa sẵn sàng' }}
+              {{ applying ? 'Đang giữ chỗ…' : activeReservation ? 'Quay lại thanh toán' : serverPreview && serverPreview.paymentAvailable !== true ? 'Máy chủ chưa sẵn sàng' : 'Áp dụng voucher' }}
             </FhButton>
           </footer>
         </div>

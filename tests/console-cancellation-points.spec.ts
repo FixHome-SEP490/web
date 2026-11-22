@@ -56,14 +56,25 @@ describe('Cancellations cost points by themselves (console)', () => {
     expect(wrapper.text()).not.toContain('Strike vi phạm');
   });
 
+  it('offers Boost only for a customer who cancelled after the technician checked in (BRX-034)', async () => {
+    getCancellationsPage.mockResolvedValue(pageOf([
+      cancellation({ id: 'after-arrival', stateAtCancel: 'under_repair' }),
+      cancellation({ id: 'before-arrival', stateAtCancel: 'en_route' }),
+      cancellation({ id: 'tech', actor: 'technician', stateAtCancel: 'under_repair' }),
+      cancellation({ id: 'staff', actor: 'service_manager', stateAtCancel: 'under_repair' }),
+    ]));
+    const wrapper = await mountPage();
+    expect(wrapper.findAll('button').filter((b) => b.text() === 'Cấp Boost')).toHaveLength(1);
+  });
+
   it('treats a missing amount as nothing deducted', async () => {
     getCancellationsPage.mockResolvedValue(pageOf([cancellation({ reputationDelta: undefined })]));
     const wrapper = await mountPage();
     expect(wrapper.get('[data-testid="cancellation-points"]').text()).toBe('Không trừ điểm');
   });
 
-  it('still grants a Priority Boost, sending only that decision', async () => {
-    getCancellationsPage.mockResolvedValue(pageOf([cancellation()]));
+  it('still grants a Priority Boost after a verified arrival, sending only that decision', async () => {
+    getCancellationsPage.mockResolvedValue(pageOf([cancellation({ stateAtCancel: 'under_repair' })]));
     reviewCancellation.mockResolvedValue(cancellation({ reviewedByUserId: 'sm-1' }));
     const wrapper = await mountPage();
     await wrapper.findAll('button').find((b) => b.text().includes('Cấp Boost'))!.trigger('click');

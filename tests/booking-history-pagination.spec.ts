@@ -227,7 +227,10 @@ describe('CustomerOrdersPage: requests per tab', () => {
     mockGet.mockClear();
     await wrapper.get('[data-testid="history-tab-CANCELLED"]').trigger('click');
     await flushPromises();
-    expect(calls('/service-orders/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true' }]);
+    expect(calls('/service-orders/my')).toEqual([
+      { page: 1, pageSize: 100, status: 'cancelled', excludeVisitGroups: 'true' },
+      { page: 1, pageSize: 100, statuses: 'en_route,under_repair', excludeVisitGroups: 'true' },
+    ]);
     expect(calls('/bookings/my')).toEqual([{ page: 1, pageSize: 10, status: 'cancelled', excludeVisitGroups: 'true', withoutOrder: 'true' }]);
     expect(cardIds(wrapper, 'order-card-')).toEqual(['oX']);
     await wrapper.get('[data-testid="list-switch-requests"]').trigger('click');
@@ -438,6 +441,46 @@ describe('CustomerOrdersPage: one list at a time', () => {
     expect(card.text()).toContain('Đang tìm thợ thay thế');
     expect(card.text()).toContain('Thợ trước đã rút, FixHome đang tìm thợ khác');
     expect(card.text()).not.toContain('Đang di chuyển');
+  });
+
+  it('an order whose work stopped reads as stopped instead of repairing or awaiting assignment', async () => {
+    serve({
+      under_repair: [{
+        ...makeOrder({ id: 'o2', bookingId: 'x2', status: 'under_repair' }),
+        technician: null,
+        workStopped: true,
+        operationalDisposition: 'STOPPED',
+      }],
+    }, {});
+    const wrapper = await mountPage();
+    const card = wrapper.get('[data-testid="order-card-o2"]');
+    expect(card.text()).toContain('Đã dừng công việc');
+    expect(card.text()).toContain('Công việc đã dừng · phân công kỹ thuật viên đã được nhả');
+    expect(card.text()).not.toContain('Đang sửa chữa');
+    expect(card.text()).not.toContain('Chưa phân công kỹ thuật viên');
+  });
+
+  it('moves stopped-work orders out of IN_PROGRESS and into CANCELLED tab', async () => {
+    serve({
+      accepted: [makeOrder({ id: 'oActive', bookingId: 'xA', status: 'accepted', createdAt: day(2) })],
+      under_repair: [{
+        ...makeOrder({ id: 'oStopped', bookingId: 'xS', status: 'under_repair', createdAt: day(3) }),
+        technician: null,
+        workStopped: true,
+        operationalDisposition: 'STOPPED',
+      }],
+      cancelled: [makeOrder({ id: 'oCancelled', bookingId: 'xC', status: 'cancelled', createdAt: day(1) })],
+    }, {});
+    const wrapper = await mountPage();
+
+    await wrapper.get('[data-testid="history-tab-IN_PROGRESS"]').trigger('click');
+    await flushPromises();
+    expect(cardIds(wrapper, 'order-card-')).toEqual(['oActive']);
+
+    await wrapper.get('[data-testid="history-tab-CANCELLED"]').trigger('click');
+    await flushPromises();
+    expect(cardIds(wrapper, 'order-card-')).toEqual(['oStopped', 'oCancelled']);
+    expect(wrapper.get('[data-testid="order-card-oStopped"]').text()).toContain('Đã dừng công việc');
   });
 });
 

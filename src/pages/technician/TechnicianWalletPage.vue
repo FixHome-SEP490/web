@@ -28,7 +28,7 @@ import {
   formatWalletTxType,
   formatWithdrawalStatus,
 } from '../../utils/formatters';
-import { extractApiErrorMessage } from '../../utils/input-validation';
+import { extractApiErrorMessage, validateBankAccountName } from '../../utils/input-validation';
 import { toast } from 'vue-sonner';
 import { userFacingError, withoutCodes } from '../../utils/user-facing-error';
 import { useCacheUpdates, useCachedQuery } from '../../composables/useCachedQuery';
@@ -278,6 +278,11 @@ const handleSaveBank = async () => {
   }
   if (!accountName) {
     bankError.value = 'Vui lòng nhập tên chủ tài khoản';
+    return;
+  }
+  const nameError = validateBankAccountName(accountName);
+  if (nameError) {
+    bankError.value = nameError;
     return;
   }
 
