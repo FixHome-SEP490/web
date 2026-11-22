@@ -49,6 +49,7 @@ const TECHNICAL = [
 const TRANSLATIONS: Record<string, string> = {
   'email is already registered': 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.',
   'phone number is already registered': 'Số điện thoại này đã được đăng ký. Vui lòng dùng số khác.',
+  'phone number is already registered by another account': 'Số điện thoại này đã được tài khoản khác sử dụng. Vui lòng dùng số khác.',
   'invalid email or password': 'Email, số điện thoại hoặc mật khẩu không đúng.',
   'account is locked or suspended': 'Tài khoản đang bị khoá hoặc tạm ngưng. Vui lòng liên hệ FixHome để được hỗ trợ.',
   'technician account is inactive': 'Tài khoản kỹ thuật viên đang tạm ngưng hoạt động.',

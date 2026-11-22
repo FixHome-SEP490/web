@@ -274,8 +274,8 @@ const handleAddTimeOff = async () => {
     return;
   }
   const offReason = (newTimeOff.value.reason ?? '').trim();
-  if (offReason.length > 500) {
-    showFeedback('Lý do tối đa 500 ký tự.', 'error');
+  if (offReason.length > 255) {
+    showFeedback('Lý do tối đa 255 ký tự.', 'error');
     return;
   }
   if (offReason && containsUnsafeText(offReason)) {
@@ -1488,7 +1488,7 @@ const openAvatarModal = () => {
                 id="tp-off-reason"
                 v-model="newTimeOff.reason"
                 type="text"
-                maxlength="500"
+                maxlength="255"
                 placeholder="VD: Việc gia đình"
                 class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"
               />

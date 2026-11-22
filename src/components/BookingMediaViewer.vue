@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { ChevronLeft, ChevronRight, Image as ImageIcon, LockKeyhole, Play, ShieldAlert, X } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, Image as ImageIcon, LockKeyhole, Play, ShieldAlert, X, ZoomIn } from 'lucide-vue-next';
 import { AUTH_SESSION_INVALIDATED_EVENT, apiUrl } from '../api/client';
 import { mediaApi } from '../api/media.api';
 import type { BookingMedia } from '../api/bookings.api';
@@ -260,6 +260,9 @@ onUnmounted(() => {
             :alt="`Ảnh mô tả ${index + 1}`"
             class="h-full w-full object-cover transition-opacity hover:opacity-90"
           >
+          <span v-if="!isVideo(mediaItem)" class="absolute bottom-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white shadow-xs">
+            <ZoomIn :size="13" aria-hidden="true" />
+          </span>
           <span v-if="!mediaItem.isPrivate" class="absolute inset-x-0 bottom-0 bg-black/60 px-1.5 py-1 text-left text-[10px] font-medium leading-tight text-white">Ảnh cũ / liên kết công khai</span>
         </button>
         <div v-else class="flex h-full items-center justify-center px-2 text-center">

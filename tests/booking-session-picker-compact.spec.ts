@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import BookingSessionPicker from '../src/components/customer/BookingSessionPicker.vue';
 import { upcomingSessions } from '../src/utils/booking-session';
 
 describe('compact booking session picker', () => {
+  afterEach(() => { vi.useRealTimers(); });
   it.each([true, false])('keeps three equal session columns, icons, selection and availability (compact=%s)', async (compact) => {
     const date = '2030-01-03';
     const sessions = [
@@ -39,6 +40,9 @@ describe('compact booking session picker', () => {
     wrapper.unmount();
   });
   it('shows four mobile or five desktop dates and selects a farther allowed session without losing the model value', async () => {
+    // A fixed day keeps the unavailable and far dates in one month; near a month end they split (21/11/2026).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-03T02:00:00Z'));
     const allSessions = upcomingSessions(14);
     const dates = [...new Set(allSessions.map((session) => session.date))];
     const unavailableDate = dates[6];
@@ -64,12 +68,16 @@ describe('compact booking session picker', () => {
     expect(calendar.attributes('role')).toBe('dialog');
 
     const monthLabel = (date: string) => `Tháng ${date.slice(5, 7)}, ${date.slice(0, 4)}`;
-    while (!calendar.text().includes(monthLabel(farDate))) {
-      await calendar.get('button[title="Tháng sau"]').trigger('click');
-    }
-
+    // The two dates can fall in different months (22/11: 28/11 and 01/12), so open each one's month.
+    const showMonth = async (date: string) => {
+      while (!calendar.text().includes(monthLabel(date))) {
+        await calendar.get('button[title="Tháng sau"]').trigger('click');
+      }
+    };
+    await showMonth(unavailableDate);
     const unavailableDay = calendar.get(`[data-testid="fh-date-${unavailableDate}"]`);
     expect(unavailableDay.attributes('disabled')).toBeDefined();
+    await showMonth(farDate);
     const farDay = calendar.get(`[data-testid="fh-date-${farDate}"]`);
     expect(farDay.attributes('disabled')).toBeUndefined();
     await farDay.trigger('click');
