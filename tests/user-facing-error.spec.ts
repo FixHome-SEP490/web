@@ -107,3 +107,10 @@ describe('user-facing errors', () => {
     expect(transportMessage(httpError(400, { error: { message: 'Đơn đã bị huỷ.' } }))).toBe('Đơn đã bị huỷ.');
   });
 });
+
+describe('known business 503', () => {
+  it('keeps the Vietnamese reason when the payment gateway is simply not switched on', () => {
+    const err = { response: { status: 503, data: { error: { code: 'PAYMENT_PROVIDER_UNAVAILABLE', message: 'Nạp tiền chưa mở vì cổng thanh toán chưa bật. Vui lòng liên hệ FixHome.' } } } };
+    expect(userFacingError(err, 'Không thể nạp.')).toBe('Nạp tiền chưa mở vì cổng thanh toán chưa bật. Vui lòng liên hệ FixHome.');
+  });
+});

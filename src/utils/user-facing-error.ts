@@ -14,6 +14,9 @@ export const TIMEOUT_ERROR = 'Kết nối đang chậm. Vui lòng thử lại.';
 export const SESSION_EXPIRED = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
 export const FORBIDDEN = 'Bạn không có quyền thực hiện thao tác này.';
 
+/** 503s that are a known business state with a Vietnamese reason worth showing (gateway not switched on). */
+const KNOWN_UNAVAILABLE = new Set(['PAYMENT_PROVIDER_UNAVAILABLE']);
+
 const VIETNAMESE_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 
 /** Library, transport and framework wording that must never reach the screen. */
@@ -168,7 +171,8 @@ export function userFacingError(err: unknown, fallback: string = GENERIC_ERROR):
 
   // A system failure is never something the person can fix (PO 22/11/2026): whatever the
   // server wrote is dropped; the screen's own sentence, or the generic one, is shown.
-  if (status !== undefined && status >= 500) return fallback || GENERIC_ERROR;
+  const code = (axiosLike.response?.data as { error?: { code?: unknown } } | undefined)?.error?.code;
+  if (status !== undefined && status >= 500 && !(typeof code === 'string' && KNOWN_UNAVAILABLE.has(code))) return fallback || GENERIC_ERROR;
 
   for (const candidate of serverMessages(axiosLike.response?.data)) {
     const message = toUserFacingMessage(candidate, '');
