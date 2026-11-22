@@ -121,7 +121,8 @@ describe('technician warranty claim page', () => {
 
   it('shows a retryable error for any other failure', async () => {
     const wrapper = await mountPage({ response: { status: 500, data: { message: 'Lỗi máy chủ.' } } });
-    expect(wrapper.get('[role="alert"]').text()).toContain('Lỗi máy chủ.');
+    expect(wrapper.get('[role="alert"]').text()).not.toContain('Lỗi máy chủ.');
+    expect(wrapper.get('[role="alert"]').text()).toContain('Không thể tải yêu cầu bảo hành');
     apiClientMock.get.mockResolvedValueOnce({ data: { data: claim() } });
     await button(wrapper, 'Thử lại')!.trigger('click');
     await flushPromises();
@@ -150,6 +151,19 @@ describe('technician warranty claim page', () => {
 
     const waiting = await mountPage(claim({ status: 'in_progress', partRequest: { ...overdue, status: 'ready', faultyReturnDueAt: null } }));
     expect(waiting.find('[data-testid="faulty-part-return"]').exists()).toBe(false);
+  });
+
+  it('links straight to the order parts section while the replacement part is still to collect', async () => {
+    const ready = { id: 'pr-1', status: 'ready', faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false };
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: ready }));
+    const card = wrapper.get('[data-testid="warranty-part-pickup"]');
+    expect(card.text()).toContain('Nhận linh kiện bảo hành');
+    expect(card.find('[data-testid="warranty-part-pickup-link"]').exists()).toBe(true);
+
+    const received = await mountPage(claim({ status: 'in_progress', partRequest: { ...ready, status: 'received' } }));
+    expect(received.find('[data-testid="warranty-part-pickup"]').exists()).toBe(false);
+    const none = await mountPage(claim({ status: 'in_progress', partRequest: null }));
+    expect(none.find('[data-testid="warranty-part-pickup"]').exists()).toBe(false);
   });
 
   it('accepts the claim from the page and stays on it with the new state', async () => {

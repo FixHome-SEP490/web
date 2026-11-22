@@ -32,9 +32,7 @@ const handleGoogleCredential = async (idToken: string) => {
     const role = user.role?.toUpperCase();
     router.push(role === 'TECHNICIAN' ? '/tech' : '/app');
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string } } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message || 'Đăng ký bằng Google thất bại';
+    errorMessage.value = userFacingError(err, 'Đăng ký bằng Google thất bại. Vui lòng thử lại.');
     toast.error(errorMessage.value);
   }
 };

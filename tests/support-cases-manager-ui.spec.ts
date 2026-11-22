@@ -488,7 +488,7 @@ describe('SupportDetailPage for a complaint', () => {
       expectedCaseVersion: 1,
       reason: 'Khách đã xác nhận muốn chọn lịch mới.',
     }));
-    expect(wrapper.text()).toContain('khách cần xác nhận lịch và giá mới');
+    expect(wrapper.text()).toContain('Khách cần xác nhận lịch và giá mới');
     wrapper.unmount();
   });
 
@@ -588,7 +588,8 @@ describe('SupportQueuePage', () => {
     const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toContain(message);
-    expect(wrapper.get('[role="alert"]').text()).toContain(`HTTP ${status}`);
+    // No HTTP status on screen (PO 22/11/2026).
+    expect(wrapper.get('[role="alert"]').text()).not.toContain(`HTTP ${status}`);
     expect(wrapper.text()).not.toContain('SQL secret stack');
     expect(wrapper.text()).not.toContain('Không có yêu cầu nào phù hợp');
     apiClientMock.get.mockResolvedValueOnce(envelope([baseCase()], { page: 1, limit: 10, total: 1, totalPages: 1 }));

@@ -30,6 +30,7 @@ import {
   type NotCoveredReason,
 } from '../../utils/warranty-claim';
 import { formatSupportDate, getSupportErrorMessage, isSafeEvidenceLink } from './support-cases.utils';
+import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -75,6 +76,16 @@ const reasonLabel = (code: string | null | undefined) =>
 const resultLabel = (result: string | null | undefined) => (result ? inspectionResultLabels[result as InspectionResult] ?? result : '—');
 const date = (value: string | null | undefined) => formatSupportDate(value);
 const partSourceLabel = (source: string | null) => (source === 'fixhome' ? 'FixHome' : source === 'technician' ? 'Thợ tự mua' : '');
+
+// The technician or customer moved the claim on: read it again in place, no skeleton.
+useLiveOrderRefresh(['warranty', 'part'], async () => {
+  if (!claim.value || loading.value) return;
+  try {
+    claim.value = await warrantyManagerApi.getDetail(claimId.value);
+  } catch {
+    // A failed background read keeps what is on screen; the next change or reload reads again.
+  }
+}, () => claim.value?.order.id);
 
 async function load() {
   loading.value = true;

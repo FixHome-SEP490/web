@@ -46,6 +46,14 @@ const part = computed(() => {
   const request = claim.value?.partRequest;
   return request && ['received', 'completed'].includes(String(request.status).toLowerCase()) ? request : null;
 });
+// The replacement is not in hand yet: the technician receives it on the order's parts section.
+const partToCollect = computed(() => {
+  const status = String(claim.value?.partRequest?.status ?? '').toLowerCase();
+  if (status === 'requested') return 'Kho đang chuẩn bị linh kiện thay thế.';
+  if (status === 'ready') return 'Linh kiện thay thế đã sẵn sàng. Mở mục linh kiện của đơn để nhận.';
+  if (status === 'delivering') return 'Linh kiện thay thế đang được giao tới bạn. Mở mục linh kiện của đơn để nhận.';
+  return '';
+});
 const partOverdue = computed(() => !!part.value && !part.value.faultyReturnedAt && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
 
 async function returnFaultyPart() {
@@ -292,6 +300,24 @@ onMounted(load);
               <h2 class="text-xs font-semibold uppercase tracking-wider text-ink-400">Liên hệ khách hàng</h2>
               <WarrantyContactActions :claim="claim" />
             </div>
+          </section>
+
+          <!-- Warranty replacement part still to collect: go straight to where it is received -->
+          <section
+            v-if="partToCollect && claim.order?.id"
+            class="rounded-2xl border border-ink-200/90 bg-white p-5 shadow-2xs space-y-3"
+            data-testid="warranty-part-pickup"
+          >
+            <h2 class="text-base font-semibold text-ink-900">Linh kiện bảo hành</h2>
+            <p class="text-sm text-ink-700 leading-relaxed">{{ partToCollect }}</p>
+            <router-link
+              :to="{ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } }"
+              class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
+              :class="focusRing"
+              data-testid="warranty-part-pickup-link"
+            >
+              <PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành
+            </router-link>
           </section>
 
           <!-- Faulty Part Return Card -->

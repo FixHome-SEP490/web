@@ -47,6 +47,7 @@ import { vnDateTimeString } from '../../utils/vn-time';
 import { ordersApi } from '../../api/orders.api';
 import { consoleTextarea } from '../../components/console/console-ui';
 import { userFacingError } from '../../utils/user-facing-error';
+import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
 
 const route = useRoute();
 const router = useRouter();
@@ -69,16 +70,18 @@ const categories = ref<ServiceCategory[]>([]);
 const isQuotationCollapsed = ref(false);
 const selectedFallbackImage = ref<string | null>(null);
 
-const loadOrder = async (requestedOrderId = orderId) => {
+const loadOrder = async (requestedOrderId = orderId, quiet = false) => {
   const generation = ++loadGeneration;
   const requestedRole = String(authStore.userRole ?? '').toUpperCase();
   const isCurrent = () => !disposed
     && generation === loadGeneration
     && requestedOrderId === orderId
     && requestedRole === String(authStore.userRole ?? '').toUpperCase();
-  loading.value = true;
-  loadError.value = false;
-  bookingForMedia.value = null;
+  if (!quiet) loading.value = true;
+  if (!quiet) {
+    loadError.value = false;
+    bookingForMedia.value = null;
+  }
   try {
     const nextOrder = await consoleOrderContextApi.getConsoleOrderContext(requestedOrderId);
     if (!isCurrent()) return;
@@ -96,7 +99,8 @@ const loadOrder = async (requestedOrderId = orderId) => {
       }
     }
   } catch {
-    if (!isCurrent()) return;
+    // A failed background read keeps the order on screen.
+    if (!isCurrent() || quiet) return;
     order.value = null;
     loadError.value = true;
   } finally {
@@ -130,6 +134,13 @@ watch(() => String(authStore.userRole ?? '').toUpperCase(), (nextRole, previousR
   bookingForMedia.value = null;
   void loadOrder(orderId);
 });
+
+// Status, quotation, extra costs, parts, cash or warranty moved on: read the order again in place.
+useLiveOrderRefresh(
+  ['order', 'status', 'invoice', 'quotation', 'additional_cost', 'cash', 'part', 'warranty', 'assignment', 'evidence', 'arrival'],
+  () => { if (order.value && !loading.value) void loadOrder(orderId, true); },
+  () => orderId,
+);
 
 onUnmounted(() => {
   disposed = true;
