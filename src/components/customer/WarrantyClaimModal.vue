@@ -6,6 +6,7 @@ import { ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { useEvidencePhotos } from '../../composables/useEvidencePhotos';
 import { formatDateVN } from '../../utils/formatters';
+import { validateDescriptionText } from '../../utils/input-validation';
 
 export interface ClaimableCoverage {
   id: string;
@@ -96,6 +97,11 @@ async function submit() {
   }
   if (text.length < MIN_LENGTH) {
     error.value = `Vui lòng mô tả sự cố ít nhất ${MIN_LENGTH} ký tự.`;
+    return;
+  }
+  const textError = validateDescriptionText(text);
+  if (textError) {
+    error.value = textError;
     return;
   }
   submitting.value = true;

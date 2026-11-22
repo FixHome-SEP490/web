@@ -2,7 +2,14 @@ import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
-const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const apiClientMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
+const liveMock = vi.hoisted(() => ({ onOrder: null as null | (() => void) }));
+vi.mock('../src/services/live-updates', async (original) => ({
+  ...(await original<typeof import('../src/services/live-updates')>()),
+  onOrderChange: (_orderId: string, listener: () => void) => { liveMock.onOrder = listener; return () => {}; },
+  onResync: () => () => {},
+  whileOffline: () => () => {},
+}));
 vi.mock('../src/api/client', async (original) => ({
   ...(await original<typeof import('../src/api/client')>()),
   default: apiClientMock,
@@ -121,7 +128,8 @@ describe('technician warranty claim page', () => {
 
   it('shows a retryable error for any other failure', async () => {
     const wrapper = await mountPage({ response: { status: 500, data: { message: 'Lỗi máy chủ.' } } });
-    expect(wrapper.get('[role="alert"]').text()).toContain('Lỗi máy chủ.');
+    expect(wrapper.get('[role="alert"]').text()).not.toContain('Lỗi máy chủ.');
+    expect(wrapper.get('[role="alert"]').text()).toContain('Không thể tải yêu cầu bảo hành');
     apiClientMock.get.mockResolvedValueOnce({ data: { data: claim() } });
     await button(wrapper, 'Thử lại')!.trigger('click');
     await flushPromises();
@@ -150,6 +158,19 @@ describe('technician warranty claim page', () => {
 
     const waiting = await mountPage(claim({ status: 'in_progress', partRequest: { ...overdue, status: 'ready', faultyReturnDueAt: null } }));
     expect(waiting.find('[data-testid="faulty-part-return"]').exists()).toBe(false);
+  });
+
+  it('links straight to the order parts section while the replacement part is still to collect', async () => {
+    const ready = { id: 'pr-1', status: 'ready', faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false };
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: ready }));
+    const card = wrapper.get('[data-testid="warranty-part-pickup"]');
+    expect(card.text()).toContain('Nhận linh kiện bảo hành');
+    expect(card.find('[data-testid="warranty-part-pickup-link"]').exists()).toBe(true);
+
+    const received = await mountPage(claim({ status: 'in_progress', partRequest: { ...ready, status: 'received' } }));
+    expect(received.find('[data-testid="warranty-part-pickup"]').exists()).toBe(false);
+    const none = await mountPage(claim({ status: 'in_progress', partRequest: null }));
+    expect(none.find('[data-testid="warranty-part-pickup"]').exists()).toBe(false);
   });
 
   it('accepts the claim from the page and stays on it with the new state', async () => {
@@ -196,5 +217,48 @@ describe('technician warranty claim page', () => {
     const wrapper = await mountPage(claim({ status: 'rejected' }));
     expect(button(wrapper, 'Nhận yêu cầu')).toBeUndefined();
     expect(wrapper.text()).not.toContain('Đang chờ');
+  });
+});
+
+describe('replacement part and live updates on the technician warranty page', () => {
+  const part = (status: string, usage: string[]) => ({
+    id: 'pr-1', status, faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false,
+    items: usage.map((usageStatus, i) => ({ id: `it-${i}`, name: 'Van xả', quantity: 1, usageStatus })),
+  });
+
+  it('keeps "Báo đã bảo hành xong" off until the replacement part is declared fitted', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: part('received', ['pending']) as never }));
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="complete-blocked-by-parts"]').exists()).toBe(true);
+
+    apiClientMock.patch.mockResolvedValueOnce({ data: { data: { id: 'it-0', usageStatus: 'used' } } });
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'in_progress', partRequest: part('received', ['used']) as never }) } });
+    await button(wrapper, 'Đã lắp')!.trigger('click');
+    await flushPromises();
+
+    expect(apiClientMock.patch).toHaveBeenCalledWith('/part-requests/pr-1/items/it-0/usage', { usageStatus: 'used' });
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="complete-blocked-by-parts"]').exists()).toBe(false);
+  });
+
+  it('sends the technician to the order to receive a replacement part that is not in hand yet, and keeps completion off', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: part('ready', ['pending']) as never }));
+    expect(wrapper.find('[data-testid="warranty-part-pickup"]').exists()).toBe(true);
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="replacement-part"]').exists()).toBe(false);
+  });
+
+  it('has no part gate when the claim has no replacement part', async () => {
+    const wrapper = await mountPage(claim({ status: 'in_progress' }));
+    expect(button(wrapper, 'Báo đã bảo hành xong')!.attributes('disabled')).toBeUndefined();
+  });
+
+  it('reads the claim again by itself when its order changes, without a reload button', async () => {
+    const wrapper = await mountPage(claim({ status: 'accepted' }));
+    expect(button(wrapper, 'Tải lại')).toBeUndefined();
+    apiClientMock.get.mockResolvedValueOnce({ data: { data: claim({ status: 'inspected' }) } });
+    liveMock.onOrder!();
+    await flushPromises();
+    expect(wrapper.text()).toContain('Chờ quản lý duyệt kết luận');
   });
 });

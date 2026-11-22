@@ -18,7 +18,9 @@ vi.mock('../src/services/chat-socket.service', () => ({ chatSocketService: socke
 import {
   LIVE_DEBOUNCE_MS,
   afterRunningRead,
+  eventsTouch,
   mergeKinds,
+  onAnyOrderChange,
   onBookingChange,
   onOrderChange,
   onOrderListsChange,
@@ -92,6 +94,21 @@ describe('startLiveUpdates', () => {
     // Wallets are not read for a status: they have their own event.
     expect(keys).not.toContain(JSON.stringify(['wallet']));
     expect(counted).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells many-order screens (SM part counters) once per burst with every changed order', async () => {
+    const heard = vi.fn();
+    const off = onAnyOrderChange(heard);
+    socket.emit('onOrderUpdated', order(['part'], 'order-1'));
+    socket.emit('onOrderUpdated', order(['evidence'], 'order-2'));
+    await vi.advanceTimersByTimeAsync(LIVE_DEBOUNCE_MS);
+    expect(heard).toHaveBeenCalledTimes(1);
+    const events = heard.mock.calls[0][0];
+    expect(events.map((e: { serviceOrderId: string }) => e.serviceOrderId).sort()).toEqual(['order-1', 'order-2']);
+    expect(eventsTouch(events, ['part'])).toBe(true);
+    expect(eventsTouch([events[1]], ['part'])).toBe(false);
+    expect(eventsTouch([{ ...events[1], kinds: undefined }], ['part'])).toBe(true);
+    off();
   });
 
   it('marks an order nobody has open as stale without reading it', async () => {

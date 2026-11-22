@@ -9,6 +9,7 @@
  * một nút bấm vào không có gì xảy ra.
  */
 import { onMounted, ref } from 'vue';
+import { toUserFacingMessage } from '../../utils/user-facing-error';
 import {
   isGoogleSignInConfigured,
   renderGoogleButton,
@@ -45,9 +46,8 @@ onMounted(async () => {
     failed.value = true;
     emit(
       'error',
-      err instanceof Error
-        ? err.message
-        : 'Không tải được đăng nhập Google',
+      // Setup details (library, client id) are not for the person: one plain sentence.
+      toUserFacingMessage(err instanceof Error ? err.message : '', 'Không tải được đăng nhập Google. Vui lòng dùng mật khẩu.'),
     );
   }
 });

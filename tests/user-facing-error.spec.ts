@@ -51,10 +51,20 @@ describe('user-facing errors', () => {
     ['Lỗi hệ thống backend'],
     ['Request failed with status code 500'],
   ])('never shows "%s"', (message) => {
-    const err = httpError(500, { error: { message } });
-    expect(userFacingError(err, 'Không thể tải đơn sửa chữa. Vui lòng thử lại.')).toBe(
+    // A system failure (5xx) never shows the server wording, only the screen sentence (PO 22/11/2026).
+    expect(userFacingError(httpError(500, { error: { message } }), 'Không thể tải đơn sửa chữa. Vui lòng thử lại.')).toBe('Không thể tải đơn sửa chữa. Vui lòng thử lại.');
+    // The same wording on a 4xx falls back to what the screen says.
+    expect(userFacingError(httpError(400, { error: { message } }), 'Không thể tải đơn sửa chữa. Vui lòng thử lại.')).toBe(
       'Không thể tải đơn sửa chữa. Vui lòng thử lại.',
     );
+  });
+
+  it('reads every system failure as the one generic sentence', () => {
+    expect(GENERIC_ERROR).toBe('Có lỗi xảy ra, vui lòng thử lại sau.');
+    for (const status of [500, 502, 503, 504]) {
+      expect(userFacingError(httpError(status, { error: { message: 'Hệ thống đang bận' } }))).toBe(GENERIC_ERROR);
+      expect(userFacingError(httpError(status, { error: { message: 'Lỗi máy chủ.' } }), 'Không thể lưu.')).toBe('Không thể lưu.');
+    }
   });
 
   it('drops partner and system code prefixes', () => {
@@ -92,7 +102,15 @@ describe('user-facing errors', () => {
 
   it('leaves the screen to speak when the request itself says nothing useful', () => {
     // The API client stores this as error.message, so `err.message || fallback` works.
-    expect(transportMessage(httpError(500, { error: { message: 'Internal server error' } }))).toBe('');
+    expect(transportMessage(httpError(500, { error: { message: 'Internal server error' } }))).toBe(GENERIC_ERROR);
+    expect(transportMessage(httpError(400, { error: { message: 'Validation failed' } }))).toBe('');
     expect(transportMessage(httpError(400, { error: { message: 'Đơn đã bị huỷ.' } }))).toBe('Đơn đã bị huỷ.');
+  });
+});
+
+describe('known business 503', () => {
+  it('keeps the Vietnamese reason when the payment gateway is simply not switched on', () => {
+    const err = { response: { status: 503, data: { error: { code: 'PAYMENT_PROVIDER_UNAVAILABLE', message: 'Nạp tiền chưa mở vì cổng thanh toán chưa bật. Vui lòng liên hệ FixHome.' } } } };
+    expect(userFacingError(err, 'Không thể nạp.')).toBe('Nạp tiền chưa mở vì cổng thanh toán chưa bật. Vui lòng liên hệ FixHome.');
   });
 });

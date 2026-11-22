@@ -275,6 +275,16 @@ describe('TechnicianWarrantyPage', () => {
     return wrapper;
   };
 
+  it('offers a way to collect the warranty part while it is still at the warehouse', async () => {
+    const part = (status: string) => ({ id: `pr-${status}`, status, faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false });
+    const wrapper = await mountPage([
+      claim({ id: 'r', status: 'in_progress', partRequest: part('ready') } as Partial<StaffWarrantyClaim>),
+      claim({ id: 'x', status: 'in_progress', partRequest: part('received') } as Partial<StaffWarrantyClaim>),
+    ]);
+    expect(wrapper.find('[data-testid="warranty-part-pickup-r"]').text()).toContain('Nhận linh kiện bảo hành');
+    expect(wrapper.find('[data-testid="warranty-part-pickup-x"]').exists()).toBe(false);
+  });
+
   it('groups claims and offers the next step for each status', async () => {
     const wrapper = await mountPage([
       claim({ id: 'a', status: 'submitted' }),

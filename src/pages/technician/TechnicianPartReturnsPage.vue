@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   AlertTriangle,
@@ -29,6 +29,8 @@ import { partCustodyQuantities } from '../../utils/part-custody-quantities';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { categoryIcon } from '../../components/booking/service-icons';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
+import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
+import { onOrderListsChange, onResync } from '../../services/live-updates';
 
 interface OrderReturnGroup {
   id: string; // serviceOrderId
@@ -79,8 +81,10 @@ const totalAwaitingManager = computed(() =>
   orderGroups.value.reduce((sum, g) => sum + g.awaitingManagerQty, 0),
 );
 
+// The open list never carries settled parts, so the server counts them (null: older server).
+const serverCompletedQty = ref<number | null>(null);
 const totalCompleted = computed(() =>
-  orderGroups.value.reduce((sum, g) => sum + g.completedQty, 0),
+  serverCompletedQty.value ?? orderGroups.value.reduce((sum, g) => sum + g.completedQty, 0),
 );
 
 const countNeedDeclareOrders = computed(() =>
@@ -158,7 +162,9 @@ const loadData = async (preferredOrderId?: string) => {
     // 1. Fetch technician's active returns
     let mineRecords: PartCustodyReturnRecord[] = [];
     try {
-      mineRecords = await partRequestsApi.getMyReturns();
+      const summary = await partRequestsApi.getMyReturnsSummary();
+      mineRecords = summary.records;
+      serverCompletedQty.value = summary.completedQty;
     } catch (err) {
       if (isPartReturnsUnavailableError(err)) {
         isUnavailable.value = true;
@@ -271,8 +277,32 @@ const loadData = async (preferredOrderId?: string) => {
   }
 };
 
+// Faulty parts of warranty claims: not in the custody ledger above, so listed here too. Handing one in is done on the claim.
+const faultyClaims = ref<StaffWarrantyClaim[]>([]);
+const loadFaulty = async () => {
+  try {
+    const page = await warrantyClaimsApi.listMine({ page: 1, pageSize: 100 });
+    faultyClaims.value = page.items
+      .filter((c) => c.partRequest && ['received', 'completed'].includes(String(c.partRequest.status).toLowerCase()) && !c.partRequest.faultyReturnedAt)
+      .sort((a, b) => (a.partRequest?.faultyReturnDueAt ?? '9').localeCompare(b.partRequest?.faultyReturnDueAt ?? '9'));
+  } catch {
+    // The ledger above still works; the next change or visit reads again.
+  }
+};
+const faultyOverdue = (claim: StaffWarrantyClaim) => {
+  const due = claim.partRequest?.faultyReturnDueAt;
+  return !!claim.partRequest?.faultyReturnChargedAt || (!!due && new Date(due).getTime() < Date.now());
+};
+const stopFaultyLive = onOrderListsChange(() => void loadFaulty());
+const stopFaultyResync = onResync(() => void loadFaulty());
+onBeforeUnmount(() => {
+  stopFaultyLive();
+  stopFaultyResync();
+});
+
 onMounted(() => {
   void loadData();
+  void loadFaulty();
 });
 
 // Auto-refresh on notifications or window focus
@@ -380,6 +410,39 @@ const formatOrderTime = (order: OrderReturnGroup) => {
         </div>
       </div>
     </div>
+
+    <!-- Faulty parts of warranty claims still to hand in -->
+    <section
+      v-if="faultyClaims.length"
+      class="rounded-2xl border border-amber-200 bg-amber-50/50 p-5 space-y-3"
+      data-testid="faulty-warranty-returns"
+    >
+      <div class="flex items-center gap-2">
+        <AlertTriangle :size="18" class="text-amber-600 shrink-0" />
+        <h2 class="text-base font-semibold text-ink-900">Linh kiện hỏng cần nộp (bảo hành)</h2>
+        <span class="font-num text-sm font-bold text-amber-900">{{ faultyClaims.length }}</span>
+      </div>
+      <ul class="divide-y divide-amber-200/70 rounded-xl border border-amber-200 bg-white">
+        <li v-for="claim in faultyClaims" :key="claim.id">
+          <router-link
+            :to="{ name: 'tech-warranty-detail', params: { id: claim.id } }"
+            class="flex flex-wrap items-center justify-between gap-2 p-3.5 hover:bg-amber-50/60"
+            :data-testid="`faulty-return-${claim.id}`"
+          >
+            <span class="min-w-0">
+              <span class="font-semibold text-ink-900">#{{ claim.order.code }}</span>
+              <span class="text-ink-600"> · {{ claim.order.serviceName }}</span>
+            </span>
+            <span class="text-sm" :class="faultyOverdue(claim) ? 'font-medium text-danger-700' : 'text-ink-700'">
+              <template v-if="claim.partRequest?.faultyReturnChargedAt">Quá hạn, đã bị trừ ví</template>
+              <template v-else-if="faultyOverdue(claim)">Đã quá hạn nộp</template>
+              <template v-else-if="claim.partRequest?.faultyReturnDueAt">Hạn nộp {{ vnDateTimeString(claim.partRequest.faultyReturnDueAt) }}</template>
+              <template v-else>Chưa có hạn nộp</template>
+            </span>
+          </router-link>
+        </li>
+      </ul>
+    </section>
 
     <!-- Unavailable Feature State -->
     <div

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, CalendarClock, Check, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User, X } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '../../components';
@@ -13,6 +13,7 @@ import { getHttpStatus } from '../../api/client';
 import { getSupportErrorMessage } from '../console/support-cases.utils';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { checkInClaim } from '../../composables/useWarrantyCheckIn';
+import { onOrderChange, onResync, whileOffline } from '../../services/live-updates';
 import { affectedBy } from '../../lib/query-keys';
 import { formatDateTimeVN } from '../../utils/formatters';
 import { vnDateString } from '../../utils/vn-time';
@@ -46,7 +47,40 @@ const part = computed(() => {
   const request = claim.value?.partRequest;
   return request && ['received', 'completed'].includes(String(request.status).toLowerCase()) ? request : null;
 });
+// The replacement is not in hand yet: the technician receives it on the order's parts section.
+const partToCollect = computed(() => {
+  const status = String(claim.value?.partRequest?.status ?? '').toLowerCase();
+  if (status === 'requested') return 'Kho đang chuẩn bị linh kiện thay thế.';
+  if (status === 'ready') return 'Linh kiện thay thế đã sẵn sàng. Mở mục linh kiện của đơn để nhận.';
+  if (status === 'delivering') return 'Linh kiện thay thế đang được giao tới bạn. Mở mục linh kiện của đơn để nhận.';
+  return '';
+});
 const partOverdue = computed(() => !!part.value && !part.value.faultyReturnedAt && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
+
+// The free replacement part: received with the code, then declared fitted or returned before the warranty can be reported done.
+// The faulty part may still be handed in afterwards.
+const partsPending = computed(() => {
+  const request = claim.value?.partRequest;
+  if (!request || String(request.status).toLowerCase() === 'cancelled') return false;
+  return !part.value || !!part.value.items?.some((item) => item.usageStatus === 'pending');
+});
+
+async function reloadClaim() {
+  claim.value = await warrantyClaimsApi.get(claimId.value);
+}
+async function markUsage(itemId: string, usageStatus: 'used' | 'returned') {
+  if (!part.value || busy.value) return;
+  busy.value = true;
+  notice.value = null;
+  try {
+    await partRequestsApi.updateItemUsage(part.value.id, itemId, { usageStatus });
+    await reloadClaim();
+  } catch (reason) {
+    notice.value = { type: 'error', text: getSupportErrorMessage(reason, 'Không ghi nhận được. Vui lòng thử lại.') };
+  } finally {
+    busy.value = false;
+  }
+}
 
 async function returnFaultyPart() {
   if (!part.value || busy.value) return;
@@ -125,6 +159,32 @@ async function checkIn() {
 }
 
 onMounted(load);
+
+// Real-time (PO 18/10/2026): the claim is read again quietly when its order changes, not while a command or the form is open.
+async function reloadQuietly() {
+  if (busy.value || loading.value || modalMode.value) return;
+  try {
+    await reloadClaim();
+  } catch {
+    /* the next event, reconnect or poll reads again */
+  }
+}
+let stopLive: () => void = () => {};
+watch(
+  () => claim.value?.order.id,
+  (orderId) => {
+    stopLive();
+    stopLive = orderId ? onOrderChange(orderId, () => void reloadQuietly()) : () => {};
+  },
+  { immediate: true },
+);
+const stopResync = onResync(() => void reloadQuietly());
+const stopOffline = whileOffline(() => void reloadQuietly(), 30_000);
+onBeforeUnmount(() => {
+  stopLive();
+  stopResync();
+  stopOffline();
+});
 </script>
 
 <template>
@@ -283,7 +343,10 @@ onMounted(load);
                 <FhButton v-if="!checkedIn" variant="secondary" size="md" block :disabled="busy" @click="modalMode = 'reschedule'"><CalendarClock :size="16" aria-hidden="true" /> Đổi lịch kiểm tra</FhButton>
                 <FhButton v-else variant="primary" size="md" block @click="modalMode = 'propose'"><ClipboardCheck :size="16" aria-hidden="true" /> Gửi kết luận kiểm tra</FhButton>
               </div>
-              <FhButton v-else-if="claim.status === 'in_progress'" variant="primary" size="md" block @click="modalMode = 'complete'"><CircleCheck :size="16" aria-hidden="true" /> Báo đã bảo hành xong</FhButton>
+              <template v-else-if="claim.status === 'in_progress'">
+              <p v-if="partsPending" class="rounded-xl bg-warning-50 border border-warning-200 px-3.5 py-2.5 text-warning-800" data-testid="complete-blocked-by-parts">Hãy nhận linh kiện thay thế và khai đã lắp hoặc trả lại trước khi báo bảo hành xong.</p>
+              <FhButton variant="primary" size="md" block :disabled="partsPending" @click="modalMode = 'complete'"><CircleCheck :size="16" aria-hidden="true" /> Báo đã bảo hành xong</FhButton>
+            </template>
               <p v-else-if="claim.status === 'inspected'" class="rounded-xl bg-ink-50 px-3.5 py-2.5 text-ink-600">Chờ quản lý duyệt kết luận</p>
               <p v-else class="rounded-xl bg-ink-50 px-3.5 py-2.5 text-ink-600">Chờ khách phản hồi</p>
             </div>
@@ -292,6 +355,43 @@ onMounted(load);
               <h2 class="text-xs font-semibold uppercase tracking-wider text-ink-400">Liên hệ khách hàng</h2>
               <WarrantyContactActions :claim="claim" />
             </div>
+          </section>
+
+          <!-- Warranty replacement part still to collect: go straight to where it is received -->
+          <section
+            v-if="partToCollect && claim.order?.id"
+            class="rounded-2xl border border-ink-200/90 bg-white p-5 shadow-2xs space-y-3"
+            data-testid="warranty-part-pickup"
+          >
+            <h2 class="text-base font-semibold text-ink-900">Linh kiện bảo hành</h2>
+            <p class="text-sm text-ink-700 leading-relaxed">{{ partToCollect }}</p>
+            <router-link
+              :to="{ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } }"
+              class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
+              :class="focusRing"
+              data-testid="warranty-part-pickup-link"
+            >
+              <PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành
+            </router-link>
+          </section>
+
+          <!-- Replacement part in hand: declare it fitted or returned -->
+          <section
+            v-if="part?.items?.length"
+            class="bg-white rounded-2xl border border-ink-200/90 p-5 shadow-2xs space-y-3"
+            data-testid="replacement-part"
+          >
+            <h2 class="text-base font-semibold text-ink-900">Linh kiện thay thế</h2>
+            <ul class="divide-y divide-ink-100 rounded-xl border border-ink-200/80">
+              <li v-for="item in part.items" :key="item.id" class="flex flex-wrap items-center justify-between gap-2 p-3" :data-testid="`replacement-item-${item.id}`">
+                <span class="min-w-0 break-words font-medium text-ink-900">{{ item.name }} <span class="font-num text-ink-600">× {{ item.quantity }}</span></span>
+                <span v-if="item.usageStatus === 'pending'" class="flex gap-2">
+                  <FhButton variant="primary" size="sm" :disabled="busy" @click="markUsage(item.id, 'used')">Đã lắp</FhButton>
+                  <FhButton variant="secondary" size="sm" :disabled="busy" @click="markUsage(item.id, 'returned')">Trả lại</FhButton>
+                </span>
+                <span v-else class="text-sm text-ink-600">{{ item.usageStatus === 'used' ? 'Đã lắp' : 'Đã trả lại' }}</span>
+              </li>
+            </ul>
           </section>
 
           <!-- Faulty Part Return Card -->

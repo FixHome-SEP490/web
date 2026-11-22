@@ -153,3 +153,12 @@ export function extractApiErrorMessage(err: unknown, fallback: string): string {
   // codes and library wording never reach the person (user-facing-error.ts).
   return userFacingError(err, fallback);
 }
+
+/** Bản sao `HasLetterOrDigit` + `NoUnsafeText` ở backend cho mô tả tự do. */
+const TEXT_HAS_LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+
+export function validateDescriptionText(value: string): string {
+  if (containsUnsafeText(value)) return 'Mô tả không được chứa ký tự điều khiển hay ký tự vô hình.';
+  if (!TEXT_HAS_LETTER_OR_DIGIT.test(value)) return 'Mô tả cần có chữ hoặc số, không chỉ emoji hay ký hiệu.';
+  return '';
+}

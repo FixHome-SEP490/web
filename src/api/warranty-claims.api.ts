@@ -53,6 +53,7 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
     faultyReturnChargedAt: string | null;
     faultyInspectionResult: 'manufacturer' | 'installation' | 'undetermined' | null;
     chargeTechnician: boolean;
+    items?: { id: string; name: string; quantity: number; usageStatus: string }[];
   } | null;
   /** A decline or missed response waiting for a manager, or the verdict. */
   declineReview?: DeclineReview | null;

@@ -115,8 +115,8 @@ async function runCommand() {
       throw new Error('Backend returned a result for another case or order.');
     }
     const message = action === 'CLOSE_FOR_REBOOK'
-        ? `Kết quả đã được cập nhật: đơn chuyển sang ${result.order.status}; khách cần xác nhận lịch và giá mới.`
-        : `Kết quả đã được cập nhật: yêu cầu ${result.case.status === 'rejected' ? 'bị từ chối' : 'đã xử lý'}, đơn giữ trạng thái ${result.order.status}.`;
+        ? 'Kết quả đã được cập nhật. Khách cần xác nhận lịch và giá mới.'
+        : `Kết quả đã được cập nhật: yêu cầu ${result.case.status === 'rejected' ? 'bị từ chối' : 'đã xử lý'}, đơn giữ nguyên trạng thái.`;
     pendingCommand.value = null;
     pendingAction.value = null;
     confirmOpen.value = false;

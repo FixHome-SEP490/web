@@ -8,11 +8,14 @@
  * fallback, or a plain sentence for the few cases every screen shares.
  */
 
-export const GENERIC_ERROR = 'Đã có lỗi xảy ra. Vui lòng thử lại.';
+export const GENERIC_ERROR = 'Có lỗi xảy ra, vui lòng thử lại sau.';
 export const NETWORK_ERROR = 'Không có kết nối mạng. Kiểm tra kết nối rồi thử lại.';
 export const TIMEOUT_ERROR = 'Kết nối đang chậm. Vui lòng thử lại.';
 export const SESSION_EXPIRED = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
 export const FORBIDDEN = 'Bạn không có quyền thực hiện thao tác này.';
+
+/** 503s that are a known business state with a Vietnamese reason worth showing (gateway not switched on). */
+const KNOWN_UNAVAILABLE = new Set(['PAYMENT_PROVIDER_UNAVAILABLE']);
 
 const VIETNAMESE_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
 
@@ -165,6 +168,11 @@ export function userFacingError(err: unknown, fallback: string = GENERIC_ERROR):
     isAxiosError?: boolean;
   };
   const status = typeof axiosLike.response?.status === 'number' ? axiosLike.response.status : undefined;
+
+  // A system failure is never something the person can fix (PO 22/11/2026): whatever the
+  // server wrote is dropped; the screen's own sentence, or the generic one, is shown.
+  const code = (axiosLike.response?.data as { error?: { code?: unknown } } | undefined)?.error?.code;
+  if (status !== undefined && status >= 500 && !(typeof code === 'string' && KNOWN_UNAVAILABLE.has(code))) return fallback || GENERIC_ERROR;
 
   for (const candidate of serverMessages(axiosLike.response?.data)) {
     const message = toUserFacingMessage(candidate, '');

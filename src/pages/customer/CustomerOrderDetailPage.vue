@@ -40,7 +40,7 @@ import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vu
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
-import { orderBilling, paymentChannels } from '../../utils/order-billing';
+import { invoiceVoucherLines, orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
 import { fundedCheckoutApi } from '../../api/funded-checkout.api';
@@ -1085,6 +1085,8 @@ const isWarrantyExpanded = ref(true);
 
 const isCompleted = computed(() => String(order.value?.status ?? '').toUpperCase() === 'COMPLETED');
 const isPaid = computed(() => String(order.value?.paymentStatus ?? '').toUpperCase() === 'PAID');
+/** Voucher part of the final bill, read from the server (never computed here). */
+const invoiceVoucher = computed(() => invoiceVoucherLines(invoice.value));
 // BUG DETECTOR 162: the customer who chose cash keeps the payment dialog open while the technician
 // confirms; once the order reads paid the dialog had no way to pay left and showed "Thông tin hóa đơn
 // chưa sẵn sàng hoặc chưa khớp". A paid order closes it and says so.
@@ -1842,7 +1844,7 @@ const parsedReview = computed(() => {
           </div>
           <div class="relative z-10 flex items-center gap-2 text-xs font-medium text-ink-600">
             <span v-if="!oldFinanceReview && !notQuotedYet" class="text-sm font-semibold text-ink-900 font-num">
-              <FhMoney v-if="(billing.total) !== null" :amount="billing.total" /><span v-else>Chưa xác định</span>
+              <FhMoney v-if="invoiceVoucher" :amount="invoiceVoucher.due" /><FhMoney v-else-if="(billing.total) !== null" :amount="billing.total" /><span v-else>Chưa xác định</span>
             </span>
             <span>{{ isCostsExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
             <div
@@ -1978,6 +1980,16 @@ const parsedReview = computed(() => {
                   <span class="text-ink-500 font-medium">Tổng cộng</span>
                   <span class="whitespace-nowrap"><FhMoney v-if="(billing.total) !== null" :amount="billing.total" emphasis /><span v-else>Chưa xác định</span></span>
                 </div>
+                <template v-if="invoiceVoucher">
+                  <div class="flex items-baseline justify-between gap-3 text-sm" data-testid="invoice-voucher-discount">
+                    <span class="text-ink-500">Giảm voucher</span>
+                    <span class="whitespace-nowrap font-num text-success-700">-<FhMoney :amount="invoiceVoucher.discount" /></span>
+                  </div>
+                  <div class="flex items-baseline justify-between gap-3" data-testid="invoice-amount-due">
+                    <span class="text-ink-900 font-semibold">{{ isPaid ? 'Thực trả' : 'Cần trả' }}</span>
+                    <span class="whitespace-nowrap"><FhMoney :amount="invoiceVoucher.due" emphasis /></span>
+                  </div>
+                </template>
               </template>
             </div>
           </div>

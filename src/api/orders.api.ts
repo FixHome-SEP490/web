@@ -311,6 +311,22 @@ export interface WarrantyClaimView {
   resolvedAt: string | null;
   technician: { id: string; fullName: string } | null;
   inspectionScheduledAt?: string | null;
+  /** The approved inspection result, present once the service manager has decided. */
+  inspection?: WarrantyInspectionResult | null;
+  outcomeCode?: 'fixed' | 'unfixed' | 'rejected' | null;
+  /** Whole VND returned to the wallet when the item could not be fixed. */
+  refundAmount?: number | null;
+}
+
+export interface WarrantyInspectionResult {
+  result: string;
+  reasonCode: string | null;
+  findings: string | null;
+  evidenceRefs: string[] | null;
+  reServiceNotes: string | null;
+  reServiceEvidenceRefs: string[] | null;
+  checkedInAt: string | null;
+  completedAt: string | null;
 }
 
 export interface CreateWarrantyClaimPayload {

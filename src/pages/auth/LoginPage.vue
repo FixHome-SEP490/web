@@ -7,6 +7,7 @@ import { toast } from 'vue-sonner';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
 import { extractApiErrorMessage } from '../../utils/input-validation';
 import { usableLoginRedirect } from '../../utils/login-redirect';
+import { userFacingError } from '../../utils/user-facing-error';
 
 const router = useRouter();
 const route = useRoute();
@@ -53,9 +54,7 @@ const handleGoogleCredential = async (idToken: string) => {
   try {
     goAfterLogin(await authStore.loginWithGoogle(idToken));
   } catch (err: unknown) {
-    const error = err as { response?: { data?: { error?: { message?: string } } } };
-    errorMessage.value =
-      error?.response?.data?.error?.message || 'Đăng nhập bằng Google thất bại';
+    errorMessage.value = userFacingError(err, 'Đăng nhập bằng Google thất bại. Vui lòng thử lại.');
     toast.error(errorMessage.value);
   }
 };

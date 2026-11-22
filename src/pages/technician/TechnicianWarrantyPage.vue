@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, RefreshCw, User, X } from 'lucide-vue-next';
+import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User, X } from 'lucide-vue-next';
 import { ConsoleTabs, FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
@@ -28,7 +28,6 @@ const {
   loading,
   error,
   load,
-  refreshing,
   prefetch,
 } = usePagedList<StaffWarrantyClaim>({
   key: () => queryKeys.warranty.technicianClaims({}),
@@ -74,6 +73,9 @@ const rows = computed(() =>
 
 const cache = useCacheUpdates();
 const router = useRouter();
+/** The replacement part is not in hand yet: it is received on the order's parts section. */
+const partToCollect = (claim: StaffWarrantyClaim) =>
+  ['requested', 'ready', 'delivering'].includes(String(claim.partRequest?.status ?? '').toLowerCase());
 const openDetail = (claim: StaffWarrantyClaim) => router.push({ name: 'tech-warranty-detail', params: { id: claim.id } });
 
 function replace(updated: StaffWarrantyClaim) {
@@ -161,10 +163,6 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           <h1 class="text-2xl font-bold text-ink-900 tracking-tight">Bảo hành</h1>
           <p class="text-xs sm:text-sm text-ink-600">Tiếp nhận lịch kiểm tra và xử lý các yêu cầu bảo hành từ khách hàng.</p>
         </div>
-        <FhButton variant="secondary" size="sm" class="h-10 shrink-0" :disabled="loading" aria-label="Tải lại" @click="load">
-          <RefreshCw :size="16" :class="{ 'animate-spin': loading || refreshing }" />
-          <span class="hidden sm:inline">Tải lại</span>
-        </FhButton>
       </div>
     </header>
 
@@ -295,7 +293,15 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 ><MapPinCheck :size="16" aria-hidden="true" /> Đã đến nơi</FhButton>
                 <FhButton v-else variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'propose')"><ClipboardCheck :size="16" aria-hidden="true" /> Gửi kết luận kiểm tra</FhButton>
               </template>
-              <FhButton v-else-if="claim.status === 'in_progress'" variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'complete')">
+              <FhButton
+                v-if="claim.status === 'in_progress' && partToCollect(claim)"
+                variant="secondary"
+                size="sm"
+                class="h-10"
+                :data-testid="`warranty-part-pickup-${claim.id}`"
+                @click.stop="router.push({ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } })"
+              ><PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành</FhButton>
+              <FhButton v-if="claim.status === 'in_progress'" variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'complete')">
                 <CircleCheck :size="16" aria-hidden="true" /> Báo đã bảo hành xong
               </FhButton>
               <p v-else-if="claim.status === 'inspected'" class="text-ink-500">Chờ quản lý duyệt kết luận</p>

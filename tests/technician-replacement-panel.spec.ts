@@ -80,7 +80,7 @@ describe('Replacement panel for the Service Manager', () => {
     await wrapper.get('[data-testid="replacement-confirm"]').trigger('click');
     await flushPromises();
     expect(resolveInterruption).toHaveBeenCalledWith('case-1', expect.objectContaining({ action: 'CLOSE_FOR_REBOOK', expectedCaseVersion: 2 }));
-    expect(wrapper.emitted('done')?.[0]?.[0]).toContain('khách cần xác nhận lịch và giá mới');
+    expect(wrapper.emitted('done')?.[0]?.[0]).toContain('Khách cần xác nhận lịch và giá mới');
     wrapper.unmount();
   });
 
