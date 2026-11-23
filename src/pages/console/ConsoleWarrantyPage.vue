@@ -44,6 +44,7 @@ import {
 import { getSupportErrorMessage } from './support-cases.utils';
 import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
 import { pageItems } from '../../utils/pagination';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const authStore = useAuthStore();
 const canDecide = computed(() => authStore.userRole === 'SERVICE_MANAGER');
@@ -64,6 +65,10 @@ const searchQuery = ref('');
 const unassignedOnly = ref(false);
 const reviewOnly = ref(false);
 const technicians = ref<{ id: string; fullName: string }[]>([]);
+const artworkErrors = ref<Record<string, boolean>>({});
+function onArtworkError(id: string) {
+  artworkErrors.value[id] = true;
+}
 
 const modalClaim = ref<StaffWarrantyClaim | null>(null);
 const modalMode = ref<WarrantyDecisionMode | null>(null);
@@ -384,13 +389,13 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
             <table class="w-full text-left text-sm">
               <thead>
                 <tr class="border-b border-ink-100 bg-slate-50/70 text-xs font-semibold text-ink-600">
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 pl-5 w-[210px]">Mã yêu cầu</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 w-[190px]">Hạng mục</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 w-[200px]">Trạng thái</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 w-[190px]">Kỹ thuật viên</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 w-[180px]">Khách hàng</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 w-[170px]">Thời gian</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 pr-5 text-right w-[60px]"></th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">Mã yêu cầu</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Hạng mục</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Trạng thái</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Khách hàng</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Thời gian</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
@@ -419,28 +424,50 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   class="transition-colors hover:bg-slate-50/70"
                 >
                   <!-- 1. Mã yêu cầu -->
-                  <td class="whitespace-nowrap px-4 py-3.5 pl-5">
+                  <td class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">
                     <router-link
                       :to="`/console/warranty/${row.id}`"
-                      class="font-num font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                      class="font-num text-xs sm:text-sm font-semibold text-brand-600 hover:text-brand-700 hover:underline"
                     >
                       #{{ row.order.code || row.id.slice(0, 8) }}
                     </router-link>
                   </td>
 
-                  <!-- 2. Hạng mục -->
-                  <td class="whitespace-nowrap px-4 py-3.5">
-                    <div class="flex items-center gap-2 text-ink-900 font-medium">
-                      <component :is="getServiceIcon(row.order.serviceName)" :size="15" class="text-ink-400 shrink-0" />
-                      <span class="truncate">{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</span>
+                  <!-- 2. Hạng mục (Đồng bộ artwork dịch vụ 3D chuẩn FixHome) -->
+                  <td class="px-3.5 py-3">
+                    <div class="flex items-center gap-2.5">
+                      <div
+                        class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-blue-100/80 bg-blue-50/50 p-1"
+                      >
+                        <img
+                          v-if="!artworkErrors[row.id]"
+                          :src="getServiceArtworkUrl({ name: row.order.serviceName })"
+                          :alt="row.order.serviceName || 'Dịch vụ'"
+                          class="h-full w-full object-contain select-none pointer-events-none"
+                          loading="lazy"
+                          @error="onArtworkError(row.id)"
+                        />
+                        <component
+                          v-else
+                          :is="getServiceIcon(row.order.serviceName)"
+                          :size="16"
+                          class="text-brand-600"
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <div class="min-w-0 max-w-[130px] md:max-w-[160px] lg:max-w-[200px] xl:max-w-[240px]">
+                        <div class="truncate text-xs sm:text-sm font-medium text-ink-900" :title="row.order.serviceName">
+                          {{ row.order.serviceName || 'Bảo hành dịch vụ' }}
+                        </div>
+                      </div>
                     </div>
                   </td>
 
                   <!-- 3. Trạng thái -->
-                  <td class="px-4 py-3.5">
+                  <td class="px-3.5 py-3">
                     <div class="flex flex-wrap items-center gap-1.5">
                       <span
-                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap"
+                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold whitespace-nowrap"
                         :class="warrantyClaimToneClasses[meta(row).tone]"
                       >
                         <component :is="statusBadgeIcon(row)" :size="12" />
@@ -448,13 +475,13 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                       </span>
                       <span
                         v-if="row.submittedAfterExpiry"
-                        class="inline-flex items-center rounded-full border border-warning-200/60 bg-warning-50 px-2 py-0.5 text-[11px] font-medium text-warning-700 whitespace-nowrap"
+                        class="inline-flex items-center rounded-full border border-warning-200/60 bg-warning-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-warning-700 whitespace-nowrap"
                       >
                         Gửi sau hạn
                       </span>
                       <span
                         v-if="row.autoApproved"
-                        class="inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600 whitespace-nowrap"
+                        class="inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-ink-600 whitespace-nowrap"
                       >
                         Tự động duyệt
                       </span>
@@ -462,34 +489,42 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   </td>
 
                   <!-- 4. Kỹ thuật viên -->
-                  <td class="whitespace-nowrap px-4 py-3.5">
+                  <td class="px-3.5 py-3">
                     <div class="flex items-center gap-2">
-                      <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 overflow-hidden">
+                      <div class="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 overflow-hidden ring-1 ring-slate-300/50">
                         <span>{{ getInitials(row.technician?.fullName) }}</span>
                       </div>
-                      <span class="text-sm font-medium text-ink-800 truncate">{{ row.technician?.fullName || '—' }}</span>
+                      <div class="min-w-0 max-w-[110px] lg:max-w-[140px] xl:max-w-[180px]">
+                        <span class="block truncate text-xs sm:text-sm font-medium text-ink-800" :title="row.technician?.fullName">
+                          {{ row.technician?.fullName || '—' }}
+                        </span>
+                      </div>
                     </div>
                   </td>
 
                   <!-- 5. Khách hàng -->
-                  <td class="whitespace-nowrap px-4 py-3.5">
-                    <div class="flex items-center gap-1.5 text-sm text-ink-800">
-                      <User :size="14" class="text-ink-400 shrink-0" />
-                      <span class="truncate">{{ row.order.customerName }}</span>
+                  <td class="px-3.5 py-3">
+                    <div class="flex items-center gap-1.5 text-xs sm:text-sm text-ink-800">
+                      <User :size="13" class="text-ink-400 shrink-0" />
+                      <div class="min-w-0 max-w-[100px] lg:max-w-[130px] xl:max-w-[160px]">
+                        <span class="block truncate font-medium text-ink-800" :title="row.order.customerName">
+                          {{ row.order.customerName }}
+                        </span>
+                      </div>
                     </div>
                   </td>
 
                   <!-- 6. Thời gian -->
-                  <td class="whitespace-nowrap px-4 py-3.5">
-                    <div class="flex items-center gap-1.5 text-xs sm:text-sm font-num text-ink-600">
-                      <Clock :size="14" class="text-ink-400 shrink-0" />
+                  <td class="whitespace-nowrap px-3.5 py-3">
+                    <div class="flex items-center gap-1.5 text-xs font-num text-ink-600">
+                      <Clock :size="13" class="text-ink-400 shrink-0" />
                       <span>{{ formatDateTimeVN(row.submittedAt) }}</span>
                     </div>
                   </td>
 
                   <!-- 7. Thao tác -->
-                  <td class="whitespace-nowrap px-4 py-3.5 pr-5 text-right">
-                    <div class="flex items-center justify-end gap-2">
+                  <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">
+                    <div class="flex items-center justify-end gap-1.5">
                       <!-- Decision buttons for Service Manager -->
                       <template v-if="canDecide && !closed(row)">
                         <FhButton
@@ -636,14 +671,14 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
             <table class="w-full text-left text-sm">
               <thead>
                 <tr class="border-b border-ink-100 bg-slate-50/70 text-xs font-semibold text-ink-600">
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 pl-5">Kỹ thuật viên</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right hidden xl:table-cell">Đơn có bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right">Yêu cầu</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right">Tỷ lệ bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right hidden lg:table-cell">Không bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right hidden xl:table-cell">Quản lý đổi kết luận</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right hidden xl:table-cell">Khách phản đối</th>
-                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 pr-5 text-right hidden lg:table-cell">Từ chối nhận</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">Kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Đơn có bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right">Yêu cầu</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right">Tỷ lệ bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden lg:table-cell">Không bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Quản lý đổi kết luận</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Khách phản đối</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right hidden lg:table-cell">Từ chối nhận</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
@@ -665,19 +700,19 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   :key="row.technicianId"
                   class="transition-colors hover:bg-slate-50/70"
                 >
-                  <td class="whitespace-nowrap px-4 py-3.5 pl-5">
+                  <td class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">
                     <span class="font-medium text-ink-900">{{ row.fullName }}</span>
                     <span v-if="row.lowSample" class="ml-2 inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">
                       Ít dữ liệu
                     </span>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num hidden xl:table-cell">{{ row.ordersWithWarranty }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num">{{ row.claims }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num font-semibold text-ink-900">{{ pct(row.claimRate) }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num hidden lg:table-cell">{{ pct(row.notCoveredRate) }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num hidden xl:table-cell">{{ pct(row.overriddenRate) }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 text-right font-num hidden xl:table-cell">{{ pct(row.disputedRate) }}</td>
-                  <td class="whitespace-nowrap px-4 py-3.5 pr-5 text-right font-num hidden lg:table-cell">
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ row.ordersWithWarranty }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num">{{ row.claims }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num font-semibold text-ink-900">{{ pct(row.claimRate) }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden lg:table-cell">{{ pct(row.notCoveredRate) }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ pct(row.overriddenRate) }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ pct(row.disputedRate) }}</td>
+                  <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right font-num hidden lg:table-cell">
                     {{ pct(row.declineRate) }} <span class="text-ink-400 font-normal">({{ row.declines }})</span>
                   </td>
                 </tr>
