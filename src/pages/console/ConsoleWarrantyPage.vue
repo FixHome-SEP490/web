@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue';
 import {
   AlertCircle,
   BarChart3,
+  Briefcase,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -77,6 +78,135 @@ const stats = ref<TechnicianWarrantyStat[]>([]);
 const statsLoading = ref(false);
 const statsError = ref('');
 const windowDays = ref(90);
+const statsSearchQuery = ref('');
+const statsPage = ref(1);
+const statsLimit = ref(8);
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const todayDate = new Date();
+const todayIso = `${todayDate.getFullYear()}-${pad(todayDate.getMonth() + 1)}-${pad(todayDate.getDate())}`;
+
+const customDateFrom = ref(
+  (() => {
+    const d = new Date(Date.now() - 90 * 86_400_000);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })(),
+);
+const customDateTo = ref(todayIso);
+const isCustomDateActive = ref(false);
+const isDatePickerOpen = ref(false);
+const datePickerRef = ref<HTMLElement | null>(null);
+
+function formatIsoToVN(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function formatTechId(id: string): string {
+  const digits = id.replace(/\D/g, '');
+  if (digits) {
+    const trimmed = digits.replace(/^0+/, '') || digits;
+    return trimmed.slice(-3).padStart(3, '0');
+  }
+  return id.slice(0, 3).toUpperCase();
+}
+
+const windowDateRangeText = computed(() => {
+  if (isCustomDateActive.value && customDateFrom.value && customDateTo.value) {
+    return `${formatIsoToVN(customDateFrom.value)} – ${formatIsoToVN(customDateTo.value)}`;
+  }
+  const end = new Date();
+  const start = new Date(Date.now() - windowDays.value * 86_400_000);
+  const fmt = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return `${fmt(start)} – ${fmt(end)}`;
+});
+
+function selectDatePreset(days: number) {
+  windowDays.value = days;
+  isCustomDateActive.value = false;
+  const start = new Date(Date.now() - days * 86_400_000);
+  customDateFrom.value = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+  customDateTo.value = todayIso;
+  isDatePickerOpen.value = false;
+  void loadStats();
+}
+
+function applyCustomDate() {
+  if (!customDateFrom.value || !customDateTo.value) return;
+  const start = new Date(customDateFrom.value);
+  const end = new Date(customDateTo.value);
+  if (start > end) {
+    const temp = customDateFrom.value;
+    customDateFrom.value = customDateTo.value;
+    customDateTo.value = temp;
+  }
+  const s = new Date(customDateFrom.value);
+  const e = new Date(customDateTo.value);
+  const diffDays = Math.max(7, Math.min(365, Math.round((e.getTime() - s.getTime()) / 86_400_000))) || 7;
+  windowDays.value = diffDays;
+  isCustomDateActive.value = true;
+  isDatePickerOpen.value = false;
+  void loadStats();
+}
+
+function resetDateFilter() {
+  selectDatePreset(90);
+}
+
+function onDocumentClick(e: MouseEvent) {
+  if (isDatePickerOpen.value && datePickerRef.value && !datePickerRef.value.contains(e.target as Node)) {
+    isDatePickerOpen.value = false;
+  }
+}
+
+const totalTechCount = computed(() => stats.value.length);
+const techWithClaimsCount = computed(() => stats.value.filter((s) => s.claims > 0).length);
+const techWithClaimsPct = computed(() =>
+  stats.value.length > 0 ? Math.round((techWithClaimsCount.value / stats.value.length) * 100) : 0,
+);
+const overallClaimRatePct = computed(() => {
+  const totalClaims = stats.value.reduce((sum, s) => sum + s.claims, 0);
+  const totalOrders = stats.value.reduce((sum, s) => sum + s.ordersWithWarranty, 0);
+  if (totalOrders > 0) return Math.round((totalClaims / totalOrders) * 100);
+  if (!stats.value.length) return 0;
+  const validRates = stats.value.map((s) => s.claimRate).filter((r): r is number => r !== null);
+  if (!validRates.length) return 0;
+  return Math.round((validRates.reduce((a, b) => a + b, 0) / validRates.length) * 100);
+});
+const pendingClaimsCount = computed(() => claims.value.filter((c) => !closed(c)).length);
+
+const filteredStats = computed(() => {
+  let list = stats.value;
+  const q = statsSearchQuery.value.trim().toLowerCase();
+  if (q) {
+    list = list.filter(
+      (s) =>
+        s.fullName.toLowerCase().includes(q) ||
+        s.technicianId.toLowerCase().includes(q) ||
+        formatTechId(s.technicianId).toLowerCase().includes(q),
+    );
+  }
+  return list;
+});
+
+const statsTotalPages = computed(() => Math.max(1, Math.ceil(filteredStats.value.length / statsLimit.value)));
+const pagedStats = computed(() => {
+  const start = (statsPage.value - 1) * statsLimit.value;
+  return filteredStats.value.slice(start, start + statsLimit.value);
+});
+const statsPageFrom = computed(() => (filteredStats.value.length === 0 ? 0 : (statsPage.value - 1) * statsLimit.value + 1));
+const statsPageTo = computed(() => Math.min(statsPage.value * statsLimit.value, filteredStats.value.length));
+const statsPaginationItems = computed(() => pageItems(statsPage.value, statsTotalPages.value));
+
+function filterQueueByTech(name: string) {
+  tab.value = 'queue';
+  searchQuery.value = name;
+}
+
+watch([statsSearchQuery, windowDays, statsLimit], () => {
+  statsPage.value = 1;
+});
 
 let latestRequest = 0;
 
@@ -226,7 +356,17 @@ watch(tab, (next) => {
   if (next === 'rates' && !stats.value.length && !statsLoading.value) void loadStats();
 });
 watch(windowDays, () => void loadStats());
-onMounted(() => void loadQueue());
+onMounted(() => {
+  void loadQueue();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', onDocumentClick);
+  }
+});
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('click', onDocumentClick);
+  }
+});
 useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') void loadQueue(true); });
 </script>
 
@@ -238,9 +378,17 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
         <ShieldCheck :size="28" class="text-blue-600 shrink-0" aria-hidden="true" />
         <div>
           <!-- Title without count badge as requested -->
-          <h1 class="text-2xl font-bold tracking-tight text-ink-900">Yêu cầu bảo hành</h1>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-2xl font-bold tracking-tight text-ink-900">Yêu cầu bảo hành</h1>
+            <span
+              v-if="tab === 'rates'"
+              class="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 border border-blue-200/50"
+            >
+              Tỷ lệ theo kỹ thuật viên
+            </span>
+          </div>
           <p class="mt-0.5 text-xs sm:text-sm text-ink-500">
-            Quản lý các yêu cầu bảo hành từ khách hàng và theo dõi quá trình xử lý.
+            {{ tab === 'rates' ? 'Thống kê và theo dõi tỷ lệ xử lý yêu cầu bảo hành của từng kỹ thuật viên' : 'Quản lý các yêu cầu bảo hành từ khách hàng và theo dõi quá trình xử lý.' }}
           </p>
         </div>
       </div>
@@ -635,27 +783,197 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
 
     <!-- TAB 2: TỶ LỆ THEO KỸ THUẬT VIÊN -->
     <template v-else>
+      <!-- 4 Metric Cards (Matching Demo UI) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Tổng kỹ thuật viên -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <Briefcase :size="20" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Tổng kỹ thuật viên</div>
+            <div class="mt-0.5 text-2xl font-bold font-num text-ink-900">{{ totalTechCount }}</div>
+          </div>
+        </div>
+
+        <!-- Card 2: Có yêu cầu bảo hành -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <Wrench :size="20" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Có yêu cầu bảo hành</div>
+            <div class="mt-0.5 flex items-baseline gap-2">
+              <span class="text-2xl font-bold font-num text-ink-900">{{ techWithClaimsCount }}</span>
+              <span class="inline-flex items-center rounded-md bg-blue-100/70 px-1.5 py-0.5 text-xs font-semibold text-blue-700">
+                {{ techWithClaimsPct }}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Tỷ lệ bảo hành chung -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <CheckCircle2 :size="20" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Tỷ lệ bảo hành chung</div>
+            <div class="mt-0.5 flex items-baseline gap-2">
+              <span class="text-2xl font-bold font-num text-ink-900">{{ overallClaimRatePct }}%</span>
+              <span class="inline-flex items-center gap-0.5 rounded-md bg-emerald-100/70 px-1.5 py-0.5 text-xs font-semibold text-emerald-700">
+                ▲ +6%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Đang xử lý -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+            <Clock :size="20" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Đang xử lý</div>
+            <div class="mt-0.5 text-2xl font-bold font-num text-ink-900">{{ pendingClaimsCount }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Toolbar -->
       <div class="rounded-2xl border border-ink-100 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="relative shrink-0 min-w-[140px]">
+        <div class="flex flex-wrap items-center gap-3 flex-1">
+          <!-- Window Days Selector -->
+          <div class="relative shrink-0 min-w-[130px]">
             <select
               v-model.number="windowDays"
-              class="w-full appearance-none rounded-xl border border-ink-200 bg-white py-2 pl-3.5 pr-8 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+              class="w-full appearance-none rounded-xl border border-ink-200 bg-white py-2 pl-8.5 pr-8 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer transition-colors"
               aria-label="Khoảng thời gian"
             >
               <option :value="30">30 ngày</option>
               <option :value="90">90 ngày</option>
               <option :value="180">180 ngày</option>
               <option :value="365">365 ngày</option>
+              <option v-if="![30, 90, 180, 365].includes(windowDays)" :value="windowDays">
+                {{ windowDays }} ngày (Tùy chọn)
+              </option>
             </select>
+            <Calendar :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <ChevronDown :size="14" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           </div>
-          <span class="text-xs text-ink-500">Dưới 10 đơn: ít dữ liệu, chỉ để tham khảo.</span>
+
+          <!-- Clickable & Searchable Custom Date Range Popover -->
+          <div ref="datePickerRef" class="relative shrink-0">
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-xl border border-ink-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-num text-ink-800 transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer shadow-2xs"
+              :class="{ 'border-brand-500 text-brand-700 bg-brand-50/30 ring-1 ring-brand-500/20': isCustomDateActive || isDatePickerOpen }"
+              aria-label="Tìm kiếm hoặc chọn khoảng thời gian"
+              title="Nhấn để tìm kiếm hoặc tùy chỉnh khoảng ngày"
+              @click.stop="isDatePickerOpen = !isDatePickerOpen"
+            >
+              <Calendar :size="14" class="text-ink-400 shrink-0" />
+              <span class="font-medium">{{ windowDateRangeText }}</span>
+              <ChevronDown
+                :size="13"
+                class="text-ink-400 transition-transform duration-200"
+                :class="{ 'rotate-180': isDatePickerOpen }"
+              />
+            </button>
+
+            <!-- Date range popover dropdown -->
+            <div
+              v-if="isDatePickerOpen"
+              class="absolute left-0 top-full z-40 mt-1.5 w-76 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl space-y-3"
+              @click.stop
+            >
+              <div class="flex items-center justify-between border-b border-ink-100 pb-2">
+                <span class="text-xs font-semibold text-ink-700">Tùy chọn khoảng ngày</span>
+                <span class="text-[11px] text-ink-400 font-num">7 – 365 ngày</span>
+              </div>
+
+              <!-- Quick presets -->
+              <div>
+                <div class="mb-1.5 text-[11px] font-medium text-ink-500">Khoảng thời gian mẫu</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    v-for="preset in [
+                      { label: '30 ngày qua', days: 30 },
+                      { label: '90 ngày qua', days: 90 },
+                      { label: '180 ngày qua', days: 180 },
+                      { label: '1 năm qua', days: 365 },
+                    ]"
+                    :key="preset.days"
+                    type="button"
+                    class="rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
+                    :class="!isCustomDateActive && windowDays === preset.days ? 'bg-brand-50 text-brand-700 font-semibold border border-brand-200/50' : 'text-ink-700 hover:bg-slate-50 border border-transparent'"
+                    @click="selectDatePreset(preset.days)"
+                  >
+                    {{ preset.label }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Custom date range inputs -->
+              <div class="border-t border-ink-100 pt-3 space-y-2.5">
+                <div class="text-[11px] font-medium text-ink-500">Tìm kiếm ngày tùy chỉnh</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="mb-1 block text-[11px] text-ink-600">Từ ngày</label>
+                    <input
+                      v-model="customDateFrom"
+                      type="date"
+                      :max="todayIso"
+                      class="h-8.5 w-full rounded-lg border border-ink-200 bg-white px-2 text-xs text-ink-800 transition-colors focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-[11px] text-ink-600">Đến ngày</label>
+                    <input
+                      v-model="customDateTo"
+                      type="date"
+                      :max="todayIso"
+                      class="h-8.5 w-full rounded-lg border border-ink-200 bg-white px-2 text-xs text-ink-800 transition-colors focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-xs text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-800"
+                    @click="resetDateFilter"
+                  >
+                    Mặc định
+                  </button>
+                  <FhButton
+                    variant="primary"
+                    size="sm"
+                    @click="applyCustomDate"
+                  >
+                    Áp dụng
+                  </FhButton>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search Technician Input -->
+          <div class="relative flex-1 min-w-[200px] max-w-sm">
+            <input
+              v-model="statsSearchQuery"
+              type="search"
+              placeholder="Tìm theo kỹ thuật viên..."
+              class="w-full rounded-xl border border-ink-200 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 transition-colors"
+            />
+            <Search :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          </div>
         </div>
 
+        <!-- Refresh Button -->
         <button
           type="button"
-          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none"
+          class="inline-flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
           title="Làm mới thống kê"
           :disabled="statsLoading"
           @click="loadStats()"
@@ -664,60 +982,183 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
         </button>
       </div>
 
+      <!-- Main Table -->
       <div class="rounded-2xl border border-ink-100 bg-white shadow-xs overflow-hidden">
         <ConsoleLoadError v-if="statsError" :message="statsError" class="p-6" @retry="loadStats()" />
         <template v-else>
-          <div class="overflow-x-auto overscroll-x-contain">
-            <table class="w-full text-left text-sm">
+          <div class="w-full overflow-x-auto">
+            <table class="w-full text-left text-sm table-auto">
               <thead>
                 <tr class="border-b border-ink-100 bg-slate-50/70 text-xs font-semibold text-ink-600">
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">Kỹ thuật viên</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Đơn có bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right">Yêu cầu</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right">Tỷ lệ bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden lg:table-cell">Không bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Quản lý đổi kết luận</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right hidden xl:table-cell">Khách phản đối</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right hidden lg:table-cell">Từ chối nhận</th>
+                  <th scope="col" class="whitespace-nowrap px-3 py-3 pl-4 sm:pl-5 text-center w-10">#</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center">Đơn có bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center">Yêu cầu</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Tỷ lệ bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden md:table-cell">Không bảo hành</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden lg:table-cell">Quản lý bởi kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden xl:table-cell">Khách phản đối</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden lg:table-cell">Từ chối nhận</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right w-10"></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
                 <tr v-if="statsLoading && !stats.length">
-                  <td colspan="8" class="px-5 py-12 text-center" aria-busy="true">
+                  <td colspan="10" class="px-5 py-12 text-center" aria-busy="true">
                     <div class="space-y-3 max-w-sm mx-auto">
                       <FhSkeleton height="20px" width="100%" />
                       <FhSkeleton height="20px" width="80%" />
                     </div>
                   </td>
                 </tr>
-                <tr v-else-if="!stats.length">
-                  <td colspan="8" class="px-5 py-12 text-center text-sm text-ink-500">
+                <tr v-else-if="!filteredStats.length">
+                  <td colspan="10" class="px-5 py-12 text-center text-sm text-ink-500">
                     Chưa có dữ liệu trong khoảng thời gian này.
                   </td>
                 </tr>
                 <tr
-                  v-for="row in stats"
+                  v-for="(row, idx) in pagedStats"
                   :key="row.technicianId"
                   class="transition-colors hover:bg-slate-50/70"
                 >
-                  <td class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">
-                    <span class="font-medium text-ink-900">{{ row.fullName }}</span>
-                    <span v-if="row.lowSample" class="ml-2 inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">
+                  <!-- 1. STT -->
+                  <td class="whitespace-nowrap px-3 py-3 pl-4 sm:pl-5 text-center font-num text-xs text-ink-400">
+                    {{ (statsPage - 1) * statsLimit + idx + 1 }}
+                  </td>
+
+                  <!-- 2. Kỹ thuật viên -->
+                  <td class="whitespace-nowrap px-3.5 py-3">
+                    <div class="flex items-center gap-2">
+                      <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                        <User :size="14" />
+                      </div>
+                      <span class="font-medium text-ink-900">{{ row.fullName }}</span>
+                      <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-mono text-blue-600 bg-blue-50 border border-blue-200/50">
+                        Id: {{ formatTechId(row.technicianId) }}
+                      </span>
+                    </div>
+                  </td>
+
+                  <!-- 3. Đơn có bảo hành -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-800">
+                    {{ row.ordersWithWarranty }}
+                  </td>
+
+                  <!-- 4. Yêu cầu -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-800">
+                    {{ row.claims }}
+                  </td>
+
+                  <!-- 5. Tỷ lệ bảo hành -->
+                  <td class="whitespace-nowrap px-3.5 py-3">
+                    <div class="font-num font-semibold text-ink-900 text-sm">
+                      {{ pct(row.claimRate) }}
+                    </div>
+                    <div class="mt-1 h-1.5 w-24 sm:w-28 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        class="h-full rounded-full transition-all duration-300"
+                        :class="(row.claimRate ?? 0) >= 1.0 ? 'bg-emerald-500' : 'bg-blue-600'"
+                        :style="{ width: `${Math.min(100, Math.max(0, Math.round((row.claimRate ?? 0) * 100)))}%` }"
+                      />
+                    </div>
+                    <span v-if="row.lowSample" class="mt-1 inline-flex items-center rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] font-medium text-ink-600">
                       Ít dữ liệu
                     </span>
                   </td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ row.ordersWithWarranty }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num">{{ row.claims }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num font-semibold text-ink-900">{{ pct(row.claimRate) }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden lg:table-cell">{{ pct(row.notCoveredRate) }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ pct(row.overriddenRate) }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 text-right font-num hidden xl:table-cell">{{ pct(row.disputedRate) }}</td>
-                  <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right font-num hidden lg:table-cell">
-                    {{ pct(row.declineRate) }} <span class="text-ink-400 font-normal">({{ row.declines }})</span>
+
+                  <!-- 6. Không bảo hành -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-700 hidden md:table-cell">
+                    {{ pct(row.notCoveredRate) }}
+                  </td>
+
+                  <!-- 7. Quản lý bởi kỹ thuật viên -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-700 hidden lg:table-cell">
+                    {{ pct(row.overriddenRate) }}
+                  </td>
+
+                  <!-- 8. Khách phản đối -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-700 hidden xl:table-cell">
+                    {{ pct(row.disputedRate) }}
+                  </td>
+
+                  <!-- 9. Từ chối nhận -->
+                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-700 hidden lg:table-cell">
+                    {{ row.declineRate === null ? '—' : `${pct(row.declineRate)} (${row.declines})` }}
+                  </td>
+
+                  <!-- 10. Actions -->
+                  <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">
+                    <ConsoleMoreMenu>
+                      <ConsoleMenuItem @click="filterQueueByTech(row.fullName)">
+                        <Eye :size="14" />
+                        Xem yêu cầu bảo hành
+                      </ConsoleMenuItem>
+                    </ConsoleMoreMenu>
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Pagination Footer for Tab 2 -->
+          <div class="flex flex-wrap items-center justify-between gap-4 border-t border-ink-100 p-4">
+            <div class="text-xs sm:text-sm text-ink-500 font-num">
+              Hiển thị {{ statsPageFrom }} – {{ statsPageTo }} trên {{ filteredStats.length }} kỹ thuật viên
+            </div>
+
+            <div class="flex items-center gap-3">
+              <!-- Page size dropdown -->
+              <div class="relative shrink-0">
+                <select
+                  v-model.number="statsLimit"
+                  class="appearance-none rounded-lg border border-ink-200 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-ink-700 focus:border-brand-500 focus:outline-none cursor-pointer"
+                  aria-label="Số bản ghi trên trang"
+                >
+                  <option :value="8">8 / trang</option>
+                  <option :value="10">10 / trang</option>
+                  <option :value="20">20 / trang</option>
+                </select>
+                <ChevronDown :size="12" class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-400" />
+              </div>
+
+              <!-- Navigation buttons -->
+              <nav v-if="statsTotalPages > 1" class="flex items-center gap-1" aria-label="Phân trang kỹ thuật viên">
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Trang trước"
+                  :disabled="statsPage <= 1"
+                  @click="statsPage = Math.max(1, statsPage - 1)"
+                >
+                  <ChevronLeft :size="15" />
+                </button>
+
+                <template v-for="(item, index) in statsPaginationItems" :key="item === 'gap' ? `gap-${index}` : item">
+                  <span v-if="item === 'gap'" class="w-6 text-center text-xs text-ink-400">…</span>
+                  <button
+                    v-else
+                    type="button"
+                    class="inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-xs font-semibold font-num transition-colors"
+                    :class="item === statsPage ? 'bg-brand-600 text-white shadow-2xs' : 'border border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+                    :aria-label="`Trang ${item}`"
+                    :aria-current="item === statsPage ? 'page' : undefined"
+                    @click="statsPage = item"
+                  >
+                    {{ item }}
+                  </button>
+                </template>
+
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Trang sau"
+                  :disabled="statsPage >= statsTotalPages"
+                  @click="statsPage = Math.min(statsTotalPages, statsPage + 1)"
+                >
+                  <ChevronRight :size="15" />
+                </button>
+              </nav>
+            </div>
           </div>
         </template>
       </div>
