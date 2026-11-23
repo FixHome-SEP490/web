@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue';
 import {
   AlertCircle,
   BarChart3,
@@ -82,6 +82,27 @@ const statsSearchQuery = ref('');
 const statsPage = ref(1);
 const statsLimit = ref(8);
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const todayDate = new Date();
+const todayIso = `${todayDate.getFullYear()}-${pad(todayDate.getMonth() + 1)}-${pad(todayDate.getDate())}`;
+
+const customDateFrom = ref(
+  (() => {
+    const d = new Date(Date.now() - 90 * 86_400_000);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })(),
+);
+const customDateTo = ref(todayIso);
+const isCustomDateActive = ref(false);
+const isDatePickerOpen = ref(false);
+const datePickerRef = ref<HTMLElement | null>(null);
+
+function formatIsoToVN(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 function formatTechId(id: string): string {
   const digits = id.replace(/\D/g, '');
   if (digits) {
@@ -92,12 +113,52 @@ function formatTechId(id: string): string {
 }
 
 const windowDateRangeText = computed(() => {
+  if (isCustomDateActive.value && customDateFrom.value && customDateTo.value) {
+    return `${formatIsoToVN(customDateFrom.value)} – ${formatIsoToVN(customDateTo.value)}`;
+  }
   const end = new Date();
   const start = new Date(Date.now() - windowDays.value * 86_400_000);
-  const pad = (n: number) => String(n).padStart(2, '0');
   const fmt = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
   return `${fmt(start)} – ${fmt(end)}`;
 });
+
+function selectDatePreset(days: number) {
+  windowDays.value = days;
+  isCustomDateActive.value = false;
+  const start = new Date(Date.now() - days * 86_400_000);
+  customDateFrom.value = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+  customDateTo.value = todayIso;
+  isDatePickerOpen.value = false;
+  void loadStats();
+}
+
+function applyCustomDate() {
+  if (!customDateFrom.value || !customDateTo.value) return;
+  const start = new Date(customDateFrom.value);
+  const end = new Date(customDateTo.value);
+  if (start > end) {
+    const temp = customDateFrom.value;
+    customDateFrom.value = customDateTo.value;
+    customDateTo.value = temp;
+  }
+  const s = new Date(customDateFrom.value);
+  const e = new Date(customDateTo.value);
+  const diffDays = Math.max(7, Math.min(365, Math.round((e.getTime() - s.getTime()) / 86_400_000))) || 7;
+  windowDays.value = diffDays;
+  isCustomDateActive.value = true;
+  isDatePickerOpen.value = false;
+  void loadStats();
+}
+
+function resetDateFilter() {
+  selectDatePreset(90);
+}
+
+function onDocumentClick(e: MouseEvent) {
+  if (isDatePickerOpen.value && datePickerRef.value && !datePickerRef.value.contains(e.target as Node)) {
+    isDatePickerOpen.value = false;
+  }
+}
 
 const totalTechCount = computed(() => stats.value.length);
 const techWithClaimsCount = computed(() => stats.value.filter((s) => s.claims > 0).length);
@@ -295,7 +356,17 @@ watch(tab, (next) => {
   if (next === 'rates' && !stats.value.length && !statsLoading.value) void loadStats();
 });
 watch(windowDays, () => void loadStats());
-onMounted(() => void loadQueue());
+onMounted(() => {
+  void loadQueue();
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', onDocumentClick);
+  }
+});
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('click', onDocumentClick);
+  }
+});
 useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') void loadQueue(true); });
 </script>
 
@@ -783,15 +854,108 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
               <option :value="90">90 ngày</option>
               <option :value="180">180 ngày</option>
               <option :value="365">365 ngày</option>
+              <option v-if="![30, 90, 180, 365].includes(windowDays)" :value="windowDays">
+                {{ windowDays }} ngày (Tùy chọn)
+              </option>
             </select>
             <Calendar :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <ChevronDown :size="14" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           </div>
 
-          <!-- Calculated Date Range -->
-          <div class="relative shrink-0 flex items-center gap-2 rounded-xl border border-ink-200 bg-slate-50/60 px-3 py-2 text-xs font-num text-ink-700">
-            <Calendar :size="14" class="text-ink-400 shrink-0" />
-            <span>{{ windowDateRangeText }}</span>
+          <!-- Clickable & Searchable Custom Date Range Popover -->
+          <div ref="datePickerRef" class="relative shrink-0">
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-xl border border-ink-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-num text-ink-800 transition-colors focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer shadow-2xs"
+              :class="{ 'border-brand-500 text-brand-700 bg-brand-50/30 ring-1 ring-brand-500/20': isCustomDateActive || isDatePickerOpen }"
+              aria-label="Tìm kiếm hoặc chọn khoảng thời gian"
+              title="Nhấn để tìm kiếm hoặc tùy chỉnh khoảng ngày"
+              @click.stop="isDatePickerOpen = !isDatePickerOpen"
+            >
+              <Calendar :size="14" class="text-ink-400 shrink-0" />
+              <span class="font-medium">{{ windowDateRangeText }}</span>
+              <ChevronDown
+                :size="13"
+                class="text-ink-400 transition-transform duration-200"
+                :class="{ 'rotate-180': isDatePickerOpen }"
+              />
+            </button>
+
+            <!-- Date range popover dropdown -->
+            <div
+              v-if="isDatePickerOpen"
+              class="absolute left-0 top-full z-40 mt-1.5 w-76 rounded-2xl border border-ink-200 bg-white p-4 shadow-xl space-y-3"
+              @click.stop
+            >
+              <div class="flex items-center justify-between border-b border-ink-100 pb-2">
+                <span class="text-xs font-semibold text-ink-700">Tùy chọn khoảng ngày</span>
+                <span class="text-[11px] text-ink-400 font-num">7 – 365 ngày</span>
+              </div>
+
+              <!-- Quick presets -->
+              <div>
+                <div class="mb-1.5 text-[11px] font-medium text-ink-500">Khoảng thời gian mẫu</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    v-for="preset in [
+                      { label: '30 ngày qua', days: 30 },
+                      { label: '90 ngày qua', days: 90 },
+                      { label: '180 ngày qua', days: 180 },
+                      { label: '1 năm qua', days: 365 },
+                    ]"
+                    :key="preset.days"
+                    type="button"
+                    class="rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
+                    :class="!isCustomDateActive && windowDays === preset.days ? 'bg-brand-50 text-brand-700 font-semibold border border-brand-200/50' : 'text-ink-700 hover:bg-slate-50 border border-transparent'"
+                    @click="selectDatePreset(preset.days)"
+                  >
+                    {{ preset.label }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Custom date range inputs -->
+              <div class="border-t border-ink-100 pt-3 space-y-2.5">
+                <div class="text-[11px] font-medium text-ink-500">Tìm kiếm ngày tùy chỉnh</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="mb-1 block text-[11px] text-ink-600">Từ ngày</label>
+                    <input
+                      v-model="customDateFrom"
+                      type="date"
+                      :max="todayIso"
+                      class="h-8.5 w-full rounded-lg border border-ink-200 bg-white px-2 text-xs text-ink-800 transition-colors focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label class="mb-1 block text-[11px] text-ink-600">Đến ngày</label>
+                    <input
+                      v-model="customDateTo"
+                      type="date"
+                      :max="todayIso"
+                      class="h-8.5 w-full rounded-lg border border-ink-200 bg-white px-2 text-xs text-ink-800 transition-colors focus:border-brand-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    class="rounded-lg px-2 py-1 text-xs text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-800"
+                    @click="resetDateFilter"
+                  >
+                    Mặc định
+                  </button>
+                  <FhButton
+                    variant="primary"
+                    size="sm"
+                    @click="applyCustomDate"
+                  >
+                    Áp dụng
+                  </FhButton>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Search Technician Input -->
