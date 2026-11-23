@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, useId } from 'vue';
-import { MoreHorizontal } from 'lucide-vue-next';
+import { ChevronDown, MoreHorizontal } from 'lucide-vue-next';
 
 // The "⋯" menu that holds secondary actions. The panel is teleported to body
 // with fixed viewport coordinates so transformed ancestors (.animate-slide-up)
 // and overflow-hidden table wrappers never offset or clip it.
-withDefaults(defineProps<{ label?: string }>(), { label: 'Thao tác khác' });
+withDefaults(defineProps<{
+  label?: string;
+  showLabel?: boolean;
+  buttonLabel?: string;
+}>(), {
+  label: 'Thao tác khác',
+  showLabel: false,
+  buttonLabel: 'Thao tác',
+});
 
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
@@ -59,7 +67,11 @@ onBeforeUnmount(() => {
     <button
       ref="trigger"
       type="button"
-      class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      :class="[
+        showLabel
+          ? 'inline-flex h-9 px-3 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-medium transition-colors hover:bg-slate-50 hover:text-slate-900 shadow-xs'
+          : 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500'
+      ]"
       :aria-label="label"
       :title="label"
       aria-haspopup="menu"
@@ -67,7 +79,9 @@ onBeforeUnmount(() => {
       :aria-controls="panelId"
       @click="toggle"
     >
-      <MoreHorizontal :size="18" aria-hidden="true" />
+      <MoreHorizontal :size="showLabel ? 16 : 18" aria-hidden="true" />
+      <span v-if="showLabel">{{ buttonLabel }}</span>
+      <ChevronDown v-if="showLabel" :size="14" aria-hidden="true" class="text-slate-400" />
     </button>
     <Teleport to="body">
       <div
