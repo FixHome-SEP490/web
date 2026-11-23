@@ -342,13 +342,15 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
 </script>
 
 <template>
-  <section v-if="panelContextValid" class="space-y-3 rounded-lg border border-ink-200 bg-white p-4" :aria-busy="readStatus === 'loading' || warehouseLoadStatus === 'loading'">
-    <div class="flex flex-wrap items-start justify-between gap-2">
-      <div>
+  <section v-if="panelContextValid" class="space-y-3.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4" :aria-busy="readStatus === 'loading' || warehouseLoadStatus === 'loading'">
+    <div class="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-3">
+      <div class="min-w-0">
         <h3 class="text-sm font-semibold text-ink-900">{{ positive ? 'Giao linh kiện · phí 70/30' : 'Giao linh kiện · 0 ₫' }}</h3>
-        <p class="mt-1 break-all text-xs text-ink-600">Mã yêu cầu: {{ requestId }}</p>
+        <p class="mt-0.5 break-all font-mono text-xs text-ink-500">Mã yêu cầu: {{ requestId }}</p>
       </div>
-      <span class="rounded-md bg-ink-100 px-2 py-1 text-xs font-medium text-ink-700">{{ positive ? 'Điều khoản trước hóa đơn' : 'Không phát sinh phí' }}</span>
+      <span class="rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap" :class="positive ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-ink-200 bg-ink-50 text-ink-700'">
+        {{ positive ? 'Điều khoản trước hóa đơn' : 'Không phát sinh phí' }}
+      </span>
     </div>
     <template v-if="audience === 'manager' && managerMode === 'bootstrap'">
       <p class="text-sm text-ink-700">Chọn kho đang hoạt động do bạn phụ trách. Backend sẽ kiểm tra quyền và nguồn yêu cầu khi nhận đề xuất.</p>
@@ -357,9 +359,9 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
         <p class="text-danger-700">Chưa tải được danh sách kho của bạn.</p><FhButton variant="secondary" size="sm" @click="loadManagerWarehouses">Tải lại danh sách kho</FhButton>
       </div>
       <div v-else-if="warehouseLoadStatus === 'ready'" class="space-y-3">
-        <p v-if="ownActiveWarehouses.length === 0" class="text-sm text-ink-700">Bạn chưa có kho đang hoạt động được giao phụ trách.</p>
-        <label v-else class="block text-sm font-medium text-ink-800">Kho phụ trách
-          <select v-model="selectedWarehouseId" class="mt-1 min-h-11 w-full rounded-md border border-ink-300 px-3" aria-label="Chọn kho đang hoạt động do bạn phụ trách">
+        <p v-if="ownActiveWarehouses.length === 0" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700">Bạn chưa có kho đang hoạt động được giao phụ trách.</p>
+        <label v-else class="block text-xs font-semibold text-ink-700">Kho phụ trách
+          <select v-model="selectedWarehouseId" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" aria-label="Chọn kho đang hoạt động do bạn phụ trách">
             <option value="">Chọn kho</option>
             <option v-for="warehouse in ownActiveWarehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
           </select>
@@ -367,81 +369,85 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
         <template v-if="selectedWarehouse">
           <FhButton variant="secondary" :disabled="busy || readStatus === 'loading'" @click="openExisting">{{ readStatus === 'loading' ? 'Đang đối chiếu…' : 'Đối chiếu trạng thái đã có' }}</FhButton>
           <template v-if="positive">
-            <p v-if="!managerInspected" class="text-sm text-ink-600">Đối chiếu trạng thái do Backend ghi nhận trước khi ghi đề xuất phí dương.</p>
-            <template v-else-if="!quote">
-              <p class="text-sm text-ink-700">Chưa có điều khoản phí giao. Đề xuất không được vượt mức phí đã duyệt {{ shippingFee }} ₫.</p>
-              <label class="block text-sm font-medium text-ink-800">Tổng phí giao đề xuất (VND)
-                <input v-model="proposedShippingFee" data-testid="positive-shipping-fee" type="number" min="1" :max="shippingFee ?? undefined" inputmode="numeric" class="mt-1 min-h-11 w-full rounded-md border border-ink-300 px-3" />
+            <p v-if="!managerInspected" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 px-3 py-2 text-xs sm:text-sm text-ink-600">Đối chiếu trạng thái do Backend ghi nhận trước khi ghi đề xuất phí dương.</p>
+            <div v-else-if="!quote" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+              <p class="text-sm text-ink-700">Chưa có điều khoản phí giao. Đề xuất không được vượt mức phí đã duyệt <strong class="font-num text-ink-900">{{ shippingFee }} ₫</strong>.</p>
+              <label class="block text-xs font-semibold text-ink-700">Tổng phí giao đề xuất (VND)
+                <input v-model="proposedShippingFee" data-testid="positive-shipping-fee" type="number" min="1" :max="shippingFee ?? undefined" inputmode="numeric" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal font-num text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
               </label>
-              <label class="block text-sm font-medium text-ink-800">Mã tham chiếu đơn vị giao hàng
-                <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1 min-h-11 w-full rounded-md border border-ink-300 px-3" />
+              <label class="block text-xs font-semibold text-ink-700">Mã tham chiếu đơn vị giao hàng
+                <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
               </label>
-              <label class="block text-sm font-medium text-ink-800">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
-                <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'quote')" />
+              <label class="block text-xs font-semibold text-ink-700">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
+                <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'quote')" />
               </label>
               <FhButton :disabled="busy || proposedFee === null || !courierReference.trim() || !quotePhoto" @click="proposePositive">{{ busy ? 'Đang ghi nhận…' : 'Ghi đề xuất phí giao' }}</FhButton>
-            </template>
+            </div>
             <p v-else class="text-sm text-ink-700">Đã có đề xuất phí giao. Chuyển sang phần giao nhận bên dưới.</p>
           </template>
-          <template v-else>
-            <label class="block text-sm font-medium text-ink-800">Mã tham chiếu đơn vị giao hàng
-              <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1 min-h-11 w-full rounded-md border border-ink-300 px-3" />
+          <div v-else class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+            <label class="block text-xs font-semibold text-ink-700">Mã tham chiếu đơn vị giao hàng
+              <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
             </label>
-            <label class="block text-sm font-medium text-ink-800">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
-              <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'quote')" />
+            <label class="block text-xs font-semibold text-ink-700">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
+              <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'quote')" />
             </label>
             <FhButton :disabled="busy || !courierReference.trim() || !quotePhoto" @click="propose">{{ busy ? 'Đang ghi nhận…' : 'Đề xuất phí giao 0 ₫' }}</FhButton>
-          </template>
+          </div>
         </template>
       </div>
-      <p v-if="message" class="text-sm text-ink-700" role="status">{{ message }}</p>
+      <p v-if="message" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status">{{ message }}</p>
       <FhButton v-if="retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
     </template>
     <p v-else-if="readStatus === 'loading'" class="text-sm text-ink-600" role="status">Đang tải tình trạng giao linh kiện…</p>
     <div v-else-if="readStatus === 'unavailable'" class="space-y-2 text-sm text-ink-700" role="status">
       <p>Chưa khả dụng.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
     </div>
-    <div v-else-if="readStatus === 'forbidden'" class="text-sm text-danger-700" role="alert">Bạn không có quyền xem thông tin giao linh kiện này.</div>
+    <div v-else-if="readStatus === 'forbidden'" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">Bạn không có quyền xem thông tin giao linh kiện này.</div>
     <div v-else-if="readStatus === 'error'" class="space-y-2 text-sm" role="alert">
-      <p class="text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      <p class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
     </div>
     <template v-else-if="readStatus === 'ready' && readState">
       <!-- Once the technician has the parts the order moves on, so the server reports the terms as
            no longer current; that is the end of the delivery, not a change to review (13/11). -->
-      <p v-if="physical?.status === 'TECHNICIAN_RECEIVED'" class="text-sm text-success-700" role="status" data-testid="delivery-operations-done">Đã giao xong: kỹ thuật viên đã nhận linh kiện.</p>
-      <p v-else-if="readState.invalidated" class="text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
+      <p v-if="physical?.status === 'TECHNICIAN_RECEIVED'" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-3 py-2.5 text-sm font-medium text-success-800" role="status" data-testid="delivery-operations-done">Đã giao xong: kỹ thuật viên đã nhận linh kiện.</p>
+      <p v-else-if="readState.invalidated" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2.5 text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
       <template v-else-if="requiresReload">
-        <p class="text-sm text-warning-800" role="alert">{{ message }}</p>
+        <p class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="alert">{{ message }}</p>
         <FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
       </template>
       <template v-else>
-        <dl v-if="quote" class="grid gap-1 text-sm sm:grid-cols-2">
-          <div><dt class="inline text-ink-600">{{ positive ? 'Phí giao theo thỏa thuận: ' : 'Phí giao thực tế: ' }}</dt><dd class="inline font-medium text-ink-900"><FhMoney :amount="quote.totalShippingFee" /></dd></div>
-          <div><dt class="inline text-ink-600">Mã phiên báo giá: </dt><dd class="inline font-num text-ink-900">{{ quote.quoteVersion }}</dd></div>
-          <div v-if="positive"><dt class="inline text-ink-600">Khách hàng chịu (70%): </dt><dd class="inline font-num text-ink-900"><FhMoney :amount="quote.customerShippingShare" /></dd></div>
-          <div v-if="positive"><dt class="inline text-ink-600">Kỹ thuật viên chịu (30%): </dt><dd class="inline font-num text-ink-900"><FhMoney :amount="quote.technicianShippingShare" /></dd></div>
-          <div v-if="readState.actual"><dt class="inline text-ink-600">Phí thực tế đã ghi nhận: </dt><dd class="inline font-num text-ink-900"><FhMoney :amount="readState.actual.totalShippingFee" /></dd></div>
-          <div><dt class="inline text-ink-600">Đồng thuận khách hàng: </dt><dd class="inline">{{ readState.customerConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
-          <div><dt class="inline text-ink-600">Đồng thuận kỹ thuật viên: </dt><dd class="inline">{{ readState.technicianConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
+        <dl v-if="quote" class="grid gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25/70 p-3 text-sm sm:grid-cols-2">
+          <div><dt class="inline text-ink-600">{{ positive ? 'Phí giao theo thỏa thuận: ' : 'Phí giao thực tế: ' }}</dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.totalShippingFee" /></dd></div>
+          <div><dt class="inline text-ink-600">Mã phiên báo giá: </dt><dd class="inline font-num font-semibold text-ink-900">{{ quote.quoteVersion }}</dd></div>
+          <div v-if="positive"><dt class="inline text-ink-600">Khách hàng chịu (70%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.customerShippingShare" /></dd></div>
+          <div v-if="positive"><dt class="inline text-ink-600">Kỹ thuật viên chịu (30%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.technicianShippingShare" /></dd></div>
+          <div v-if="readState.actual"><dt class="inline text-ink-600">Phí thực tế đã ghi nhận: </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="readState.actual.totalShippingFee" /></dd></div>
+          <div><dt class="inline text-ink-600">Đồng thuận khách hàng: </dt><dd class="inline font-medium" :class="readState.customerConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.customerConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
+          <div><dt class="inline text-ink-600">Đồng thuận kỹ thuật viên: </dt><dd class="inline font-medium" :class="readState.technicianConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.technicianConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
         </dl>
-        <p v-else class="text-sm text-ink-700">{{ positive ? 'Chưa có điều khoản phí giao.' : 'Chưa có đề xuất phí giao 0 ₫.' }}</p>
-        <p class="text-sm text-ink-700">Giao nhận: {{ statusLabel }}.</p>
-        <p v-if="positive" class="text-xs text-warning-800">Giao nhận vật lý khả dụng khi cả hai bên đồng thuận và phí thực tế đã được ghi nhận. Thanh toán hoặc chi trả chỉ sau hóa đơn W3 đã khóa và đủ điều kiện; khoản phí này chưa được thanh toán.</p>
-        <p v-else class="text-xs text-warning-800">Phí giao và mọi phần chia đều bằng 0 ₫. Không ghi nhận thanh toán hoặc xác minh bên giao hàng.</p>
-        <p v-if="positive && quote" class="text-xs" :class="canOperatePhysical ? 'text-success-700' : 'text-ink-600'">{{ canOperatePhysical ? 'Đã đủ điều kiện ghi nhận giao nhận vật lý.' : 'Chưa đủ điều kiện giao nhận vật lý: cần cả hai đồng thuận và phí thực tế.' }}</p>
+        <p v-else class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25 px-3 py-2 text-sm text-ink-700">
+          {{ positive ? 'Chưa có điều khoản phí giao.' : 'Chưa có đề xuất phí giao 0 ₫.' }}
+        </p>
+        <div class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25/50 px-3 py-2 text-sm text-ink-800">
+          Giao nhận: <strong class="font-semibold text-ink-900">{{ statusLabel }}</strong>.
+        </div>
+        <p v-if="positive" class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/60 px-3 py-2 text-xs text-warning-800">Giao nhận vật lý khả dụng khi cả hai bên đồng thuận và phí thực tế đã được ghi nhận. Thanh toán hoặc chi trả chỉ sau hóa đơn W3 đã khóa và đủ điều kiện; khoản phí này chưa được thanh toán.</p>
+        <p v-else class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/60 px-3 py-2 text-xs text-warning-800">Phí giao và mọi phần chia đều bằng 0 ₫. Không ghi nhận thanh toán hoặc xác minh bên giao hàng.</p>
+        <p v-if="positive && quote" class="text-xs font-medium" :class="canOperatePhysical ? 'text-success-700' : 'text-ink-600'">{{ canOperatePhysical ? 'Đã đủ điều kiện ghi nhận giao nhận vật lý.' : 'Chưa đủ điều kiện giao nhận vật lý: cần cả hai đồng thuận và phí thực tế.' }}</p>
 
         <div v-if="audience === 'customer' || audience === 'technician'" data-testid="delivery-operations-actions" class="space-y-3">
-          <div v-if="canConsent" class="space-y-2 rounded-md border border-ink-200 p-3">
-            <label class="flex items-start gap-2 text-sm text-ink-800"><input v-model="accepted" type="checkbox" class="mt-1 size-4 accent-brand-600" />Tôi đồng ý với mức phí giao 0 ₫ cho đề xuất này.</label>
+          <div v-if="canConsent" class="space-y-2.5 rounded-[var(--radius-sm)] border border-brand-200 bg-brand-50/40 p-3">
+            <label class="flex items-start gap-2.5 text-sm text-ink-800 cursor-pointer"><input v-model="accepted" type="checkbox" class="mt-1 size-4 accent-brand-600" />Tôi đồng ý với mức phí giao 0 ₫ cho đề xuất này.</label>
             <FhButton data-testid="delivery-consent" :disabled="busy || !accepted" @click="consent">{{ busy ? 'Đang ghi nhận…' : 'Ghi nhận đồng ý' }}</FhButton>
           </div>
           <p v-else-if="positive && !readState?.[audience === 'customer' ? 'customerConsented' : 'technicianConsented']" class="text-xs text-ink-600">Đồng thuận phí dương được ghi tại mục Điều khoản phí giao hàng.</p>
           <div v-if="audience === 'technician' && canOperatePhysical && (!physical || ['INELIGIBLE', 'PENDING_ASSISTANCE', 'RELEASED'].includes(physical.status))">
             <FhButton variant="secondary" :disabled="busy" @click="physicalAction('reserve')">{{ busy ? 'Đang ghi nhận…' : 'Yêu cầu phân bổ kho' }}</FhButton>
           </div>
-          <div v-if="audience === 'technician' && canOperatePhysical && physical?.status === 'DISPATCH_RECORDED'" class="space-y-2">
-            <label class="block text-sm font-medium text-ink-800">Ảnh xác nhận nhận linh kiện
-              <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'stage')" />
+          <div v-if="audience === 'technician' && canOperatePhysical && physical?.status === 'DISPATCH_RECORDED'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3">
+            <label class="block text-xs font-semibold text-ink-700">Ảnh xác nhận nhận linh kiện
+              <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
             </label>
             <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('receipt')">Ghi nhận nhận linh kiện</FhButton>
           </div>
@@ -449,34 +455,38 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
 
         <div v-if="audience === 'manager' && managerMode === 'operations'" data-testid="delivery-operations-actions" class="space-y-3 border-t border-ink-100 pt-3">
           <template v-if="quote">
-            <div v-if="readState.customerConsented && readState.technicianConsented && !actualRecorded" class="space-y-2">
-              <label v-if="positive" class="block text-sm font-medium text-ink-800">Tổng phí giao thực tế (0–{{ quote.totalShippingFee }} ₫)
-                <input v-model="actualShippingFee" data-testid="positive-actual-fee" type="number" min="0" :max="quote.totalShippingFee" inputmode="numeric" class="mt-1 min-h-11 w-full rounded-md border border-ink-300 px-3" />
+            <div v-if="readState.customerConsented && readState.technicianConsented && !actualRecorded" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+              <label v-if="positive" class="block text-xs font-semibold text-ink-700">Tổng phí giao thực tế (0–{{ quote.totalShippingFee }} ₫)
+                <input v-model="actualShippingFee" data-testid="positive-actual-fee" type="number" min="0" :max="quote.totalShippingFee" inputmode="numeric" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal font-num text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
               </label>
-              <label class="block text-sm font-medium text-ink-800">{{ positive ? 'Ảnh đối chiếu phí giao thực tế' : 'Ảnh đối chiếu phí giao thực tế 0 ₫' }}
-                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'actual')" />
+              <label class="block text-xs font-semibold text-ink-700">{{ positive ? 'Ảnh đối chiếu phí giao thực tế' : 'Ảnh đối chiếu phí giao thực tế 0 ₫' }}
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'actual')" />
               </label>
               <FhButton :disabled="busy || !actualPhoto || (positive && actualFee === null)" @click="recordActual">{{ positive ? 'Ghi nhận phí thực tế' : 'Ghi nhận phí giao thực tế 0 ₫' }}</FhButton>
             </div>
-            <div v-if="canOperatePhysical && physical?.status === 'RESERVED'" class="space-y-2">
-              <label class="block text-sm font-medium text-ink-800">Ảnh bàn giao cho đơn vị giao hàng
-                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'stage')" />
+            <div v-if="canOperatePhysical && physical?.status === 'RESERVED'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+              <label class="block text-xs font-semibold text-ink-700">Ảnh bàn giao cho đơn vị giao hàng
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
               </label>
-              <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('issue-to-courier')">Ghi nhận bàn giao cho đơn vị giao hàng</FhButton>
-              <FhButton variant="secondary" :disabled="busy" @click="physicalAction('release')">Hủy phân bổ giao hàng</FhButton>
+              <div class="flex flex-wrap gap-2">
+                <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('issue-to-courier')">Ghi nhận bàn giao cho đơn vị giao hàng</FhButton>
+                <FhButton variant="secondary" :disabled="busy" @click="physicalAction('release')">Hủy phân bổ giao hàng</FhButton>
+              </div>
             </div>
-            <div v-if="canOperatePhysical && physical?.status === 'ISSUED_TO_COURIER'" class="space-y-2">
-              <label class="block text-sm font-medium text-ink-800">Ảnh xác nhận rời kho
-                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm" @change="setFile($event, 'stage')" />
+            <div v-if="canOperatePhysical && physical?.status === 'ISSUED_TO_COURIER'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+              <label class="block text-xs font-semibold text-ink-700">Ảnh xác nhận rời kho
+                <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
               </label>
               <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('dispatch')">Ghi nhận rời kho</FhButton>
             </div>
           </template>
         </div>
       </template>
-      <p v-if="message" class="text-sm text-ink-700" role="status">{{ message }}</p>
-      <FhButton v-if="message.includes('Chưa xác định') && retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
-      <FhButton variant="ghost" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      <p v-if="message" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status">{{ message }}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <FhButton v-if="message.includes('Chưa xác định') && retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
+        <FhButton variant="ghost" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      </div>
     </template>
   </section>
 </template>

@@ -1176,7 +1176,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div class="flex justify-between items-baseline gap-2">
                   <span class="text-slate-500 shrink-0">Kho xuất</span>
                   <span class="font-medium text-slate-900 text-right truncate">
-                    {{ allocationFor(selected)?.warehouseName || warehouseLabel(selected) || '[DEMO HCM] Kho 06 - Quận 5' }}
+                    {{ allocationFor(selected)?.warehouseName || warehouseLabel(selected) || (selected.fulfillmentMethod === 'delivery' ? 'Chọn ở mục giao hàng bên dưới' : 'Chưa phân bổ kho') }}
                   </span>
                 </div>
 
@@ -1237,7 +1237,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div class="flex items-start gap-1.5 text-slate-600">
                   <MapPin :size="14" class="text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <span class="line-clamp-2">
-                    Địa chỉ: {{ allocationFor(selected)?.warehouseAddress || '[ĐỊA CHỈ DEMO] Số 28 An Dương Vương, Quận 5, TP. Hồ Chí Minh' }}
+                    Địa chỉ: {{ allocationFor(selected)?.warehouseAddress || (selected.fulfillmentMethod === 'delivery' ? 'Xem thông tin kho xử lý giao hàng bên dưới' : 'Chưa có địa chỉ kho phân bổ') }}
                   </span>
                 </div>
 
@@ -1253,9 +1253,9 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                   <Route :size="14" class="text-slate-400 shrink-0 inline mr-1" aria-hidden="true" />
                   Chưa xác minh khoảng cách; quản lý cần kiểm tra. Không có km hoặc thời gian ước tính.
                 </p>
-                <p v-else class="text-xs text-slate-500">
+                <p v-else-if="typeof allocationFor(selected)?.estimatedStraightLineKm === 'number'" class="text-xs text-slate-500">
                   <Route :size="14" class="text-slate-400 shrink-0 inline mr-1" aria-hidden="true" />
-                  Khoảng cách: ~{{ allocationFor(selected)?.estimatedStraightLineKm != null ? allocationFor(selected)?.estimatedStraightLineKm?.toFixed(1) : '65.0' }} km (chưa xác minh đường đi/ETA)
+                  Khoảng cách: ~{{ allocationFor(selected)?.estimatedStraightLineKm?.toFixed(1) }} km (chưa xác minh đường đi/ETA)
                 </p>
 
                 <!-- In-place Warehouse QR and Handover confirmations -->

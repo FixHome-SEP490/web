@@ -26,6 +26,7 @@ import { FhButton, FhMoney, FhSkeleton } from './index';
 import ShippingShareBreakdown from './ShippingShareBreakdown.vue';
 import DeliveryPhysicalPreview from './DeliveryPhysicalPreview.vue';
 import DeliveryOperationsPanel from './DeliveryOperationsPanel.vue';
+import DeliveryTermsPanel from './DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../api/w3-delivery-physical.api';
 import { toUserFacingMessage, userFacingError } from '../utils/user-facing-error';
 import {
@@ -107,7 +108,6 @@ export interface SelectedPartItem {
 const selectedItems = ref<SelectedPartItem[]>([]);
 
 // Search & Part Picker state
-const showSearchDropdown = ref(false);
 const selectedPart = ref<FixHomePart | null>(null);
 const selectedQuantity = ref(1);
 /** Backend accepts whole quantities from 1 to MAX_PART_REQUEST_QTY per line. */
@@ -120,7 +120,6 @@ const itemNote = ref('');
 const partialUsageDraft = ref<Record<string, number>>({});
 const partialUsageEditing = ref<Record<string, boolean>>({});
 const partialUsageSaving = ref<string | null>(null);
-const searchContainerRef = ref<HTMLElement | null>(null);
 
 const CATEGORY_TABS = [
   { label: 'Tất cả linh kiện', value: 'ALL' },
@@ -336,15 +335,36 @@ function canRecordUsage(request: PartRequest | undefined, item: PartRequest['ite
 }
 /** The reason a person wrote; system notes in English stay hidden. */
 const requestReasonText = (reason?: string | null) => toUserFacingMessage(reason ?? '', '');
-const hasActivePreRepair = computed(() =>
-  partRequests.value.some(
+const activePreRepair = computed(() =>
+  partRequests.value.find(
     (pr) => pr.requestType === 'pre_repair' && pr.status !== 'cancelled',
-  ),
+  ) ?? null,
 );
+const hasActivePreRepair = computed(() => !!activePreRepair.value);
+const confirmModifyPreRepairId = ref<string | null>(null);
+const isW3ParcelMoved = (request: PartRequest) =>
+  ['ISSUED_TO_COURIER', 'DISPATCH_RECORDED', 'TECHNICIAN_RECEIVED'].includes(
+    String(request.w3DeliveryStage ?? '').toUpperCase(),
+  );
+const canModifyPreRepair = (request: PartRequest | null): boolean => {
+  if (!request || !isAccepted.value || props.disabled) return false;
+  if (request.requestType !== 'pre_repair' || request.status !== 'requested') return false;
+  if (isW3ParcelMoved(request)) return false;
+  if (request.fulfillmentMethod === 'pickup') {
+    if (warehouseAllocationLoading.value[request.id]) return false;
+    const allocStatus = warehouseAllocationFor(request)?.status;
+    if (allocStatus === 'stock_unavailable') return false;
+    if (['handed_over', 'received'].includes(String(allocStatus ?? ''))) return false;
+  }
+  return true;
+};
 
 function openPreRepairFormWhenReady() {
   if (!preRepairFormRequested.value || loading.value) return;
   showCreateForm.value = partRequestsLoaded.value && isAccepted.value && !hasActivePreRepair.value;
+  if (partRequestsLoaded.value && isAccepted.value && activePreRepair.value && canModifyPreRepair(activePreRepair.value)) {
+    confirmModifyPreRepairId.value = activePreRepair.value.id;
+  }
   preRepairFormRequested.value = false;
 }
 
@@ -555,15 +575,14 @@ const loadReturns = async () => {
   }
 };
 
-const onSearchInput = () => { showSearchDropdown.value = true; picker.searchSoon(); };
-const selectCategory = (value: string) => { showSearchDropdown.value = true; picker.selectCategory(value); };
-const clearSearch = () => { showSearchDropdown.value = true; picker.clear(); };
+const onSearchInput = () => { picker.searchSoon(); };
+const selectCategory = (value: string) => { picker.selectCategory(value); };
+const clearSearch = () => { picker.clear(); };
 
 const selectPartForForm = (part: FixHomePart) => {
-  selectedPart.value = part;
+  selectedPart.value = selectedPart.value?.id === part.id ? null : part;
   selectedQuantity.value = 1;
   itemNote.value = '';
-  showSearchDropdown.value = false;
 };
 
 const clearSelectedPart = () => {
@@ -572,15 +591,17 @@ const clearSelectedPart = () => {
   itemNote.value = '';
 };
 
-const addItemToForm = () => {
-  if (!selectedPart.value) return;
-  const part = selectedPart.value;
+const selectedCatalogQuantities = computed(
+  () => new Map(selectedItems.value.map((item) => [item.partCatalogId, item.quantity])),
+);
 
+const upsertSelectedPart = (part: FixHomePart, quantity: number, note = '') => {
+  const clamped = clampPartQty(quantity);
   const existing = selectedItems.value.find((i) => i.partCatalogId === part.id);
   if (existing) {
-    existing.quantity = clampPartQty(existing.quantity + clampPartQty(selectedQuantity.value));
-    if (itemNote.value.trim() && !existing.note) {
-      existing.note = itemNote.value.trim();
+    existing.quantity = clampPartQty(existing.quantity + clamped);
+    if (note.trim() && !existing.note) {
+      existing.note = note.trim();
     }
   } else {
     selectedItems.value.push({
@@ -590,12 +611,25 @@ const addItemToForm = () => {
       price: part.sellingPrice,
       warrantyDays: part.warrantyDays,
       warrantyPolicy: part.warrantyPolicy,
-      quantity: clampPartQty(selectedQuantity.value),
-      note: itemNote.value.trim(),
+      quantity: clamped,
+      note: note.trim(),
     });
   }
+};
 
+const addItemToForm = () => {
+  if (!selectedPart.value) return;
+  upsertSelectedPart(selectedPart.value, selectedQuantity.value, itemNote.value);
   clearSelectedPart();
+};
+
+const quickAddPart = (part: FixHomePart) => {
+  upsertSelectedPart(part, 1);
+};
+
+const decrementCatalogPart = (partId: string) => {
+  const index = selectedItems.value.findIndex((i) => i.partCatalogId === partId);
+  if (index >= 0) decreaseQuantity(index);
 };
 
 /** Closing the form drops the unsent draft so reopening starts clean. */
@@ -627,16 +661,7 @@ const decreaseQuantity = (index: number) => {
   }
 };
 
-const handleClickOutside = (e: MouseEvent) => {
-  // Loading can remove the clicked result/load-more button before bubbling ends.
-  // The event path still records that the click originated inside this picker.
-  if (searchContainerRef.value && !e.composedPath().includes(searchContainerRef.value)) {
-    showSearchDropdown.value = false;
-  }
-};
-
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside);
   void loadPartRequests();
   void loadReturns();
   void picker.load();
@@ -644,7 +669,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   custodyScope += 1;
-  document.removeEventListener('click', handleClickOutside);
   stopLiveParts();
   stopOfflineParts();
   ++returnsLoadVersion;
@@ -686,6 +710,7 @@ watch(() => props.orderId, id => {
   pendingBulkDeclarations.value = {};
   custodyCommandKeys.clear();
   actionLoading.value = false;
+  confirmModifyPreRepairId.value = null;
   selectedItems.value = [];
   showCreateForm.value = false;
   actionError.value = null;
@@ -751,6 +776,65 @@ const cancelUnavailablePreRepair = async (requestId: string) => {
     emit('parts-updated');
   } catch (error) {
     actionError.value = userFacingError(error, 'Chưa hủy được yêu cầu kho; vui lòng thử lại.');
+  } finally {
+    actionLoading.value = false;
+  }
+};
+
+const promptModifyPreRepair = (requestId: string) => {
+  confirmModifyPreRepairId.value = requestId;
+  document.querySelector('[data-testid="pre-repair-active-notice"]')?.scrollIntoView?.({
+    block: 'nearest',
+    behavior: 'smooth',
+  });
+};
+
+const reorderPreRepair = async (request: PartRequest) => {
+  if (!canModifyPreRepair(request) || actionLoading.value) return;
+  const prefillItems: SelectedPartItem[] = request.items
+    .filter((item): item is PartRequest['items'][number] & { partCatalogId: string } => !!item.partCatalogId)
+    .map((item) => {
+      const catalog = partsMap.value.get(item.partCatalogId);
+      return {
+        partCatalogId: item.partCatalogId,
+        partName: catalog?.name || item.partNameSnapshot,
+        sku: catalog?.sku ?? null,
+        price: catalog?.sellingPrice ?? item.unitPriceSnapshot,
+        warrantyDays: catalog?.warrantyDays ?? null,
+        warrantyPolicy: catalog?.warrantyPolicy ?? null,
+        quantity: clampPartQty(item.quantity),
+        note: item.note ?? '',
+      };
+    });
+  const savedFulfillment = request.fulfillmentMethod;
+  const savedReason = requestReasonText(request.reason);
+
+  try {
+    actionLoading.value = true;
+    actionError.value = null;
+    actionSuccess.value = null;
+    await partRequestsApi.cancel(
+      request.id,
+      'Kỹ thuật viên hủy phiếu để bổ sung linh kiện trước khi xuất phát.',
+    );
+    confirmModifyPreRepairId.value = null;
+    await loadPartRequests(partRequestsLoaded.value);
+    fulfillmentMethod.value = savedFulfillment;
+    requestReason.value = savedReason;
+    selectedItems.value = prefillItems;
+    showCreateForm.value = true;
+    clearSelectedPart();
+    actionSuccess.value = prefillItems.length > 0
+      ? 'Đã hủy phiếu cũ và giữ lại các linh kiện đã chọn. Hãy chọn thêm món còn thiếu rồi gửi lại.'
+      : 'Đã hủy phiếu cũ. Hãy chọn lại danh sách linh kiện rồi gửi yêu cầu mới.';
+    emit('parts-updated');
+  } catch (err: unknown) {
+    confirmModifyPreRepairId.value = null;
+    actionError.value = userFacingError(
+      err,
+      'Không thể hủy phiếu linh kiện hiện tại. Có thể kho vừa xác nhận bàn giao.',
+    );
+    void refreshParts();
   } finally {
     actionLoading.value = false;
   }
@@ -1021,10 +1105,10 @@ const getStatusBadgeClass = (status: string) => {
 
       <!-- Action: Create Pre-Repair Request (Only in ACCEPTED state) -->
       <div
-        v-if="isAccepted && !hasActivePreRepair"
+        v-if="isAccepted"
         class="space-y-4"
       >
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        <div v-if="!hasActivePreRepair" class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-ink-700 min-w-0">Cần mang linh kiện của FixHome theo? Xin trước khi đi.</p>
           <FhButton
             v-if="!showCreateForm"
@@ -1036,57 +1120,93 @@ const getStatusBadgeClass = (status: string) => {
           </FhButton>
         </div>
 
-        <!-- Pre-Repair Form -->
-        <div v-if="showCreateForm" class="space-y-4 pt-3 border-t border-ink-200">
-          <!-- Fulfillment & Reason inputs -->
-          <div class="grid sm:grid-cols-2 gap-3 bg-ink-50/60 p-3 rounded-lg border border-ink-200">
-            <div>
-              <label class="block font-semibold text-ink-800 mb-1 text-xs">Phương thức nhận linh kiện</label>
-              <select
-                v-model="fulfillmentMethod"
-                class="w-full text-xs rounded border border-ink-300 p-2 bg-white text-ink-900 focus:outline-brand-500"
+        <div
+          v-else-if="activePreRepair && !showCreateForm"
+          data-testid="pre-repair-active-notice"
+          class="rounded-xl border border-ink-200/80 bg-ink-50/70 p-3.5 text-xs space-y-2.5"
+        >
+          <template v-if="canModifyPreRepair(activePreRepair)">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="text-ink-700 min-w-0 flex-1 text-pretty">
+                Mỗi đơn trước khi xuất phát chỉ giữ tối đa <strong class="text-ink-900">1 phiếu linh kiện</strong>. Nếu thấy thiếu, hãy hủy phiếu đang chờ để chọn lại và thêm linh kiện mới.
+              </p>
+              <FhButton
+                v-if="confirmModifyPreRepairId !== activePreRepair.id"
+                data-testid="modify-pre-repair-parts"
+                variant="secondary"
+                size="sm"
+                :disabled="actionLoading"
+                @click="confirmModifyPreRepairId = activePreRepair.id"
               >
-                <option value="pickup">Tự lấy tại kho FixHome</option>
-                <option value="delivery">Giao tới địa chỉ</option>
-              </select>
+                <RotateCcw :size="14" class="mr-1" /> Đặt lại &amp; thêm linh kiện
+              </FhButton>
             </div>
-
-            <div>
-              <label class="block font-semibold text-ink-800 mb-1 text-xs">Ghi chú / Lý do yêu cầu linh kiện</label>
-              <input
-                v-model="requestReason"
-                type="text"
-                placeholder="VD: Nghi hỏng bo mạch chính hoặc cảm biến nhiệt độ"
-                class="w-full text-xs rounded border border-ink-300 p-2 bg-white text-ink-900 focus:outline-brand-500"
-              />
-            </div>
-          </div>
-
-          <!-- SMART PART PICKER COMPONENT -->
-          <div class="p-3.5 rounded-xl border border-brand-200 bg-brand-50/20 space-y-3">
-            <div class="flex items-center justify-between">
-              <div>
-                <h5 class="font-bold text-brand-900 text-xs flex items-center gap-1.5">
-                  <Search :size="14" class="text-brand-600" />
-                  Chọn linh kiện FixHome
-                </h5>
+            <div
+              v-if="confirmModifyPreRepairId === activePreRepair.id"
+              data-testid="confirm-modify-pre-repair-box"
+              class="rounded-lg border border-warning-200 bg-warning-50/80 p-3 space-y-2.5"
+            >
+              <p class="text-warning-900 font-medium">
+                Xác nhận hủy phiếu đang chờ để chọn bổ sung linh kiện? Các món bạn đã chọn sẽ được giữ lại trong form mới.
+              </p>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <FhButton
+                  variant="ghost"
+                  size="sm"
+                  :disabled="actionLoading"
+                  @click="confirmModifyPreRepairId = null"
+                >
+                  Giữ phiếu cũ
+                </FhButton>
+                <FhButton
+                  data-testid="confirm-modify-pre-repair"
+                  variant="primary"
+                  size="sm"
+                  :loading="actionLoading"
+                  :disabled="actionLoading"
+                  @click="reorderPreRepair(activePreRepair)"
+                >
+                  Xác nhận hủy &amp; chọn lại
+                </FhButton>
               </div>
-              <span class="text-[11px] font-medium text-brand-700 bg-brand-100/70 px-2 py-0.5 rounded-full">
+            </div>
+          </template>
+          <p
+            v-else-if="activePreRepair.fulfillmentMethod === 'pickup' && warehouseAllocationFor(activePreRepair)?.status === 'stock_unavailable'"
+            class="text-ink-700 text-pretty"
+          >
+            Phiếu hiện tại chưa có kho FixHome nào đủ hàng. Bạn có thể bấm <strong class="text-ink-900">“Dừng yêu cầu kho, tự chuẩn bị”</strong> ở phiếu bên dưới để hủy và chọn linh kiện khác.
+          </p>
+          <p v-else class="text-ink-700 text-pretty">
+            Đơn đã có yêu cầu linh kiện trước sửa đang bàn giao hoặc đã nhận, nên không thể tạo thêm phiếu mới trước khi xuất phát. Khi tới sửa, bạn có thể bổ sung linh kiện trong <strong class="text-ink-900">Báo giá</strong> hoặc <strong class="text-ink-900">Chi phí phát sinh</strong>.
+          </p>
+        </div>
+
+        <!-- Pre-Repair Form -->
+        <div v-if="showCreateForm && !hasActivePreRepair" class="space-y-4 pt-4 border-t border-ink-100">
+          <!-- Catalog Browser (Inline always-visible list with 1-tap quick add & spec inspection) -->
+          <div class="rounded-[var(--radius-md)] border border-ink-200 bg-ink-25/80 p-3.5 sm:p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h5 class="font-semibold text-ink-900 text-sm flex items-center gap-1.5">
+                <Search :size="15" class="text-brand-600 shrink-0" aria-hidden="true" />
+                Chọn linh kiện FixHome
+              </h5>
+              <span class="font-num text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200/80 px-2.5 py-0.5 rounded-full">
                 {{ isSearchingCatalog ? 'Đang tải…' : `${catalogTotal} linh kiện` }}
               </span>
             </div>
 
-            <!-- Category filter tags -->
-            <div class="flex flex-wrap gap-1.5 pt-0.5">
+            <!-- Category filter pills -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5" role="group" aria-label="Lọc theo thiết bị">
               <button
                 v-for="cat in CATEGORY_TABS"
                 :key="cat.value"
                 type="button"
-                class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                class="h-9 px-3 rounded-full text-xs font-medium shrink-0 whitespace-nowrap border transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                 :class="
                   activeCategory === cat.value
-                    ? 'bg-brand-600 text-white shadow-xs'
-                    : 'bg-white text-ink-700 hover:bg-brand-50 border border-ink-200'
+                    ? 'bg-brand-600 border-brand-600 text-white'
+                    : 'bg-white border-ink-200 text-ink-700 hover:bg-ink-50'
                 "
                 @click="selectCategory(cat.value)"
               >
@@ -1094,239 +1214,303 @@ const getStatusBadgeClass = (status: string) => {
               </button>
             </div>
 
-            <!-- Search input bar with Dropdown -->
-            <div ref="searchContainerRef" class="relative">
-              <div class="relative flex items-center">
-                <Search :size="15" class="absolute left-3 text-ink-400 pointer-events-none" />
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  placeholder="Tên linh kiện, mã hoặc hãng"
-                  class="w-full text-xs rounded-lg border border-ink-300 pl-9 pr-16 py-2 bg-white text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-hidden transition-all"
-                  @focus="showSearchDropdown = true"
-                  @input="onSearchInput"
-                />
-                <div class="absolute right-2.5 flex items-center gap-1">
-                  <Loader2 v-if="isSearchingCatalog" :size="14" class="animate-spin text-brand-600" />
-                  <button
-                    v-if="searchQuery || activeCategory !== 'ALL'"
-                    type="button"
-                    class="text-ink-400 hover:text-ink-700 p-0.5 rounded"
-                    title="Xóa tìm kiếm"
-                    @click="clearSearch"
-                  >
-                    <X :size="14" />
-                  </button>
-                </div>
+            <!-- Search input -->
+            <div class="relative flex items-center">
+              <Search :size="16" class="absolute left-3 text-ink-400 pointer-events-none" aria-hidden="true" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Tên linh kiện, mã hoặc hãng"
+                aria-label="Tìm linh kiện FixHome"
+                class="w-full h-11 rounded-[var(--radius-sm)] border border-ink-200 pl-9 pr-14 bg-white text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden transition-[border-color,box-shadow] duration-150"
+                @input="onSearchInput"
+              />
+              <div class="absolute right-2 flex items-center gap-1">
+                <Loader2 v-if="isSearchingCatalog" :size="15" class="animate-spin text-brand-600" aria-hidden="true" />
+                <button
+                  v-if="searchQuery || activeCategory !== 'ALL'"
+                  type="button"
+                  class="w-9 h-9 rounded-[var(--radius-sm)] text-ink-400 hover:text-ink-700 hover:bg-ink-50 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Xóa tìm kiếm"
+                  @click="clearSearch"
+                >
+                  <X :size="15" />
+                </button>
               </div>
+            </div>
 
-              <!-- Search results popover -->
-              <div
-                v-if="showSearchDropdown"
-                class="mt-1.5 bg-white rounded-xl border border-ink-200 max-h-72 overflow-y-auto overscroll-contain divide-y divide-ink-100"
-                @keydown.esc="showSearchDropdown = false"
-              >
-                <div v-if="isSearchingCatalog" class="p-3 text-center text-ink-400 text-xs">
-                  <Loader2 :size="15" class="animate-spin inline mr-1 text-brand-600" /> Đang tìm kiếm trong kho linh kiện...
+            <!-- Always-visible inline catalog list -->
+            <div
+              data-testid="catalog-results-list"
+              class="bg-white rounded-[var(--radius-sm)] border border-ink-200 overflow-hidden"
+            >
+              <div class="max-h-72 overflow-y-auto overscroll-contain divide-y divide-ink-100">
+                <div v-if="isSearchingCatalog" class="p-3 space-y-2.5" aria-busy="true" aria-label="Đang tải danh mục linh kiện">
+                  <FhSkeleton height="54px" rounded="sm" :count="3" />
+                </div>
+
+                <div v-else-if="catalogError" class="p-4 text-xs sm:text-sm text-danger-700 flex flex-wrap items-center justify-between gap-2" role="alert">
+                  <span>Chưa tải được danh mục linh kiện.</span>
+                  <button type="button" data-testid="catalog-retry" class="font-semibold underline cursor-pointer" @click="picker.retry">Thử lại</button>
                 </div>
 
                 <div
-                  v-else-if="!catalogError && searchResults.length === 0"
-                  class="p-4 text-center text-ink-500 text-xs space-y-1"
+                  v-else-if="searchResults.length === 0"
+                  class="p-6 text-center text-ink-500 text-xs sm:text-sm space-y-2"
                 >
-                  <Package :size="20" class="mx-auto text-ink-300" />
+                  <Package :size="22" class="mx-auto text-ink-300" aria-hidden="true" />
                   <p class="font-medium text-ink-700">Không tìm thấy linh kiện phù hợp</p>
+                  <button
+                    v-if="searchQuery || activeCategory !== 'ALL'"
+                    type="button"
+                    class="text-xs font-semibold text-brand-700 hover:underline cursor-pointer"
+                    @click="clearSearch"
+                  >
+                    Xem tất cả linh kiện
+                  </button>
                 </div>
 
-                <button
+                <div
                   v-for="part in (catalogError || isSearchingCatalog ? [] : searchResults)"
-                  type="button"
-                  data-testid="catalog-result"
                   :key="part.id"
-                  class="w-full text-left p-2.5 hover:bg-brand-50/70 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
-                  @click="selectPartForForm(part)"
+                  class="px-3 sm:px-3.5 py-2.5 flex items-center justify-between gap-3 transition-colors duration-150"
+                  :class="
+                    selectedPart?.id === part.id
+                      ? 'bg-brand-50/70'
+                      : selectedCatalogQuantities.get(part.id)
+                        ? 'bg-brand-50/35'
+                        : 'hover:bg-ink-25'
+                  "
                 >
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2 mb-0.5">
-                      <span class="font-semibold text-ink-900 group-hover:text-brand-700 transition-colors truncate">
+                  <button
+                    type="button"
+                    data-testid="catalog-result"
+                    class="min-w-0 flex-1 text-left cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-[var(--radius-sm)]"
+                    @click="selectPartForForm(part)"
+                  >
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="font-semibold text-sm text-ink-900 group-hover:text-brand-700 transition-colors truncate">
                         {{ part.name }}
                       </span>
                       <span
                         v-if="part.sku"
-                        class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-ink-100 text-ink-600 shrink-0"
+                        class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-ink-100 text-ink-600 shrink-0"
                       >
                         {{ part.sku }}
                       </span>
+                      <span
+                        v-if="selectedCatalogQuantities.get(part.id)"
+                        class="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold font-num text-brand-700 border border-brand-200"
+                      >
+                        Đã chọn · SL {{ selectedCatalogQuantities.get(part.id) }}
+                      </span>
                     </div>
-                    <p
-                      v-if="part.description"
-                      class="text-[11px] text-ink-500 truncate"
-                    >
-                      {{ part.description }}
-                    </p>
-                  </div>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-ink-500">
+                      <span class="font-num font-semibold text-brand-700">
+                        <FhMoney :amount="part.sellingPrice" />
+                      </span>
+                      <span class="inline-flex items-center gap-1 text-success-700 whitespace-nowrap">
+                        <ShieldCheck :size="12" aria-hidden="true" />
+                        {{ getWarrantyBadge(part.warrantyDays) }}
+                      </span>
+                      <span v-if="part.description" class="truncate max-w-full sm:max-w-xs text-ink-400">
+                        · {{ part.description }}
+                      </span>
+                    </div>
+                  </button>
 
-                  <div class="text-right shrink-0 space-y-1">
-                    <div class="font-num font-bold text-xs text-brand-700">
-                      <FhMoney :amount="part.sellingPrice" />
-                    </div>
-                    <span
-                      class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"
+                  <!-- 1-tap add or inline quantity adjustment -->
+                  <div class="shrink-0 flex items-center gap-1.5">
+                    <div
+                      v-if="selectedCatalogQuantities.get(part.id)"
+                      class="inline-flex items-center rounded-[var(--radius-sm)] border border-brand-200 bg-white"
                     >
-                      <ShieldCheck :size="12" />
-                      {{ getWarrantyBadge(part.warrantyDays) }}
-                    </span>
+                      <button
+                        type="button"
+                        class="w-9 h-9 flex items-center justify-center text-ink-700 hover:bg-ink-50 rounded-l-[var(--radius-sm)] transition-colors cursor-pointer"
+                        :aria-label="`Giảm số lượng ${part.name}`"
+                        @click="decrementCatalogPart(part.id)"
+                      >
+                        <Minus :size="14" />
+                      </button>
+                      <span class="w-7 text-center font-num text-xs font-bold text-ink-900">
+                        {{ selectedCatalogQuantities.get(part.id) }}
+                      </span>
+                      <button
+                        type="button"
+                        class="w-9 h-9 flex items-center justify-center text-brand-700 hover:bg-brand-50 rounded-r-[var(--radius-sm)] transition-colors cursor-pointer disabled:opacity-50"
+                        :disabled="(selectedCatalogQuantities.get(part.id) ?? 0) >= MAX_PART_REQUEST_QTY"
+                        :aria-label="`Tăng số lượng ${part.name}`"
+                        @click="quickAddPart(part)"
+                      >
+                        <Plus :size="14" />
+                      </button>
+                    </div>
+                    <button
+                      v-else
+                      type="button"
+                      data-testid="catalog-quick-add"
+                      class="h-9 px-3 rounded-[var(--radius-sm)] border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-600 hover:text-white hover:border-brand-600 text-xs font-semibold inline-flex items-center gap-1 transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                      :aria-label="`Thêm nhanh ${part.name}`"
+                      @click="quickAddPart(part)"
+                    >
+                      <Plus :size="14" /> Thêm
+                    </button>
                   </div>
+                </div>
+              </div>
+
+              <div
+                v-if="!isSearchingCatalog && !catalogError && searchResults.length > 0"
+                class="border-t border-ink-100 bg-ink-25 px-3.5 py-2 flex items-center justify-between gap-2 text-xs text-ink-600"
+              >
+                <span class="font-num">{{ searchResults.length }} / {{ catalogTotal }} linh kiện</span>
+                <button
+                  v-if="catalogHasMore"
+                  type="button"
+                  data-testid="catalog-load-more"
+                  class="font-semibold text-brand-700 hover:underline cursor-pointer"
+                  @click="picker.loadMore"
+                >
+                  Tải thêm
                 </button>
-                <div v-if="catalogError" class="p-3 text-xs text-danger-700" role="alert">
-                  Chưa tải được danh mục linh kiện.
-                  <button type="button" data-testid="catalog-retry" class="ml-2 underline" @click="picker.retry">Thử lại</button>
-                </div>
-                <div v-else-if="!isSearchingCatalog" class="p-2 text-center text-xs text-ink-600">
-                  {{ searchResults.length }} / {{ catalogTotal }} linh kiện
-                  <button v-if="catalogHasMore" type="button" data-testid="catalog-load-more" class="ml-2 text-brand-700 underline" @click="picker.loadMore">Tải thêm</button>
-                </div>
               </div>
             </div>
 
-            <!-- SPOTLIGHT CARD: Khi thợ đã click chọn 1 linh kiện -->
+            <!-- Compact inline detail & custom quantity bar when inspecting an item -->
             <div
               v-if="selectedPart"
-              class="border-2 border-brand-500 bg-brand-50/40 rounded-xl p-3.5 space-y-3 animate-in fade-in duration-200"
+              data-testid="selected-part-inspector"
+              class="rounded-[var(--radius-sm)] border border-brand-300 bg-white p-3.5 space-y-3"
             >
-              <!-- Card Header -->
-              <div class="flex items-start justify-between gap-2 border-b border-brand-200/80 pb-2.5">
-                <div class="flex items-start gap-2.5">
-                  <div class="p-2 rounded-lg bg-brand-600 text-white shrink-0 mt-0.5 shadow-xs">
+              <div class="flex items-start justify-between gap-2 border-b border-ink-100 pb-2.5">
+                <div class="flex items-start gap-2.5 min-w-0">
+                  <div class="w-9 h-9 rounded-[var(--radius-sm)] bg-brand-50 border border-brand-200 text-brand-700 flex items-center justify-center shrink-0">
                     <Wrench :size="16" />
                   </div>
-                  <div>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <h4 class="font-bold text-ink-900 text-sm">
-                        {{ selectedPart.name }}
-                      </h4>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <h4 class="font-semibold text-ink-900 text-sm">{{ selectedPart.name }}</h4>
                       <span
                         v-if="selectedPart.sku"
-                        class="px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-brand-100 text-brand-800 border border-brand-300"
+                        class="px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold bg-ink-100 text-ink-700"
                       >
-                        SKU: {{ selectedPart.sku }}
+                        {{ selectedPart.sku }}
                       </span>
                     </div>
+                    <p class="mt-0.5 text-xs text-ink-600">
+                      Đơn giá: <strong class="font-num text-brand-700"><FhMoney :amount="selectedPart.sellingPrice" /></strong>
+                      · Bảo hành: <span class="text-ink-800">{{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</span>
+                    </p>
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  class="text-ink-400 hover:text-ink-700 text-xs px-2 py-1 rounded hover:bg-white border border-transparent hover:border-ink-200 flex items-center gap-1 transition-all"
+                  class="shrink-0 h-8 w-8 rounded-[var(--radius-sm)] text-ink-400 hover:text-ink-700 hover:bg-ink-50 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Đóng chi tiết linh kiện"
                   @click="clearSelectedPart"
                 >
-                  <X :size="14" /> Đổi linh kiện khác
+                  <X :size="16" />
                 </button>
               </div>
 
-              <!-- The technician needs price and quantity now. Warranty remains in details. -->
-              <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-brand-200/60 px-3 py-2">
-                <span class="text-xs text-ink-500">Đơn giá</span>
-                <strong class="text-base text-brand-700 font-num"><FhMoney :amount="selectedPart.sellingPrice" /></strong>
-              </div>
-              <details class="rounded-lg bg-white border border-ink-200 text-xs text-ink-700">
+              <details v-if="selectedPartDetails.length > 0" class="rounded-[var(--radius-sm)] bg-ink-25 border border-ink-200/80 text-xs text-ink-700">
                 <summary class="min-h-10 cursor-pointer list-none [&::-webkit-details-marker]:hidden flex items-center gap-2 px-3 py-2 font-semibold text-brand-700">
-                  <Info :size="16" aria-hidden="true" /> Thông tin linh kiện
+                  <Info :size="15" aria-hidden="true" /> Thông tin linh kiện
                 </summary>
                 <dl class="divide-y divide-ink-100 border-t border-ink-100 px-3">
                   <div v-for="(field, index) in selectedPartDetails" :key="index" class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
                     <dt class="font-medium text-ink-500 break-words">{{ field.label }}</dt>
                     <dd class="min-w-0 break-words text-ink-900">{{ field.value }}</dd>
                   </div>
-                  <div class="py-2 grid grid-cols-[minmax(0,100px)_minmax(0,1fr)] gap-x-3 gap-y-1">
-                    <dt class="font-medium text-ink-500">Bảo hành</dt>
-                    <dd class="min-w-0 break-words text-ink-900">{{ formatWarrantyDays(selectedPart.warrantyDays, selectedPart.warrantyPolicy) }}</dd>
-                  </div>
                 </dl>
               </details>
 
-              <!-- Add to Request Action Controls -->
-              <div class="flex flex-col items-stretch gap-3 pt-1 min-w-0">
-                <!-- Quantity & Total -->
-                <div class="flex flex-wrap items-center gap-3 min-w-0">
-                  <div class="flex items-center gap-1 bg-white p-1 rounded-lg border border-ink-200">
-                    <span class="text-[11px] font-semibold text-ink-600 px-1.5">SL:</span>
-                    <button
-                      type="button"
-                      class="h-7 w-7 rounded bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold flex items-center justify-center transition-colors disabled:opacity-50"
-                      :disabled="selectedQuantity <= 1"
-                      @click="selectedQuantity = Math.max(1, selectedQuantity - 1)"
-                    >
-                      <Minus :size="13" />
-                    </button>
-                    <input
-                      v-model.number="selectedQuantity"
-                      type="number"
-                      min="1"
-                      :max="MAX_PART_REQUEST_QTY"
-                      step="1"
-                      data-testid="part-request-qty"
-                      @change="selectedQuantity = clampPartQty(selectedQuantity)"
-                      class="w-10 h-7 text-xs font-bold font-num text-center bg-transparent border-0 outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      class="h-7 w-7 rounded bg-ink-100 hover:bg-ink-200 text-ink-800 font-bold flex items-center justify-center transition-colors"
-                      :disabled="selectedQuantity >= MAX_PART_REQUEST_QTY"
-                      @click="selectedQuantity = clampPartQty(selectedQuantity + 1)"
-                    >
-                      <Plus :size="13" />
-                    </button>
-                  </div>
-
-                  <div class="text-xs">
-                    <span class="text-ink-500">Tạm tính:</span>
-                    <strong class="text-brand-900 font-num ml-1 font-bold">
-                      <FhMoney :amount="activePartEstimatedPrice" />
-                    </strong>
-                  </div>
-                </div>
-
-                <!-- Note and Add Button -->
-                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2 w-full min-w-0">
+              <div class="flex flex-wrap items-center justify-between gap-2.5">
+                <div class="flex items-center gap-1.5 bg-ink-50 p-1 rounded-[var(--radius-sm)] border border-ink-200">
+                  <span class="text-xs font-semibold text-ink-600 px-1.5">SL:</span>
+                  <button
+                    type="button"
+                    class="h-8 w-8 rounded bg-white border border-ink-200 hover:bg-ink-100 text-ink-800 font-bold flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                    :disabled="selectedQuantity <= 1"
+                    @click="selectedQuantity = Math.max(1, selectedQuantity - 1)"
+                  >
+                    <Minus :size="13" />
+                  </button>
                   <input
-                    v-model="itemNote"
-                    type="text"
-                    placeholder="Ghi chú item (VD: mang sơ cua, thay buồng lạnh)..."
-                    class="min-w-0 w-full h-10 text-xs rounded-lg border border-ink-300 px-3 bg-white text-ink-900 placeholder:text-ink-400"
+                    v-model.number="selectedQuantity"
+                    type="number"
+                    min="1"
+                    :max="MAX_PART_REQUEST_QTY"
+                    step="1"
+                    data-testid="part-request-qty"
+                    @change="selectedQuantity = clampPartQty(selectedQuantity)"
+                    class="w-11 h-8 text-sm font-bold font-num text-center bg-transparent border-0 outline-hidden"
                   />
                   <button
                     type="button"
-                    class="w-full sm:w-auto min-w-0 min-h-11 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-                    @click="addItemToForm"
+                    class="h-8 w-8 rounded bg-white border border-ink-200 hover:bg-ink-100 text-ink-800 font-bold flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+                    :disabled="selectedQuantity >= MAX_PART_REQUEST_QTY"
+                    @click="selectedQuantity = clampPartQty(selectedQuantity + 1)"
                   >
-                    <Plus :size="14" /> Thêm vào danh sách
+                    <Plus :size="13" />
                   </button>
                 </div>
+
+                <div class="text-xs sm:text-sm">
+                  <span class="text-ink-500">Tạm tính:</span>
+                  <strong class="text-brand-700 font-num ml-1 font-bold">
+                    <FhMoney :amount="activePartEstimatedPrice" />
+                  </strong>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-2 w-full min-w-0">
+                <input
+                  v-model="itemNote"
+                  type="text"
+                  placeholder="Ghi chú món này (VD: mang sơ cua, thay buồng lạnh)..."
+                  class="min-w-0 w-full h-11 text-sm rounded-[var(--radius-sm)] border border-ink-200 px-3 bg-white text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden"
+                />
+                <button
+                  type="button"
+                  class="w-full sm:w-auto min-w-0 min-h-11 px-4 py-2 rounded-[var(--radius-sm)] bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm inline-flex items-center justify-center gap-2 transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                  @click="addItemToForm"
+                >
+                  <Plus :size="15" /> Thêm vào danh sách
+                </button>
               </div>
             </div>
           </div>
 
-          <!-- Compact selected parts: no dense seven-column table on mobile. -->
-          <div v-if="selectedItems.length > 0" class="space-y-2">
+          <!-- Selected Parts Summary List -->
+          <div v-if="selectedItems.length > 0" class="space-y-2.5" data-testid="selected-parts-summary">
             <div class="flex items-center justify-between gap-2 text-sm">
               <strong class="text-ink-900">Đã chọn {{ selectedItems.length }} loại · {{ selectedTotalQuantity }} cái</strong>
               <strong class="font-num text-brand-700"><FhMoney :amount="selectedTotalPrice" /></strong>
             </div>
-            <div class="space-y-2">
-              <div v-for="(item, idx) in selectedItems" :key="item.partCatalogId" class="rounded-xl border border-ink-200 bg-white px-3 py-2.5 space-y-2">
+            <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white divide-y divide-ink-100">
+              <div v-for="(item, idx) in selectedItems" :key="item.partCatalogId" class="p-3 sm:p-3.5 space-y-2">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
                     <p class="text-sm font-semibold text-ink-900">{{ item.partName }}</p>
                     <p v-if="item.sku" class="text-[11px] text-ink-500 font-mono">{{ item.sku }}</p>
                   </div>
-                  <button type="button" class="shrink-0 w-10 h-10 inline-flex items-center justify-center text-danger-600 rounded-lg hover:bg-danger-50" aria-label="Xoá linh kiện" @click="removeItemFromForm(idx)"><Trash2 :size="16" /></button>
+                  <button
+                    type="button"
+                    class="shrink-0 w-10 h-10 -my-1 -mr-1 inline-flex items-center justify-center text-danger-600 rounded-[var(--radius-sm)] hover:bg-danger-50 transition-colors cursor-pointer"
+                    aria-label="Xoá linh kiện"
+                    @click="removeItemFromForm(idx)"
+                  >
+                    <Trash2 :size="16" />
+                  </button>
                 </div>
                 <div class="flex flex-wrap justify-between items-center gap-2">
-                  <div class="inline-flex items-center rounded-lg border border-ink-200 bg-ink-50">
-                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Giảm số lượng ${item.partName}`" @click="decreaseQuantity(idx)"><Minus :size="14" /></button>
-                    <span class="w-7 text-center font-num font-semibold">{{ item.quantity }}</span>
-                    <button type="button" class="w-10 h-10 flex items-center justify-center" :aria-label="`Tăng số lượng ${item.partName}`" @click="increaseQuantity(idx)"><Plus :size="14" /></button>
+                  <div class="inline-flex items-center rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50">
+                    <button type="button" class="w-10 h-10 flex items-center justify-center hover:bg-ink-100 rounded-l-[var(--radius-sm)] transition-colors cursor-pointer" :aria-label="`Giảm số lượng ${item.partName}`" @click="decreaseQuantity(idx)"><Minus :size="14" /></button>
+                    <span class="w-8 text-center font-num text-sm font-semibold text-ink-900">{{ item.quantity }}</span>
+                    <button type="button" class="w-10 h-10 flex items-center justify-center hover:bg-ink-100 rounded-r-[var(--radius-sm)] transition-colors cursor-pointer" :aria-label="`Tăng số lượng ${item.partName}`" @click="increaseQuantity(idx)"><Plus :size="14" /></button>
                   </div>
                   <div class="text-right text-xs text-ink-600">
                     <p><FhMoney :amount="item.price" />/cái</p>
@@ -1336,20 +1520,48 @@ const getStatusBadgeClass = (status: string) => {
                 <p v-if="item.note" class="text-xs text-ink-500">{{ item.note }}</p>
               </div>
             </div>
-            <p class="text-xs text-ink-500">Giá dự kiến · chưa tính vào hóa đơn khách.</p>
           </div>
 
-          <!-- Bottom Action Buttons -->
-          <div class="flex items-center justify-end gap-2 pt-2">
-            <FhButton variant="ghost" size="sm" data-testid="cancel-part-request-form" @click="cancelCreateForm">Hủy bỏ</FhButton>
-            <FhButton
-              variant="primary"
-              size="sm"
-              :disabled="selectedItems.length === 0 || actionLoading"
-              @click="submitPreRepairRequest"
-            >
-              <Send :size="14" class="mr-1" /> Gửi yêu cầu tới Quản lý
-            </FhButton>
+          <!-- Fulfillment & Reason inputs -->
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1.5 text-xs">Phương thức nhận linh kiện</label>
+              <select
+                v-model="fulfillmentMethod"
+                class="w-full h-11 text-sm rounded-[var(--radius-sm)] border border-ink-200 px-3 bg-white text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden"
+              >
+                <option value="pickup">Tự lấy tại kho FixHome</option>
+                <option value="delivery">Giao tới địa chỉ</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-ink-700 mb-1.5 text-xs">Ghi chú / Lý do yêu cầu linh kiện</label>
+              <input
+                v-model="requestReason"
+                type="text"
+                placeholder="VD: Nghi hỏng bo mạch chính hoặc cảm biến nhiệt độ"
+                class="w-full h-11 text-sm rounded-[var(--radius-sm)] border border-ink-200 px-3 bg-white text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden"
+              />
+            </div>
+          </div>
+
+          <!-- Bottom Action Footer -->
+          <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 pt-3">
+            <p class="text-xs text-ink-500">
+              {{ selectedItems.length > 0 ? 'Giá dự kiến · chưa tính vào hóa đơn khách.' : 'Chọn ít nhất 1 linh kiện ở trên để gửi yêu cầu.' }}
+            </p>
+            <div class="flex items-center gap-2 ml-auto">
+              <FhButton variant="ghost" size="md" data-testid="cancel-part-request-form" @click="cancelCreateForm">Hủy bỏ</FhButton>
+              <FhButton
+                variant="primary"
+                size="md"
+                :disabled="selectedItems.length === 0 || actionLoading"
+                @click="submitPreRepairRequest"
+              >
+                <Send :size="14" class="mr-1.5" /> Gửi yêu cầu tới Quản lý
+              </FhButton>
+            </div>
           </div>
         </div>
       </div>
@@ -1440,24 +1652,35 @@ const getStatusBadgeClass = (status: string) => {
             </template>
           </section>
 
-          <!-- Delivery Shipping Fee if any -->
-          <DeliveryPhysicalPreview
-            v-if="pr.fulfillmentMethod === 'delivery' && pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
-            :request-id="pr.id"
-            :fulfillment-method="pr.fulfillmentMethod"
-            audience="technician"
-          />
-          <DeliveryOperationsPanel
-            v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
-            :request-id="pr.id"
-            :fulfillment-method="pr.fulfillmentMethod"
-            :request-type="pr.requestType"
-            :shipping-fee="pr.shippingFee"
-            audience="technician"
-            :source-owner-id="pr.technicianId"
-          />
-          <div v-if="pr.fulfillmentMethod !== 'pickup' && (pr.shippingFee > 0 || pr.shippingPolicyVersion)" class="text-xs text-brand-700 font-medium">
-            <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
+          <!-- Delivery Shipping & Terms Panels if applicable -->
+          <div v-if="pr.fulfillmentMethod === 'delivery'" class="space-y-3">
+            <DeliveryPhysicalPreview
+              v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
+              :request-id="pr.id"
+              :fulfillment-method="pr.fulfillmentMethod"
+              audience="technician"
+            />
+            <DeliveryOperationsPanel
+              v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
+              :request-id="pr.id"
+              :fulfillment-method="pr.fulfillmentMethod"
+              :request-type="pr.requestType"
+              :shipping-fee="pr.shippingFee"
+              audience="technician"
+              :source-owner-id="pr.technicianId"
+            />
+            <DeliveryTermsPanel
+              v-if="pr.serviceOrderId === orderId && pr.requestType === 'additional' && pr.shippingFee > 0 && isDeliveryPhysicalRequestId(pr.id)"
+              :request-id="pr.id"
+              :request-type="pr.requestType"
+              :fulfillment-method="pr.fulfillmentMethod"
+              :shipping-fee="pr.shippingFee"
+              audience="technician"
+              :technician-id="pr.technicianId"
+            />
+            <div v-if="pr.shippingFee > 0 || pr.shippingPolicyVersion" class="text-xs text-brand-700 font-medium">
+              <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
+            </div>
           </div>
 
           <!-- Pending Preparation State -->
@@ -1469,6 +1692,15 @@ const getStatusBadgeClass = (status: string) => {
               <Clock :size="14" class="text-warning-600 shrink-0" />
               <span>Đang chờ chuẩn bị linh kiện…</span>
             </div>
+            <button
+              v-if="canModifyPreRepair(pr) && confirmModifyPreRepairId !== pr.id"
+              type="button"
+              class="text-xs font-semibold text-brand-700 hover:text-brand-800 underline cursor-pointer disabled:opacity-50"
+              :disabled="actionLoading"
+              @click="promptModifyPreRepair(pr.id)"
+            >
+              Đặt lại &amp; thêm linh kiện
+            </button>
           </div>
 
           <!-- QR Handover Action (When READY or DELIVERING) -->
