@@ -52,6 +52,7 @@ const route = useRoute();
 const router = useRouter();
 
 const loading = ref(true);
+const hasLoadedOnce = ref(false);
 const loadError = ref<string | null>(null);
 const isUnavailable = ref(false);
 
@@ -153,10 +154,13 @@ const filteredOrderGroups = computed(() => {
 });
 
 // Load all returns data
-const loadData = async (preferredOrderId?: string) => {
-  loading.value = true;
-  loadError.value = null;
-  isUnavailable.value = false;
+const loadData = async (preferredOrderId?: string, options: { silent?: boolean } = {}) => {
+  const isBackground = Boolean(options.silent && hasLoadedOnce.value);
+  if (!isBackground) {
+    loading.value = true;
+    loadError.value = null;
+    isUnavailable.value = false;
+  }
 
   try {
     // 1. Fetch technician's active returns
@@ -168,6 +172,7 @@ const loadData = async (preferredOrderId?: string) => {
     } catch (err) {
       if (isPartReturnsUnavailableError(err)) {
         isUnavailable.value = true;
+        hasLoadedOnce.value = true;
         loading.value = false;
         return;
       }
@@ -263,6 +268,9 @@ const loadData = async (preferredOrderId?: string) => {
     });
 
     orderGroups.value = groups;
+    loadError.value = null;
+    isUnavailable.value = false;
+    hasLoadedOnce.value = true;
 
     // Pick selected order
     if (routeOrderId && groups.some((g) => g.id === routeOrderId)) {
@@ -271,7 +279,9 @@ const loadData = async (preferredOrderId?: string) => {
       selectedOrderId.value = groups[0]?.id || null;
     }
   } catch {
-    loadError.value = 'Không thể tải danh sách linh kiện cần trả. Vui lòng thử lại.';
+    if (!isBackground) {
+      loadError.value = 'Không thể tải danh sách linh kiện cần trả. Vui lòng thử lại.';
+    }
   } finally {
     loading.value = false;
   }
@@ -305,8 +315,8 @@ onMounted(() => {
   void loadFaulty();
 });
 
-// Auto-refresh on notifications or window focus
-usePartReturnsRefresh(() => loadData(selectedOrderId.value ?? undefined));
+// Auto-refresh on notifications or window focus without flashing loading skeletons
+usePartReturnsRefresh(() => loadData(selectedOrderId.value ?? undefined, { silent: true }));
 
 // Watch query param change
 watch(
@@ -332,7 +342,7 @@ const openDeclareModal = (itemId?: string) => {
 };
 
 const onModalSuccess = () => {
-  void loadData(selectedOrderId.value ?? undefined);
+  void loadData(selectedOrderId.value ?? undefined, { silent: true });
 };
 
 const viewJobDetail = (orderId: string) => {
@@ -388,25 +398,6 @@ const formatOrderTime = (order: OrderReturnGroup) => {
         <div class="flex items-center gap-2 mt-1 text-sm text-ink-600">
           <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
           <span>Theo dõi linh kiện FixHome đã nhận và nghĩa vụ hoàn trả</span>
-        </div>
-      </div>
-
-      <!-- Top Summary Pills (Right side) -->
-      <div v-if="!loading && !loadError && !isUnavailable" class="flex flex-wrap items-center gap-2">
-        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-800 shadow-2xs">
-          <Package :size="14" class="text-amber-600" />
-          <span>Cần khai trả</span>
-          <span class="font-bold font-num text-sm text-amber-900 ml-0.5" data-testid="top-need-declare-count">{{ totalNeedDeclare }}</span>
-        </div>
-        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-800 shadow-2xs">
-          <Clock :size="14" class="text-blue-600" />
-          <span>Chờ xác nhận</span>
-          <span class="font-bold font-num text-sm text-blue-900 ml-0.5" data-testid="top-awaiting-count">{{ totalAwaitingManager }}</span>
-        </div>
-        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 shadow-2xs">
-          <CheckCircle2 :size="14" class="text-emerald-600" />
-          <span>Đã hoàn tất</span>
-          <span class="font-bold font-num text-sm text-emerald-900 ml-0.5" data-testid="top-completed-count">{{ totalCompleted }}</span>
         </div>
       </div>
     </div>
@@ -528,24 +519,42 @@ const formatOrderTime = (order: OrderReturnGroup) => {
         <!-- Card 3: Đã hoàn tất -->
         <button
           type="button"
-          class="flex items-center justify-between p-5 bg-white rounded-2xl border transition-all text-left group shadow-xs hover:shadow-md cursor-pointer"
-          :class="activeTab === 'completed' ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/20' : 'border-ink-200 hover:border-ink-300'"
+          class="flex items-center justify-between p-5 bg-white rounded-2xl border transition-all text-left group shadow-xs"
+          :class="[
+            countCompletedOrders > 0 ? 'hover:shadow-md cursor-pointer' : 'cursor-default',
+            activeTab === 'completed'
+              ? 'border-emerald-400 ring-2 ring-emerald-400/20 bg-emerald-50/20'
+              : countCompletedOrders > 0
+                ? 'border-ink-200 hover:border-ink-300'
+                : 'border-ink-200',
+          ]"
+          :aria-disabled="countCompletedOrders === 0"
           data-testid="stat-card-completed"
-          @click="activeTab = activeTab === 'completed' ? 'all' : 'completed'"
+          @click="countCompletedOrders > 0 && (activeTab = activeTab === 'completed' ? 'all' : 'completed')"
         >
-          <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600 shrink-0 group-hover:scale-105 transition-transform">
+          <div class="flex items-center gap-4 min-w-0">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600 shrink-0 transition-transform" :class="{ 'group-hover:scale-105': countCompletedOrders > 0 }">
               <CheckCircle2 :size="24" :stroke-width="1.8" />
             </div>
-            <div>
+            <div class="min-w-0">
               <span class="text-xs font-semibold text-ink-500 block">Đã hoàn tất</span>
               <div class="text-2xl font-bold font-num text-ink-900 mt-0.5">
                 <span v-if="loading"><FhSkeleton class="h-7 w-20" /></span>
                 <span v-else>{{ totalCompleted }} linh kiện</span>
               </div>
+              <span
+                v-if="!loading && countCompletedOrders === 0 && totalCompleted > 0"
+                class="block text-[11px] font-medium text-emerald-700 mt-0.5"
+              >
+                Đã tất toán ở các đơn trước
+              </span>
             </div>
           </div>
-          <ChevronRight :size="20" class="text-ink-400 group-hover:text-ink-700 transition-colors shrink-0" />
+          <ChevronRight
+            v-if="countCompletedOrders > 0"
+            :size="20"
+            class="text-ink-400 group-hover:text-ink-700 transition-colors shrink-0"
+          />
         </button>
       </div>
 
@@ -665,13 +674,23 @@ const formatOrderTime = (order: OrderReturnGroup) => {
             </div>
           </div>
 
-          <!-- Empty state when no orders match -->
+          <!-- Empty state when no orders match or all obligations settled -->
           <div
             v-else-if="filteredOrderGroups.length === 0"
             class="p-8 bg-white rounded-2xl border border-ink-200 text-center shadow-2xs"
             data-testid="job-list-empty"
           >
+            <div v-if="orderGroups.length === 0 && totalCompleted > 0" class="space-y-2.5">
+              <div class="w-12 h-12 mx-auto rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 :size="24" />
+              </div>
+              <h3 class="text-sm font-bold text-ink-900">Không còn công việc cần trả linh kiện</h3>
+              <p class="text-xs text-ink-500 max-w-xs mx-auto leading-relaxed">
+                Tất cả <span class="font-num font-semibold text-ink-700">{{ totalCompleted }} linh kiện</span> FixHome bạn đã nhận đều đã hoàn tất đối soát và bàn giao xong.
+              </p>
+            </div>
             <FhEmptyState
+              v-else
               title="Không tìm thấy công việc phù hợp"
               description="Hiện không có công việc nào cần trả linh kiện theo tiêu chí tìm kiếm hoặc bộ lọc hiện tại."
             />
@@ -762,15 +781,31 @@ const formatOrderTime = (order: OrderReturnGroup) => {
           <!-- When no job selected -->
           <div
             v-if="!selectedOrder"
-            class="p-12 bg-white rounded-2xl border border-ink-200 text-center shadow-2xs space-y-3"
+            class="p-10 sm:p-12 bg-white rounded-2xl border border-ink-200 text-center shadow-2xs space-y-3"
           >
-            <div class="w-16 h-16 rounded-2xl bg-ink-50 mx-auto flex items-center justify-center text-ink-400">
-              <Package :size="32" />
-            </div>
-            <h3 class="text-base font-bold text-ink-800">Chọn một công việc để xem chi tiết</h3>
-            <p class="text-xs text-ink-500 max-w-sm mx-auto">
-              Bấm vào danh sách công việc bên trái để xem nghĩa vụ hoàn trả linh kiện và gửi khai trả về kho.
-            </p>
+            <template v-if="orderGroups.length === 0 && totalCompleted > 0">
+              <div class="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200/80 mx-auto flex items-center justify-center text-emerald-600">
+                <PackageCheck :size="28" />
+              </div>
+              <h3 class="text-base font-bold text-ink-900">Đã hoàn tất đối soát toàn bộ</h3>
+              <p class="text-xs text-ink-500 max-w-md mx-auto leading-relaxed">
+                Bảng này chỉ liệt kê các công việc đang còn nghĩa vụ khai trả hoặc chờ quản lý xác nhận. Toàn bộ <span class="font-num font-semibold text-ink-700">{{ totalCompleted }} linh kiện</span> từ các công việc trước đã được tất toán xong.
+              </p>
+              <div class="pt-1">
+                <FhButton variant="secondary" size="sm" @click="router.push('/tech/jobs')">
+                  Xem danh sách công việc
+                </FhButton>
+              </div>
+            </template>
+            <template v-else>
+              <div class="w-16 h-16 rounded-2xl bg-ink-50 mx-auto flex items-center justify-center text-ink-400">
+                <Package :size="32" />
+              </div>
+              <h3 class="text-base font-bold text-ink-800">Chọn một công việc để xem chi tiết</h3>
+              <p class="text-xs text-ink-500 max-w-sm mx-auto">
+                Bấm vào danh sách công việc bên trái để xem nghĩa vụ hoàn trả linh kiện và gửi khai trả về kho.
+              </p>
+            </template>
           </div>
 
           <!-- Selected Job Card Container -->

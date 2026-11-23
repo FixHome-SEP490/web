@@ -555,7 +555,8 @@ const choosePreRepairParts = async () => {
 // Rare actions live in one "Thêm" menu instead of separate cards.
 const moreOpen = ref(false);
 const complaintPanel = ref<{ openForm: () => void } | null>(null);
-const sections = reactive({ photos: false, parts: false, extra: false });
+const sections = reactive({ photos: false, parts: false, extra: false, costLines: false, partDetails: false });
+const expandedAcIds = reactive<Record<string, boolean>>({});
 const pendingPartsUsage = ref(0);
 const pendingPartsReturns = ref(0);
 const partsReturnsKnown = ref(false);
@@ -1432,7 +1433,9 @@ async function refreshVisitReturns() {
   if (visitReturnsGroupId.value !== groupId) visitReturns.value = {};
   visitReturnsGroupId.value = groupId;
   visitReturnsLoading.value = true;
-  visitReturns.value = Object.fromEntries(ids.map(id => [id, { state: 'loading', summary: visitReturns.value[id]?.summary ?? null }]));
+  // Keep each device's previously confirmed ledger state during background focus/resync refreshes
+  // so valid devices do not flash "Chưa kiểm tra được nghĩa vụ linh kiện" and jump the page layout.
+  visitReturns.value = Object.fromEntries(ids.map(id => [id, visitReturns.value[id] ?? { state: 'loading', summary: null }]));
   const results = await Promise.allSettled(ids.map(async id => {
     // Keep the envelope here: the legacy helper maps missing data to [],
     // which cannot prove that a whole visit has no return obligations.
@@ -2758,13 +2761,124 @@ const toggleMore = async () => {
 
 <template>
   <div class="w-full mx-auto space-y-5" :class="job && nowStep?.action ? 'pb-24 sm:pb-0' : ''" data-testid="technician-job-detail-shell">
-    <a
-      href="/tech/jobs"
-      class="inline-flex items-center gap-1.5 h-10 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap"
-      @click.prevent="router.push('/tech/jobs')"
+    <!-- Top bar: back link on left, overflow actions menu on right -->
+    <div
+      class="flex items-center justify-between gap-3 relative"
+      :class="moreOpen ? 'z-40' : 'z-10'"
     >
-      <ArrowLeft :size="16" /> Công việc
-    </a>
+      <a
+        href="/tech/jobs"
+        class="inline-flex items-center gap-1.5 h-9 -ml-1 px-1 rounded-lg text-sm font-medium text-ink-600 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 whitespace-nowrap transition-colors"
+        @click.prevent="router.push('/tech/jobs')"
+      >
+        <ArrowLeft :size="16" /> Công việc
+      </a>
+
+      <div v-if="job && !loading && !historicalJob" class="relative shrink-0" data-more-menu>
+        <button
+          type="button"
+          class="h-9 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+          aria-haspopup="menu"
+          :aria-expanded="moreOpen"
+          data-testid="job-more-button"
+          @click="toggleMore"
+        >
+          <MoreHorizontal :size="18" />
+          Thêm
+        </button>
+        <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
+        <Transition
+          enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
+          enter-from-class="opacity-0 scale-95 -translate-y-1.5"
+          enter-to-class="opacity-100 scale-100 translate-y-0"
+          leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
+          leave-from-class="opacity-100 scale-100 translate-y-0"
+          leave-to-class="opacity-0 scale-95 -translate-y-1.5"
+        >
+          <div
+            v-if="moreOpen"
+            role="menu"
+            class="absolute right-0 mt-2 w-60 origin-top-right bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
+            @keydown.esc="moreOpen = false"
+          >
+            <button type="button" role="menuitem" class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors" @click="refreshJobStatus">
+              <RefreshCw :size="16" class="text-ink-500" :class="{ 'animate-spin': refreshingStatus }" />
+              Làm mới
+            </button>
+            <button
+              v-if="canCreateTypedTechnicianReport"
+              type="button"
+              role="menuitem"
+              class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left transition-colors"
+              data-testid="job-cannot-continue-menu"
+              @click="openCannotContinue"
+            >
+              <Flag :size="16" class="shrink-0 text-ink-500" />
+              Báo cáo vấn đề sửa chữa
+            </button>
+            <button
+              v-if="canReport && !gpsCheckedIn"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
+              @click="openReport"
+            >
+              <Flag :size="16" class="text-ink-500" />
+              Báo cáo vấn đề
+            </button>
+            <button
+              v-if="canReportRepairFailed"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left transition-colors"
+              data-testid="job-repair-failed-menu"
+              @click="openRepairFailed"
+            >
+              <AlertTriangle :size="16" />
+              Không sửa được máy này
+            </button>
+            <button
+              v-if="overrun?.eligible"
+              type="button"
+              role="menuitem"
+              class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
+              data-testid="overrun-release-menu"
+              @click="moreOpen = false; showOverrunModal = true"
+            >
+              <Calendar :size="16" class="text-ink-500" />
+              Không kịp tới, nhả đơn
+            </button>
+            <template v-if="canWithdraw">
+              <div class="my-1.5 border-t border-ink-100" />
+              <button
+                type="button"
+                role="menuitem"
+                class="w-full h-11 px-4 flex items-center gap-3 text-danger-600 hover:bg-danger-50 text-left transition-colors"
+                @click="openWithdraw"
+              >
+                <Ban :size="16" />
+                Huỷ đơn
+              </button>
+            </template>
+          </div>
+        </Transition>
+      </div>
+    </div>
+
+    <!-- Result of the last action -->
+    <div
+      v-if="actionMessage"
+      class="px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
+      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-700 border-danger-200'"
+      :role="actionMessage.type === 'success' ? 'status' : 'alert'"
+    >
+      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0 mt-px" />
+      <AlertTriangle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
+      <span class="flex-1 min-w-0 text-pretty">{{ actionMessage.text }}</span>
+      <button type="button" class="shrink-0 -m-1 p-1 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng thông báo" @click="actionMessage = null">
+        <X :size="16" />
+      </button>
+    </div>
 
     <!-- Loading: the shape of the page that is coming -->
     <div v-if="loading" class="space-y-4" aria-busy="true" aria-label="Đang tải công việc" data-testid="technician-job-loading-skeleton">
@@ -2821,135 +2935,44 @@ const toggleMore = async () => {
     </div>
 
     <template v-else-if="job">
-      <!-- 1. Header: service artwork, title, code, status, one overflow menu -->
-      <div
-        class="relative flex items-start justify-between gap-3 rounded-2xl border border-ink-200/90 bg-white p-4 sm:p-5 shadow-2xs"
-        :class="moreOpen ? 'z-40' : 'z-10'"
-      >
-        <div
-          class="pointer-events-none select-none absolute inset-0 overflow-hidden rounded-2xl"
-          aria-hidden="true"
-        >
-          <div class="absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center opacity-25 sm:opacity-90">
-            <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
+      <!-- 1. Header: service artwork, title, code, status -->
+      <div class="overflow-hidden rounded-2xl border border-ink-200/75 bg-white shadow-(--shadow-e1)">
+        <div class="relative overflow-hidden bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4 sm:px-6 sm:py-5">
+          <div
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-36 flex items-center justify-center overflow-hidden opacity-35 sm:opacity-95"
+            aria-hidden="true"
+          >
             <img
               :src="'/images/ui/detail-order-home.png'"
               alt=""
               data-testid="tech-job-header-ambient-artwork"
-              class="relative h-20 w-20 sm:h-24 sm:w-24 object-contain object-center p-1.5"
+              class="h-20 w-24 sm:h-24 sm:w-28 object-contain object-center p-1"
               loading="lazy"
             />
           </div>
-        </div>
-
-        <div class="relative z-10 flex items-start gap-3.5 min-w-0 flex-1 pr-4 sm:pr-24">
-          <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
-            <img
-              :src="getServiceArtworkUrl({ name: job.serviceName })"
-              alt=""
-              class="w-full h-full object-contain select-none pointer-events-none"
-              loading="lazy"
-            />
-          </div>
-          <div class="min-w-0 flex-1 space-y-1.5">
-            <div class="flex flex-wrap items-center gap-2">
+          <div class="relative z-10 flex flex-wrap items-start justify-between gap-3 sm:pr-32">
+            <div class="flex items-start gap-3.5 min-w-0 flex-1">
+              <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-brand-50/70 border border-brand-100/80 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+                <img
+                  :src="getServiceArtworkUrl({ name: job.serviceName })"
+                  alt=""
+                  class="w-full h-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="min-w-0 flex-1">
+                <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance leading-snug">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
+                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-500">
+                  <span class="font-num font-medium text-ink-600 whitespace-nowrap">#{{ job.code }}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}</span>
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
               <FhStatusPill :status="workStopped ? 'CANCELLED' : job.status" :label="workStopped ? 'Đã dừng công việc' : job.status === 'EN_ROUTE' && job.arrivalVerified ? VISIT_DEVICE_ARRIVED_LABEL : undefined" />
-              <span class="rounded-md bg-ink-100/90 px-2 py-0.5 text-xs font-semibold text-ink-700 font-num whitespace-nowrap">#{{ job.code }}</span>
             </div>
-            <h1 class="text-xl sm:text-2xl font-bold text-ink-900 text-balance leading-snug">{{ job.serviceName || 'Chi tiết công việc' }}</h1>
-            <p class="text-xs sm:text-sm text-ink-600">
-              {{ sessionLabel({ bookingMode: job.bookingMode, slot: job.slot, start: job.scheduledAt }) }}
-            </p>
           </div>
-        </div>
-
-        <div class="relative z-20 shrink-0" data-more-menu>
-          <button
-            type="button"
-            class="h-10 px-3 rounded-xl border border-ink-200 bg-white text-sm font-medium text-ink-700 hover:bg-ink-50 active:scale-[0.98] transition-[background-color,border-color,transform] duration-150 inline-flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
-            aria-haspopup="menu"
-            :aria-expanded="moreOpen"
-            data-testid="job-more-button"
-            @click="toggleMore"
-          >
-            <MoreHorizontal :size="18" />
-            Thêm
-          </button>
-          <div v-if="moreOpen" class="fixed inset-0 z-40" @click="moreOpen = false" />
-          <Transition
-            enter-active-class="transition ease-out duration-150 motion-reduce:transition-none"
-            enter-from-class="opacity-0 scale-95 -translate-y-1.5"
-            enter-to-class="opacity-100 scale-100 translate-y-0"
-            leave-active-class="transition ease-in duration-100 motion-reduce:transition-none"
-            leave-from-class="opacity-100 scale-100 translate-y-0"
-            leave-to-class="opacity-0 scale-95 -translate-y-1.5"
-          >
-            <div
-              v-if="moreOpen"
-              role="menu"
-              class="absolute right-0 mt-2 w-60 origin-top-right bg-white rounded-2xl border border-ink-200 shadow-(--shadow-e3) py-1.5 z-50 text-sm"
-            >
-              <button type="button" role="menuitem" class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors" @click="refreshJobStatus">
-                <RefreshCw :size="16" class="text-ink-500" :class="{ 'animate-spin': refreshingStatus }" />
-                Làm mới
-              </button>
-              <button
-                v-if="canCreateTypedTechnicianReport"
-                type="button"
-                role="menuitem"
-                class="w-full min-h-11 px-4 py-2 flex items-center gap-3 whitespace-normal text-ink-700 hover:bg-ink-50 text-left transition-colors"
-                data-testid="job-cannot-continue-menu"
-                @click="openCannotContinue"
-              >
-                <Flag :size="16" class="shrink-0 text-ink-500" />
-                Báo cáo vấn đề sửa chữa
-              </button>
-              <button
-                v-if="canReport && !gpsCheckedIn"
-                type="button"
-                role="menuitem"
-                class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
-                @click="openReport"
-              >
-                <Flag :size="16" class="text-ink-500" />
-                Báo cáo vấn đề
-              </button>
-              <button
-                v-if="canReportRepairFailed"
-                type="button"
-                role="menuitem"
-                class="w-full h-11 px-4 flex items-center gap-3 text-danger-700 hover:bg-danger-50 text-left transition-colors"
-                data-testid="job-repair-failed-menu"
-                @click="openRepairFailed"
-              >
-                <AlertTriangle :size="16" />
-                Không sửa được máy này
-              </button>
-              <button
-                v-if="overrun?.eligible"
-                type="button"
-                role="menuitem"
-                class="w-full h-11 px-4 flex items-center gap-3 text-ink-700 hover:bg-ink-50 text-left transition-colors"
-                data-testid="overrun-release-menu"
-                @click="moreOpen = false; showOverrunModal = true"
-              >
-                <Calendar :size="16" class="text-ink-500" />
-                Không kịp tới, nhả đơn
-              </button>
-              <template v-if="canWithdraw">
-                <div class="my-1.5 border-t border-ink-100" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="w-full h-11 px-4 flex items-center gap-3 text-danger-600 hover:bg-danger-50 text-left transition-colors"
-                  @click="openWithdraw"
-                >
-                  <Ban :size="16" />
-                  Huỷ đơn
-                </button>
-              </template>
-            </div>
-          </Transition>
         </div>
       </div>
       <section
@@ -2974,12 +2997,22 @@ const toggleMore = async () => {
         </ul>
         <button v-if="visitReturnUnknown" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
       </section>
-      <section v-else-if="visitReturnChildDetails.length" class="space-y-1 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status" aria-label="Tình trạng linh kiện ở thiết bị đã kết thúc" data-testid="visit-return-child-details">
-        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" :data-testid="`visit-return-device-${device.sequence}`" class="flex flex-wrap items-center justify-between gap-x-3">
-          <span>Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else-if="device.ledger?.state === 'unknown'"> · Chưa có sổ theo dõi linh kiện cho máy này; quản lý dịch vụ cần đối soát</span><span v-else> · Chưa kiểm tra được nghĩa vụ linh kiện (nhờ quản lý dịch vụ hoặc thử lại)</span></span>
-          <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
+      <section
+        v-else-if="visitReturnChildDetails.length"
+        class="space-y-1.5 rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-2.5 text-sm text-ink-700"
+        role="status"
+        aria-label="Tình trạng linh kiện ở thiết bị đã kết thúc"
+        :aria-busy="visitReturnsLoading"
+        data-testid="visit-return-child-details"
+      >
+        <p v-for="device in visitReturnChildDetails" :key="device.bookingId" :data-testid="`visit-return-device-${device.sequence}`" class="flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span class="min-w-0">Máy {{ device.sequence }}<template v-if="device.ledger?.state === 'ready'"> · <span v-if="device.ledger.summary?.needDeclare">{{ device.ledger.summary.needDeclare }} linh kiện cần trả kho</span><span v-if="device.ledger.summary?.needDeclare && device.ledger.summary?.awaitingManager">, </span><span v-if="device.ledger.summary?.awaitingManager">{{ device.ledger.summary.awaitingManager }} đã khai, chờ quản lý xác nhận</span></template><span v-else-if="device.ledger?.state === 'unknown'"> · Chưa có sổ theo dõi linh kiện cho máy này; quản lý dịch vụ cần đối soát</span><span v-else> · Chưa kiểm tra được nghĩa vụ linh kiện (nhờ quản lý dịch vụ hoặc thử lại)</span></span>
+          <button v-if="device.serviceOrderId && authorizedVisitChildBundle(device.serviceOrderId, visitGroupId!)" type="button" class="min-h-11 shrink-0 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :aria-label="`Mở máy ${device.sequence} và khu vực linh kiện hoàn trả`" @click="openVisitParts(device.serviceOrderId)">Linh kiện máy {{ device.sequence }}</button>
         </p>
-        <button v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" type="button" class="min-h-11 rounded-lg px-2 font-semibold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
+        <div v-if="visitReturnChildDetails.some(device => device.ledger?.state !== 'ready')" class="flex flex-wrap items-center gap-3">
+          <button type="button" class="min-h-11 rounded-lg px-2 font-semibold underline disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-700" :disabled="visitReturnsLoading" data-testid="visit-returns-retry" @click="refreshVisitReturns">Kiểm tra lại</button>
+          <span v-if="visitReturnsLoading" class="text-xs text-ink-500">Đang kiểm tra lại...</span>
+        </div>
       </section>
 
       <section
@@ -3014,22 +3047,23 @@ const toggleMore = async () => {
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(19rem,.9fr)] lg:items-start" data-testid="work-console-grid">
       <aside class="order-2 min-w-0 lg:col-start-2 lg:row-span-5 lg:sticky lg:top-20 space-y-4">
-      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 overflow-hidden rounded-2xl border border-ink-200/90 bg-white text-sm shadow-2xs">
+      <section data-testid="job-cost-summary" class="animate-slide-up-delay-1 overflow-hidden rounded-2xl border border-ink-200/80 bg-white text-sm shadow-2xs">
         <div class="relative overflow-hidden border-b border-ink-100/80 bg-gradient-to-r from-white via-white to-brand-50/85 px-5 py-4">
           <div
-            class="pointer-events-none select-none absolute inset-y-0 right-0 w-20 sm:w-28 flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
+            class="pointer-events-none select-none absolute inset-y-0 right-0 w-24 sm:w-[32%] flex items-center justify-center overflow-hidden opacity-45 sm:opacity-95"
             aria-hidden="true"
           >
+            <div class="absolute inset-0 bg-gradient-to-l from-brand-50/90 via-brand-50/35 to-transparent" />
             <img
               :src="'/images/ui/card-quote-checklist.png'"
               alt=""
               data-testid="tech-job-costs-ambient-artwork"
-              class="h-16 w-16 sm:h-20 sm:w-20 object-contain object-center p-1"
+              class="relative h-20 w-20 sm:h-24 sm:w-24 object-contain object-center p-1"
               loading="lazy"
             />
           </div>
-          <div class="relative z-10 pr-20 sm:pr-28">
-            <h2 class="text-base font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
+          <div class="relative z-10 pr-24 sm:pr-[32%]">
+            <h2 class="text-base sm:text-lg font-semibold text-ink-900">{{ visitGroupId ? 'Máy đang xem · ' : '' }}{{ financialStage }}</h2>
           </div>
         </div>
 
@@ -3070,81 +3104,86 @@ const toggleMore = async () => {
           </dl>
         </div>
         <!-- Every line of the quotation and of each additional cost, after approval too (BUG DETECTOR 13). -->
-        <details v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-3 text-xs" data-testid="cost-lines">
-          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Xem chi tiết báo giá và phát sinh</summary>
-          <div v-if="job?.quotation?.items?.length" class="pt-2" data-testid="cost-lines-quotation">
-            <h3 class="font-medium text-ink-800">Báo giá<span class="font-normal text-ink-500"> · {{ quotationStatusLabel }}</span></h3>
-            <ul class="mt-1 space-y-1 text-ink-700">
-              <li v-for="(item, index) in job.quotation.items" :key="index" class="flex justify-between gap-3">
-                <span class="min-w-0">{{ costLineLabel(item) }}</span>
-                <FhMoney :amount="item.lineTotal" class="shrink-0" />
-              </li>
-            </ul>
+        <div v-if="!showQuotationForm && (job?.quotation?.items?.length || additionalCosts.length)" class="border-t border-ink-100 pt-2 text-xs" data-testid="cost-lines">
+          <button
+            type="button"
+            class="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg py-1.5 text-left font-medium text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+            :aria-expanded="sections.costLines"
+            @click="sections.costLines = !sections.costLines"
+          >
+            <span>Xem chi tiết báo giá và phát sinh</span>
+            <ChevronDown :size="16" class="shrink-0 text-ink-400 transition-transform duration-200" :class="{ 'rotate-180': sections.costLines }" />
+          </button>
+          <div v-show="sections.costLines" class="mt-1.5 space-y-2.5">
+            <div v-if="job?.quotation?.items?.length" class="rounded-xl bg-ink-50/75 p-3 space-y-1.5" data-testid="cost-lines-quotation">
+              <h3 class="font-semibold text-ink-800">Báo giá<span class="font-normal text-ink-500"> · {{ quotationStatusLabel }}</span></h3>
+              <ul class="divide-y divide-ink-200/60 text-ink-700">
+                <li v-for="(item, index) in job.quotation.items" :key="index" class="flex justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+                  <span class="min-w-0">{{ costLineLabel(item) }}</span>
+                  <FhMoney :amount="item.lineTotal" class="shrink-0 font-num font-medium text-ink-900" />
+                </li>
+              </ul>
+            </div>
+            <div v-for="cost in additionalCosts" :key="cost.id" class="rounded-xl bg-ink-50/75 p-3 space-y-1.5" data-testid="cost-lines-additional">
+              <h3 class="font-semibold text-ink-800">Phát sinh<span class="font-normal text-ink-500"> · {{ AC_STATUS_LABELS[cost.status] }}</span></h3>
+              <ul class="divide-y divide-ink-200/60 text-ink-700">
+                <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+                  <span class="min-w-0">{{ costLineLabel(item) }}</span>
+                  <FhMoney :amount="item.lineTotal" class="shrink-0 font-num font-medium text-ink-900" />
+                </li>
+              </ul>
+            </div>
           </div>
-          <div v-for="cost in additionalCosts" :key="cost.id" class="border-t border-ink-100 pt-2 mt-2" data-testid="cost-lines-additional">
-            <h3 class="font-medium text-ink-800">Phát sinh<span class="font-normal text-ink-500"> · {{ AC_STATUS_LABELS[cost.status] }}</span></h3>
-            <ul class="mt-1 space-y-1 text-ink-700">
-              <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3">
-                <span class="min-w-0">{{ costLineLabel(item) }}</span>
-                <FhMoney :amount="item.lineTotal" class="shrink-0" />
-              </li>
-            </ul>
+        </div>
+        <div v-if="proposedParts.length || receivedRequests.length || invoicePartLines.length" class="border-t border-ink-100 pt-2 text-xs">
+          <button
+            type="button"
+            class="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg py-1.5 text-left font-medium text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+            :aria-expanded="sections.partDetails"
+            @click="sections.partDetails = !sections.partDetails"
+          >
+            <span>Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length || invoicePartLines.length }})</span>
+            <ChevronDown :size="16" class="shrink-0 text-ink-400 transition-transform duration-200" :class="{ 'rotate-180': sections.partDetails }" />
+          </button>
+          <div v-show="sections.partDetails" class="mt-1.5 space-y-2.5">
+            <div v-if="proposedParts.length" data-testid="approved-parts" class="rounded-xl bg-ink-50/75 p-3 space-y-1.5">
+              <h3 class="font-semibold text-ink-800">Số lượng dự kiến/đã duyệt · lịch sử</h3>
+              <ul class="divide-y divide-ink-200/60 text-ink-700">
+                <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
+                  <span>{{ item.description }} · tối đa {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
+                  <FhMoney :amount="item.lineTotal" class="font-num font-medium text-ink-900" />
+                </li>
+              </ul>
+            </div>
+            <div v-if="receivedRequests.length" data-testid="actual-parts" class="rounded-xl bg-ink-50/75 p-3 space-y-1.5">
+              <h3 class="font-semibold text-ink-800">Đã cấp và thực tế đã dùng</h3>
+              <ul class="space-y-1.5 text-ink-700">
+                <li v-for="request in receivedRequests" :key="request.id">
+                  {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' } as Record<string, string>)[displayPartRequestStatus(request)] }}
+                  <ul class="pl-3 mt-0.5 space-y-0.5"><li v-for="item in request.items" :key="item.id">
+                    {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
+                    <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>
+                    <span v-if="custodyByItem.has(item.id)"> · Đã khai trả {{ custodyByItem.get(item.id)?.declaredQty }}</span>
+                  </li></ul>
+                </li>
+              </ul>
+              <button type="button" class="mt-1 min-h-9 font-medium text-brand-700 underline" @click="revealParts">Mở quản lý linh kiện</button>
+            </div>
+            <div v-if="invoicePartLines.length" data-testid="invoice-part-lines" class="rounded-xl bg-ink-50/75 p-3 space-y-1.5">
+              <h3 class="font-semibold text-ink-800">Đã tính vào hóa đơn · số lượng và giá thực tế</h3>
+              <ul class="divide-y divide-ink-200/60 text-ink-700">
+                <li v-for="(item, index) in invoicePartLines" :key="index" class="flex flex-wrap justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
+                  <span>{{ item.description }} × {{ item.quantity }}</span>
+                  <FhMoney :amount="item.lineTotal" class="font-num font-medium text-ink-900" />
+                </li>
+              </ul>
+            </div>
           </div>
-        </details>
-        <details v-if="proposedParts.length || receivedRequests.length || invoicePartLines.length" class="border-t border-ink-100 pt-3 text-xs">
-          <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Chi tiết linh kiện ({{ proposedParts.length || receivedRequests.length || invoicePartLines.length }})</summary>
-        <div v-if="proposedParts.length" data-testid="approved-parts" class="pt-2">
-          <h3 class="font-medium text-ink-800">Số lượng dự kiến/đã duyệt · lịch sử</h3>
-          <ul class="mt-1 space-y-1 text-ink-700">
-            <li v-for="(item, index) in proposedParts" :key="index" class="flex flex-wrap justify-between gap-2">
-              <span>{{ item.description }} · tối đa {{ item.quantity }} · {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Nguồn khác' }}</span>
-              <FhMoney :amount="item.lineTotal" />
-            </li>
-          </ul>
         </div>
-        <div v-if="receivedRequests.length" data-testid="actual-parts" class="border-t border-ink-100 pt-3">
-          <h3 class="font-medium text-ink-800">Đã cấp và thực tế đã dùng</h3>
-          <ul class="mt-1 space-y-1 text-ink-700">
-            <li v-for="request in receivedRequests" :key="request.id">
-              {{ request.requestType === 'pre_repair' ? 'Trước sửa' : request.requestType === 'quotation' ? 'Theo báo giá' : 'Phát sinh' }} · {{ ({ requested: 'Chờ kho chuẩn bị', ready: 'Sẵn sàng nhận', delivering: 'Đang giao', received: 'Đã nhận', completed: 'Đã hoàn thành', cancelled: 'Đã hủy' } as Record<string, string>)[displayPartRequestStatus(request)] }}
-              <ul class="pl-3"><li v-for="item in request.items" :key="item.id">
-                {{ item.partNameSnapshot }} · Cấp {{ item.quantity }} · {{ item.usageStatus === 'used' ? 'Đã dùng' : item.usageStatus === 'returned' ? 'Không dùng · Hoàn trả' : 'Chưa ghi nhận sử dụng' }}
-                <span v-if="custodyByItem.has(item.id) || item.usageStatus === 'used'"> · Đã dùng {{ custodyByItem.get(item.id)?.usedQty ?? item.quantity }} / Cấp {{ item.quantity }}</span>
-                <span v-if="custodyByItem.has(item.id)"> · Đã khai trả {{ custodyByItem.get(item.id)?.declaredQty }}</span>
-              </li></ul>
-            </li>
-          </ul>
-          <button type="button" class="mt-2 min-h-10 text-brand-700 underline" @click="revealParts">Mở quản lý linh kiện</button>
-        </div>
-        <div v-if="invoicePartLines.length" data-testid="invoice-part-lines" class="border-t border-ink-100 pt-3">
-          <h3 class="font-medium text-ink-800">Đã tính vào hóa đơn · số lượng và giá thực tế</h3>
-          <ul class="mt-1 space-y-1 text-ink-700">
-            <li v-for="(item, index) in invoicePartLines" :key="index" class="flex flex-wrap justify-between gap-2">
-              <span>{{ item.description }} × {{ item.quantity }}</span>
-              <FhMoney :amount="item.lineTotal" />
-            </li>
-          </ul>
-        </div>
-        </details>
         </div>
       </section>
       <TechnicianPrivateNote :order-id="jobIdRef" class="animate-slide-up-delay-1" />
       </aside>
-
-      <!-- Result of the last action -->
-      <div
-        v-if="actionMessage"
-        class="lg:col-start-1 px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
-        :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-700 border-danger-200'"
-        :role="actionMessage.type === 'success' ? 'status' : 'alert'"
-      >
-        <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0 mt-px" />
-        <AlertTriangle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
-        <span class="flex-1 min-w-0 text-pretty">{{ actionMessage.text }}</span>
-        <button type="button" class="shrink-0 -m-1 p-1 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng thông báo" @click="actionMessage = null">
-          <X :size="16" />
-        </button>
-      </div>
 
       <!-- 2. What to do now: one line, one primary button, the steps behind "Xem thêm" -->
       <div v-if="!visitGroupId && (isCompleted || visitDeviceFailed) && (pendingPartsReturns > 0 || !partsReturnsKnown)" data-testid="pending-parts-returns" class="lg:col-start-1 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="status">
@@ -3397,25 +3436,28 @@ const toggleMore = async () => {
         </p>
 
         <!-- Completed: the customer's review, if any -->
-        <div v-if="isCompleted" class="mt-4 pt-4 border-t border-ink-100 space-y-2 text-sm" data-testid="customer-review">
+        <div v-if="isCompleted" class="mt-4 pt-4 border-t border-ink-100 space-y-2.5 text-sm" data-testid="customer-review">
           <template v-if="customerReview">
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-semibold text-ink-900">Đánh giá của khách</h3>
+              <span v-if="customerReview.createdAt" class="text-xs text-ink-500 font-num whitespace-nowrap">{{ vnDateTimeString(customerReview.createdAt) }}</span>
+            </div>
+            <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-0.5" :aria-label="`${customerReview.rating} trên 5 sao`">
                 <Star
                   v-for="s in 5"
                   :key="s"
-                  :size="16"
+                  :size="18"
                   :class="s <= customerReview.rating ? 'text-warning-400 fill-warning-400' : 'text-ink-200'"
                 />
               </span>
               <span class="font-num font-semibold text-ink-900 whitespace-nowrap">{{ customerReview.rating }}/5</span>
-              <span v-if="customerReview.createdAt" class="text-ink-500 font-num whitespace-nowrap">{{ vnDateTimeString(customerReview.createdAt) }}</span>
             </div>
             <div v-if="parsedCustomerReview.tags.length > 0" class="flex flex-wrap gap-1.5">
               <span
                 v-for="tag in parsedCustomerReview.tags"
                 :key="tag"
-                class="px-2.5 py-1 rounded-full text-xs font-medium bg-ink-100 text-ink-700 whitespace-nowrap"
+                class="inline-flex items-center h-7 px-2.5 rounded-full text-xs font-medium bg-ink-100 text-ink-700 whitespace-nowrap"
               >
                 {{ tag }}
               </span>
@@ -3819,15 +3861,27 @@ const toggleMore = async () => {
                   </div>
                   <p class="text-ink-600 text-pretty">{{ cost.reason }}</p>
                   <p v-if="cost.createdAt" class="text-xs text-ink-600">{{ vnDateTimeString(cost.createdAt) }}</p>
-                  <details v-if="cost.items?.length" class="text-xs" :data-testid="`additional-cost-lines-${cost.id}`">
-                    <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">Xem {{ cost.items.length }} dòng chi tiết</summary>
-                    <ul class="space-y-1 text-ink-700">
-                      <li v-for="item in cost.items" :key="item.id" class="flex justify-between gap-3">
-                        <span class="min-w-0">{{ costLineLabel(item) }}</span>
-                        <FhMoney :amount="item.lineTotal" class="shrink-0" />
+                  <div v-if="cost.items?.length" class="pt-1 text-xs" :data-testid="`additional-cost-lines-${cost.id}`">
+                    <button
+                      type="button"
+                      class="inline-flex min-h-9 items-center gap-1.5 rounded-lg font-medium text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                      :aria-expanded="!!expandedAcIds[cost.id]"
+                      @click="expandedAcIds[cost.id] = !expandedAcIds[cost.id]"
+                    >
+                      <span>Xem {{ cost.items.length }} dòng chi tiết</span>
+                      <ChevronDown :size="15" class="transition-transform duration-200" :class="{ 'rotate-180': expandedAcIds[cost.id] }" />
+                    </button>
+                    <ul v-show="expandedAcIds[cost.id]" class="mt-1.5 rounded-xl bg-ink-50/75 p-3 divide-y divide-ink-200/60 text-ink-700">
+                      <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between gap-3 py-1.5 first:pt-0 last:pb-0">
+                        <span class="min-w-0">
+                          {{ costLineLabel(item) }}
+                          <span v-if="item.partSource === 'external'" class="ml-1 text-[11px] font-medium text-warning-800 whitespace-nowrap">· Linh kiện ngoài</span>
+                          <span v-else-if="item.partSource === 'fixhome'" class="ml-1 text-[11px] font-medium text-brand-700 whitespace-nowrap">· Linh kiện FixHome</span>
+                        </span>
+                        <FhMoney :amount="item.lineTotal" class="shrink-0 font-num font-medium text-ink-900" />
                       </li>
                     </ul>
-                  </details>
+                  </div>
                   <button
                     v-if="['REJECTED', 'EXPIRED'].includes(cost.status) && canQuoteAdditional"
                     type="button"
@@ -4296,35 +4350,44 @@ const toggleMore = async () => {
     </Transition>
 
 
-    <!-- Photo preview -->
+    <!-- Photo preview (synced dark lightbox style with customer order detail) -->
     <Transition name="fh-modal">
       <div
         v-if="previewModalUrl"
-        class="fixed inset-0 z-50 bg-ink-900/85 backdrop-blur-xs flex items-center justify-center p-4"
+        class="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
         @click.self="previewModalUrl = null"
       >
-        <div role="dialog" aria-modal="true" aria-label="Xem ảnh" class="fh-modal-panel fh-modal-panel--sheet relative max-w-3xl w-full bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden p-3 sm:p-4 space-y-3 shadow-(--shadow-e3)">
-          <div class="flex items-center justify-end gap-2">
-            <FhButton
-              v-if="activePreviewEvidence && !isCompleted"
-              variant="ghost"
-              size="sm"
-              :disabled="actionLoading"
-              @click="handleDeleteEvidence(activePreviewEvidence)"
-            >
-              <Trash2 :size="14" /> Xoá ảnh
-            </FhButton>
-            <button
-              type="button"
-              class="w-10 h-10 rounded-full bg-ink-100 hover:bg-ink-200 text-ink-700 flex items-center justify-center"
-              aria-label="Đóng"
-              @click="previewModalUrl = null"
-            >
-              <X :size="18" />
-            </button>
+        <div role="dialog" aria-modal="true" aria-label="Xem ảnh" class="fh-modal-panel relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+          <div class="p-3.5 px-5 bg-ink-900 text-white flex items-center justify-between gap-3">
+            <span class="text-sm font-medium">
+              {{ activePreviewEvidence ? ({ before: 'Trước khi sửa', after: 'Sau khi sửa', checkin_face: 'Check-in', additional: 'Phát sinh' }[String(activePreviewEvidence.type).toLowerCase()] ?? 'Ảnh hiện trường') : 'Ảnh hiện trường' }}
+            </span>
+            <div class="flex items-center gap-2">
+              <FhButton
+                v-if="activePreviewEvidence && !isCompleted"
+                variant="ghost"
+                size="sm"
+                class="text-danger-300 hover:text-white hover:bg-danger-600/30"
+                :disabled="actionLoading"
+                @click="handleDeleteEvidence(activePreviewEvidence)"
+              >
+                <Trash2 :size="14" /> Xoá ảnh
+              </FhButton>
+              <button
+                type="button"
+                class="p-1.5 rounded-lg text-ink-400 hover:text-white hover:bg-ink-800 transition-colors"
+                aria-label="Đóng"
+                @click="previewModalUrl = null"
+              >
+                <X :size="20" />
+              </button>
+            </div>
           </div>
-          <div class="flex items-center justify-center bg-ink-50 rounded-2xl overflow-hidden max-h-[78vh]">
-            <img :src="previewModalUrl" alt="Ảnh phóng to" class="max-h-[76vh] max-w-full object-contain" />
+          <div class="flex-1 overflow-auto bg-ink-950 flex items-center justify-center p-4 min-h-72 max-h-[65vh]">
+            <img :src="previewModalUrl" alt="Ảnh phóng to" class="max-h-[60vh] max-w-full object-contain rounded-lg" />
+          </div>
+          <div v-if="activePreviewEvidence?.createdAt" class="px-5 py-3 bg-white border-t border-ink-100 flex items-center justify-end text-xs text-ink-500 font-num whitespace-nowrap">
+            {{ vnDateTimeString(activePreviewEvidence.createdAt) }}
           </div>
         </div>
       </div>
