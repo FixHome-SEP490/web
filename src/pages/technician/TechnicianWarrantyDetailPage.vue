@@ -17,6 +17,7 @@ import { onOrderChange, onResync, whileOffline } from '../../services/live-updat
 import { affectedBy } from '../../lib/query-keys';
 import { formatDateTimeVN } from '../../utils/formatters';
 import { vnDateString } from '../../utils/vn-time';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import {
   technicianClaimDisplayMeta,
   faultyInspectionLabels,
@@ -246,7 +247,17 @@ onBeforeUnmount(() => {
               <span v-if="claim.submittedAfterExpiry" class="inline-flex items-center h-6 px-2.5 rounded-full bg-ink-100 text-xs font-medium text-ink-700 whitespace-nowrap">Gửi sau hạn bảo hành</span>
               <span class="text-xs text-ink-500 whitespace-nowrap sm:ml-auto">{{ vnDateString(claim.submittedAt) }}</span>
             </div>
-            <h1 class="font-bold text-xl sm:text-2xl text-ink-900 tracking-tight text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h1>
+            <div class="flex items-center gap-2.5">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-100/80 bg-blue-50/60 p-1 overflow-hidden">
+                <img
+                  :src="getServiceArtworkUrl({ name: claim.order.serviceName })"
+                  :alt="claim.order.serviceName"
+                  class="h-full w-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <h1 class="font-bold text-xl sm:text-2xl text-ink-900 tracking-tight text-balance">{{ claim.order.serviceName || 'Bảo hành dịch vụ' }}</h1>
+            </div>
           </div>
         </div>
 
@@ -286,7 +297,17 @@ onBeforeUnmount(() => {
             <dl class="grid gap-4 sm:grid-cols-2">
               <div class="space-y-0.5">
                 <dt class="text-xs text-ink-500">Dịch vụ</dt>
-                <dd class="font-medium text-ink-900">{{ claim.order.serviceName }}</dd>
+                <dd class="flex items-center gap-1.5 font-medium text-ink-900">
+                  <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-blue-100 bg-blue-50/60 p-0.5 overflow-hidden">
+                    <img
+                      :src="getServiceArtworkUrl({ name: claim.order.serviceName })"
+                      :alt="claim.order.serviceName"
+                      class="h-full w-full object-contain"
+                      loading="lazy"
+                    />
+                  </span>
+                  <span>{{ claim.order.serviceName }}</span>
+                </dd>
               </div>
               <div v-if="claim.coverage" class="space-y-0.5">
                 <dt class="text-xs text-ink-500">Bảo hành đến</dt>

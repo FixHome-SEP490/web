@@ -9,7 +9,6 @@ import {
   Gauge,
   LayoutDashboard,
   LifeBuoy,
-  ListChecks,
   MapPinned,
   Package,
   PackageCheck,
@@ -26,6 +25,7 @@ import {
   WalletCards,
   TicketPercent,
   Warehouse,
+  Wrench,
   Building2,
   CalendarClock,
   ClipboardCheck,
@@ -52,7 +52,7 @@ const item = (label: string, path: string, icon: Component, permission?: string)
   permission ? { label, path, icon, permission } : { label, path, icon };
 
 const overview = item('Tổng quan', '/console', LayoutDashboard);
-const orders = item('Đơn sửa chữa', '/console/orders', ListChecks);
+const orders = item('Đơn sửa chữa', '/console/orders', Wrench);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
 const officeVisits = item('Lịch hẹn trụ sở', '/console/office-visits', CalendarClock);

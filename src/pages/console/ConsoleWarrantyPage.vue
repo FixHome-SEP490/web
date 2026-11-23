@@ -26,6 +26,7 @@ import {
 } from '../../utils/warranty-claim';
 import { getSupportErrorMessage } from './support-cases.utils';
 import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const authStore = useAuthStore();
 const canDecide = computed(() => authStore.userRole === 'SERVICE_MANAGER');
@@ -228,11 +229,23 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
           empty-text="Không có yêu cầu bảo hành."
         >
           <template #cell-item="{ row }">
-            <router-link
-              :to="`/console/warranty/${row.id}`"
-              class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            >{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</router-link>
-            <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
+            <div class="flex items-center gap-2.5">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-100/80 bg-blue-50/50 p-1 overflow-hidden">
+                <img
+                  :src="getServiceArtworkUrl({ name: row.order.serviceName })"
+                  :alt="row.order.serviceName"
+                  class="h-full w-full object-contain select-none pointer-events-none"
+                  loading="lazy"
+                />
+              </div>
+              <div class="min-w-0">
+                <router-link
+                  :to="`/console/warranty/${row.id}`"
+                  class="text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 block truncate"
+                >{{ row.order.serviceName || 'Bảo hành dịch vụ' }}</router-link>
+                <div class="whitespace-nowrap font-num text-xs text-ink-500">#{{ row.order.code }}</div>
+              </div>
+            </div>
           </template>
           <template #cell-status="{ row }">
             <div class="flex flex-wrap items-center gap-1.5">
