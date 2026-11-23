@@ -25,7 +25,7 @@ const invitation = {
   booking: { id: 'booking-from-route', serviceName: 'Synthetic repair', district: 'Synthetic District', province: 'Synthetic Province', quantity: 1, urgency: 'medium', preferredStartAt: null, preferredEndAt: null },
 };
 const candidate = { userId: 'technician-real-id', technicianId: 'profile-not-user-id', fullName: 'Synthetic technician', averageRating: 4, ratingCount: 2, yearsExperience: 2, reliabilityScore: 80, isAvailable: true };
-const global = { stubs: { FhButton: ActionButton, FhCountdown: true, FhMoney: true, FhEmptyState: true, FhStatusPill: true } };
+const global = { stubs: { Teleport: true, FhButton: ActionButton, FhCountdown: true, FhMoney: true, FhEmptyState: true, FhStatusPill: true } };
 
 beforeEach(() => {
   mockGet.mockReset(); mockPost.mockReset(); push.mockReset();

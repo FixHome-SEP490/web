@@ -45,6 +45,7 @@ vi.mock('../src/composables/usePartReturnsRefresh', () => ({
   usePartReturnsRefresh: vi.fn(),
 }));
 
+import { usePartReturnsRefresh } from '../src/composables/usePartReturnsRefresh';
 import TechnicianPartReturnsPage from '../src/pages/technician/TechnicianPartReturnsPage.vue';
 import DeclarePartReturnModal from '../src/components/technician/DeclarePartReturnModal.vue';
 import TechnicianJobDetailPage from '../src/pages/technician/TechnicianJobDetailPage.vue';
@@ -180,11 +181,6 @@ describe('Technician Part Returns Feature', () => {
       expect(apiClientMock.get).toHaveBeenCalledWith('/service-orders/order-1/part-returns');
       expect(apiClientMock.get).toHaveBeenCalledWith('/service-orders/order-2/part-returns');
 
-      // Check header pills
-      expect(wrapper.find('[data-testid="top-need-declare-count"]').text()).toBe('1');
-      expect(wrapper.find('[data-testid="top-awaiting-count"]').text()).toBe('2');
-      expect(wrapper.find('[data-testid="top-completed-count"]').text()).toBe('5');
-
       // Check stat cards
       expect(wrapper.find('[data-testid="stat-card-need-declare"]').text()).toContain('1 linh kiện');
       expect(wrapper.find('[data-testid="stat-card-awaiting"]').text()).toContain('2 linh kiện');
@@ -214,8 +210,50 @@ describe('Technician Part Returns Feature', () => {
         : base(url));
       const wrapper = mount(TechnicianPartReturnsPage);
       await flushPromises();
-      expect(wrapper.find('[data-testid="top-completed-count"]').text()).toBe('12');
       expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('12 linh kiện');
+      wrapper.unmount();
+    });
+
+    it('shows settled guidance instead of filter-empty state when open list is empty and completedQty > 0', async () => {
+      apiClientMock.get.mockImplementation((url: string) => {
+        if (url === '/part-returns/mine') {
+          return Promise.resolve({ data: { data: [], meta: { completedQty: 9 } } });
+        }
+        return Promise.resolve({ data: { data: [] } });
+      });
+      const wrapper = mount(TechnicianPartReturnsPage);
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('9 linh kiện');
+      expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('Đã tất toán ở các đơn trước');
+      expect(wrapper.find('[data-testid="job-list-empty"]').text()).toContain('Không còn công việc cần trả linh kiện');
+      expect(wrapper.find('[data-testid="job-list-empty"]').text()).toContain('9 linh kiện');
+      expect(wrapper.find('[data-testid="job-detail-column"]').text()).toContain('Đã hoàn tất đối soát toàn bộ');
+
+      wrapper.unmount();
+    });
+
+    it('refreshes silently on focus/resync without flashing loading skeletons', async () => {
+      const wrapper = mount(TechnicianPartReturnsPage);
+      await flushPromises();
+
+      const refreshCallback = vi.mocked(usePartReturnsRefresh).mock.calls[0]?.[0];
+      expect(refreshCallback).toBeTypeOf('function');
+
+      let resolveMine!: (val: unknown) => void;
+      apiClientMock.get.mockImplementationOnce(() => new Promise((resolve) => { resolveMine = resolve; }));
+
+      const refreshPromise = refreshCallback!();
+      await Promise.resolve();
+
+      expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('5 linh kiện');
+      expect(wrapper.findAll('[data-testid^="job-card-"]')).toHaveLength(2);
+
+      resolveMine({ data: { data: [mockRecord1, mockRecord3, mockRecord4] } });
+      await refreshPromise;
+      await flushPromises();
+
       wrapper.unmount();
     });
 

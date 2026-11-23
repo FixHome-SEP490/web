@@ -1371,13 +1371,13 @@ const getStatusBadgeClass = (status: string) => {
         <div
           v-for="pr in group.requests"
           :key="pr.id"
-          class="border border-ink-200 rounded-xl bg-white overflow-hidden shadow-xs space-y-3 p-3.5"
+          class="rounded-2xl border border-ink-200/90 bg-white overflow-hidden space-y-3.5 p-4 sm:p-5"
         >
           <!-- Request Header -->
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-2">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
             <div class="flex min-w-0 flex-wrap items-center gap-2">
               <span
-                class="px-2 py-1 rounded text-xs font-semibold border"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold border"
                 :class="getStatusBadgeClass(displayPartRequestStatus(pr))"
               >
                 {{ formatStatusText(displayPartRequestStatus(pr)) }}
@@ -1385,41 +1385,46 @@ const getStatusBadgeClass = (status: string) => {
 
               <span
                 v-if="pr.requestType === 'pre_repair'"
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-50 text-warning-700 border border-warning-200"
+                class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-warning-50 text-warning-700 border border-warning-200"
               >
                 Trước sửa chữa
               </span>
               <span
                 v-else
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
+                class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-brand-50 text-brand-700 border border-brand-200"
               >
                 {{ pr.requestType === 'quotation' ? 'Theo báo giá đã duyệt' : pr.requestType === 'warranty' ? 'Bảo hành' : 'Phát sinh khi sửa' }}
               </span>
 
-              <span class="text-ink-500 text-[11px] flex items-center gap-1">
+              <span class="text-ink-500 text-xs inline-flex items-center gap-1">
                 <Truck v-if="pr.fulfillmentMethod === 'delivery'" :size="13" />
                 <Package v-else :size="13" />
                 {{ pr.fulfillmentMethod === 'delivery' ? 'Giao hàng' : 'Tự lấy tại kho' }}
               </span>
+
+              <span v-if="pr.receivedAt" class="inline-flex items-center gap-1 text-xs font-medium text-success-700">
+                <CheckCircle2 :size="13" class="shrink-0" aria-hidden="true" />
+                Nhận {{ vnDateTimeString(pr.receivedAt) }}
+              </span>
             </div>
 
-            <button type="button" class="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-brand-700" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
+            <button type="button" class="inline-flex min-h-10 items-center gap-1 text-xs sm:text-sm font-semibold text-brand-700 hover:text-brand-800 cursor-pointer" :aria-expanded="isRequestExpanded(pr.id, group.key)" @click="toggleRequestExpanded(pr.id, group.key)">
               {{ isRequestExpanded(pr.id, group.key) ? 'Thu gọn' : 'Chi tiết' }}
               <span aria-hidden="true">{{ isRequestExpanded(pr.id, group.key) ? '⌃' : '⌄' }}</span>
             </button>
           </div>
-          <div v-show="isRequestExpanded(pr.id, group.key)" class="space-y-3">
+          <div v-show="isRequestExpanded(pr.id, group.key)" class="space-y-3.5">
           <!-- Reason & Notes -->
           <p v-if="requestReasonText(pr.reason)" class="text-xs text-ink-700" data-testid="part-request-reason">
-            <strong>Lý do:</strong> {{ requestReasonText(pr.reason) }}
+            <span class="font-semibold text-ink-800">Lý do:</span> {{ requestReasonText(pr.reason) }}
           </p>
 
-          <section v-if="pr.fulfillmentMethod === 'pickup' && (warehouseAllocationFor(pr)?.mode === 'warehouse' || warehouseAllocationLoading[pr.id] || warehouseAllocationErrors[pr.id])" class="space-y-1 rounded-lg border border-ink-200 bg-ink-25 p-3 text-xs" :data-testid="`tech-warehouse-allocation-${pr.id}`">
+          <section v-if="pr.fulfillmentMethod === 'pickup' && (warehouseAllocationFor(pr)?.mode === 'warehouse' || warehouseAllocationLoading[pr.id] || warehouseAllocationErrors[pr.id])" class="space-y-1 rounded-xl bg-ink-50/80 border border-ink-200/70 px-3.5 py-3 text-xs" :data-testid="`tech-warehouse-allocation-${pr.id}`">
             <p v-if="warehouseAllocationLoading[pr.id]" class="text-ink-600">Đang kiểm tra kho được phân bổ…</p>
             <p v-else-if="warehouseAllocationErrors[pr.id]" class="text-warning-800">Chưa kiểm tra được trạng thái kho. Không xác nhận nhận hàng cho tới khi được đối chiếu.</p>
             <template v-else-if="warehouseAllocationFor(pr)?.mode === 'warehouse'">
               <p class="font-semibold text-ink-900">{{ warehouseAllocationFor(pr)?.warehouseName || (warehouseAllocationFor(pr)?.status === 'stock_unavailable' ? 'Chưa có kho phân bổ' : 'Kho linh kiện') }}</p>
-              <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-700">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
+              <p v-if="warehouseAllocationFor(pr)?.warehouseAddress" class="text-ink-600">{{ warehouseAllocationFor(pr)?.warehouseAddress }}</p>
               <p
                 v-if="warehouseAllocationFor(pr)?.distanceReference === 'booking_snapshot' && typeof warehouseAllocationFor(pr)?.estimatedStraightLineKm === 'number'"
                 class="text-warning-800"
@@ -1458,7 +1463,7 @@ const getStatusBadgeClass = (status: string) => {
           <!-- Pending Preparation State -->
           <div
             v-if="displayPartRequestStatus(pr) === 'requested' && !isW3Delivery(pr) && warehouseAllocationFor(pr)?.status !== 'stock_unavailable'"
-            class="p-2.5 rounded-lg bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
+            class="p-2.5 rounded-xl bg-warning-50/80 border border-warning-200 flex flex-wrap items-center justify-between gap-2"
           >
             <div class="flex items-center gap-2 text-xs text-warning-800">
               <Clock :size="14" class="text-warning-600 shrink-0" />
@@ -1472,7 +1477,7 @@ const getStatusBadgeClass = (status: string) => {
               canReceivePickup(pr) ||
               (pr.fulfillmentMethod === 'delivery' && pr.status === 'delivering')
             "
-            class="p-3 rounded-lg bg-brand-50 border border-brand-200 space-y-2"
+            class="p-3 rounded-xl bg-brand-50 border border-brand-200 space-y-2"
           >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 text-brand-900 font-bold">
@@ -1514,100 +1519,108 @@ const getStatusBadgeClass = (status: string) => {
             </div>
           </div>
 
-          <!-- Received Badge -->
-          <div
-            v-if="pr.receivedAt"
-            class="text-[11px] text-success-800 bg-success-50 border border-success-200 p-2 rounded flex items-center gap-1.5"
-          >
-            <CheckCircle2 :size="14" class="text-success-600" />
-            <span>Đã nhận bàn giao lúc: {{ vnDateTimeString(pr.receivedAt) }}</span>
-          </div>
-
           <!-- Items list in this request -->
-          <div class="space-y-1">
-            <h5 class="font-semibold text-ink-800 text-sm">Thực tế đã dùng/không dùng</h5>
-            <p v-if="requestHasReturns(pr)" class="text-ink-600">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý dịch vụ nhận thực tế.</p>
-            <div class="space-y-2">
-              <article v-for="item in pr.items" :key="item.id" class="rounded-xl border border-ink-200 bg-white p-3 space-y-2.5" :data-testid="`part-item-${item.id}`">
-                <div class="flex flex-wrap items-start justify-between gap-2">
-                  <div class="min-w-0">
-                    <h6 class="font-semibold text-sm text-ink-900">{{ item.partNameSnapshot }}</h6>
-                    <p v-if="item.note" class="mt-0.5 text-xs text-ink-500">Ghi chú: {{ item.note }}</p>
-                    <span class="mt-1 inline-flex rounded-full bg-ink-50 px-2 py-0.5 text-[10px] text-ink-600">
-                      {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Mua ngoài' }}
+          <div class="space-y-2.5">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h5 class="font-semibold text-ink-800 text-sm">Thực tế đã dùng/không dùng</h5>
+              <p v-if="requestHasReturns(pr)" class="text-xs text-ink-500">“Hoàn trả” ghi nhận không dùng; “Khai trả kho” gửi số lượng để quản lý nhận thực tế.</p>
+            </div>
+            <div class="space-y-2.5">
+              <article v-for="item in pr.items" :key="item.id" class="rounded-xl border border-ink-200/85 bg-ink-25/50 p-3.5 sm:p-4 space-y-3" :data-testid="`part-item-${item.id}`">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1 space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h6 class="font-bold text-sm sm:text-[15px] text-ink-900">{{ item.partNameSnapshot }}</h6>
+                      <span class="inline-flex rounded-md bg-white border border-ink-200/80 px-2 py-0.5 text-[11px] font-medium text-ink-600">
+                        {{ item.partSource === 'fixhome' ? 'FixHome' : item.partSource === 'technician' ? 'Kỹ thuật viên tự có' : 'Mua ngoài' }}
+                      </span>
+                    </div>
+                    <p v-if="item.note" class="text-xs text-ink-500">Ghi chú: {{ item.note }}</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <span v-if="getPartWarrantyFromHistory(item)" class="inline-flex items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2.5 py-0.5 text-[11px] font-semibold text-success-700">
+                      <ShieldCheck :size="12" /> {{ getPartWarrantyFromHistory(item) }}
+                    </span>
+                    <span class="inline-flex items-baseline gap-1 rounded-lg bg-white border border-ink-200/70 px-2.5 py-1 text-xs text-ink-500">
+                      <span>Đơn giá</span>
+                      <strong class="font-num text-sm font-bold text-ink-900"><FhMoney :amount="item.unitPriceSnapshot" /></strong>
                     </span>
                   </div>
-                  <span v-if="getPartWarrantyFromHistory(item)" class="inline-flex shrink-0 items-center gap-1 rounded-full border border-success-200 bg-success-50 px-2 py-1 text-[10px] font-semibold text-success-700">
-                    <ShieldCheck :size="11" /> {{ getPartWarrantyFromHistory(item) }}
-                  </span>
                 </div>
                 <template v-for="record in [returnFor(item.id)]" :key="record?.partRequestItemId ?? item.id">
-                  <div v-if="record" class="space-y-2 text-xs text-ink-700">
-                    <p class="flex flex-wrap gap-x-1 gap-y-1 text-sm font-medium">
-                      <span class="whitespace-nowrap">Cấp <span class="font-num">{{ record.issuedQty }}</span></span> ·
-                      <span class="whitespace-nowrap">Dùng <span class="font-num">{{ record.usedQty }}</span></span> ·
-                      <span class="whitespace-nowrap">Cần trả kho <span class="font-num">{{ record.outstandingQty }}</span></span>
-                    </p>
-                    <dl class="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg bg-ink-50 p-3 [&_dd]:mt-1 [&_dd]:text-sm">
-                      <div><dt>Còn phải khai</dt><dd class="font-num font-semibold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
-                      <div><dt>Đã khai, chờ nhận</dt><dd class="font-num font-semibold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-800' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
-                      <div><dt>Khách duyệt tối đa (cả máy)</dt><dd class="font-num font-semibold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
-                      <div><dt>Quản lý đã nhận</dt><dd class="font-num font-semibold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
-                      <div><dt>Đơn giá</dt><dd><FhMoney :amount="item.unitPriceSnapshot" /></dd></div>
-                    </dl>
-                    <p v-if="record.usageRecorded !== false" class="flex flex-wrap items-baseline justify-between gap-2">
-                      <span>Giá trị linh kiện đã dùng</span>
-                      <FhMoney :amount="item.unitPriceSnapshot * record.usedQty" data-testid="part-used-value" class="font-semibold text-ink-900" />
-                    </p>
-                    <p v-else class="text-ink-600">Chưa chốt số lượng thực dùng.</p>
-                    <p v-if="pendingDeclaredQty(record) > 0" class="flex items-start gap-1.5 font-medium text-warning-800"><Clock :size="16" class="shrink-0" aria-hidden="true" />Đang chờ quản lý xác nhận nhận thực tế, chưa hoàn tất trả kho.</p>
-                    <p v-else-if="record.outstandingQty === 0 && record.managerAcceptedQty > 0" class="flex items-center gap-1.5 text-success-700"><CheckCircle2 :size="16" aria-hidden="true" />Đã nhận đủ số linh kiện hoàn trả.</p>
-                  </div>
-                  <div v-else class="space-y-2 text-xs text-ink-700">
-                    <div class="flex flex-wrap items-baseline justify-between gap-2">
-                      <p>Số lượng yêu cầu/cấp <strong class="font-num">{{ item.quantity }}</strong></p>
-                      <p>Đơn giá <FhMoney :amount="item.unitPriceSnapshot" /></p>
+                  <div v-if="record" class="space-y-2.5 text-xs text-ink-700">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <p class="flex flex-wrap gap-x-1 gap-y-1 text-xs sm:text-sm font-medium text-ink-700">
+                        <span class="whitespace-nowrap">Cấp <span class="font-num font-semibold text-ink-900">{{ record.issuedQty }}</span></span> ·
+                        <span class="whitespace-nowrap">Dùng <span class="font-num font-semibold text-ink-900">{{ record.usedQty }}</span></span> ·
+                        <span class="whitespace-nowrap">Cần trả kho <span class="font-num font-semibold text-ink-900">{{ record.outstandingQty }}</span></span>
+                      </p>
+                      <p v-if="record.usageRecorded !== false" class="flex items-baseline gap-1.5 text-xs">
+                        <span class="text-ink-500">Giá trị linh kiện đã dùng</span>
+                        <FhMoney :amount="item.unitPriceSnapshot * record.usedQty" data-testid="part-used-value" class="font-bold text-sm text-ink-900" />
+                      </p>
                     </div>
-                    <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" /></p>
+                    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Còn phải khai</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
+                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Đã khai, chờ nhận</dt><dd class="mt-1 font-num text-base font-bold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-700' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
+                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Khách duyệt tối đa (cả máy)</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
+                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Quản lý đã nhận</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
+                    </dl>
+                  </div>
+                  <div v-else class="space-y-1.5 text-xs text-ink-700 rounded-lg bg-white border border-ink-200/70 px-3 py-2.5">
+                    <div class="flex flex-wrap items-baseline justify-between gap-2">
+                      <p>Số lượng yêu cầu/cấp <strong class="font-num text-ink-900">{{ item.quantity }}</strong></p>
+                      <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" class="font-semibold text-ink-900" /></p>
+                    </div>
                     <p class="text-ink-600">Chưa có số lượng thực dùng chi tiết.</p>
-                    <p class="font-medium">{{ item.usageStatus === 'used' ? 'Đã dùng · chưa có số lượng chi tiết' : item.usageStatus === 'returned' ? 'Đã ghi nhận không dùng · chưa xác nhận trả kho' : 'Chưa ghi nhận sử dụng' }}</p>
+                    <p class="font-medium text-ink-800">{{ item.usageStatus === 'used' ? 'Đã dùng · chưa có số lượng chi tiết' : item.usageStatus === 'returned' ? 'Đã ghi nhận không dùng · chưa xác nhận trả kho' : 'Chưa ghi nhận sử dụng' }}</p>
                   </div>
 
-                  <p v-if="unapprovedItem(item)" class="text-sm text-warning-800">Chưa được khách duyệt linh kiện này. Thực dùng tối đa 0; báo giá bổ sung để xin duyệt hoặc khai trả toàn bộ.</p>
-                  <div class="part-item-actions flex flex-wrap gap-2" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
-                    <template v-if="canRecordUsage(pr, item) && !record">
-                      <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                        :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
-                        :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
-                        :disabled="actionLoading || disabled || usageLimit(item) < item.quantity" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
-                      <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                        :class="item.usageStatus === 'returned' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
-                        :aria-pressed="item.usageStatus === 'returned'" :aria-label="`Ghi nhận không dùng ${item.partNameSnapshot}`"
-                        :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')"><RotateCcw :size="16" class="shrink-0" aria-hidden="true" />Hoàn trả</button>
-                    </template>
-                    <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && item.partSource === 'fixhome' && record && usageLimit(item) > 0" type="button"
-                      data-testid="edit-part-usage"
-                      class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                      :disabled="actionLoading || disabled || returnsLoadError"
-                      :aria-label="`Ghi số lượng thực dùng ${item.partNameSnapshot}`"
-                      :aria-expanded="!!partialUsageEditing[item.id]" :aria-controls="`part-usage-editor-${item.id}`"
-                      @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
-                      <Check :size="16" class="shrink-0" aria-hidden="true" />{{ partialUsageEditing[item.id] ? 'Đóng nhập' : 'Ghi thực dùng' }}
-                    </button>
-                    <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && record && !record.usageRecorded && record.usedQty === 0 && usageLimit(item) === 0" type="button"
-                      data-testid="confirm-zero-usage" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                      :disabled="actionLoading || disabled || returnsLoadError" @click="partialUsageDraft[item.id] = 0; handlePartialUsage(pr.id, item.id)"><RotateCcw :size="16" aria-hidden="true" />Xác nhận không dùng</button>
-                    <button v-if="record && canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button"
-                      data-testid="open-declare-return"
-                      class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-ink-300 px-2 text-sm font-semibold text-ink-700 hover:bg-ink-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                      :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
-                      :aria-expanded="declareTarget?.itemId === item.id" :aria-controls="`part-return-editor-${item.id}`"
-                      :disabled="declareSubmitting || returnsLoadError || disabled || bulkReturnOpen || !!pendingBulkDeclarations[item.id]" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
-                      <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
-                    </button>
+                  <p v-if="unapprovedItem(item)" class="text-xs sm:text-sm text-warning-800">Chưa được khách duyệt linh kiện này. Thực dùng tối đa 0; báo giá bổ sung để xin duyệt hoặc khai trả toàn bộ.</p>
+                  <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-ink-200/60">
+                    <div class="min-w-0 flex-1 text-xs">
+                      <p v-if="record && record.usageRecorded === false" class="inline-flex items-center gap-1.5 text-ink-600 font-medium">
+                        <span class="h-1.5 w-1.5 rounded-full bg-warning-500 shrink-0" aria-hidden="true"></span>
+                        Chưa chốt số lượng thực dùng.
+                      </p>
+                      <p v-else-if="record && pendingDeclaredQty(record) > 0" class="inline-flex items-center gap-1.5 font-medium text-warning-800"><Clock :size="14" class="shrink-0" aria-hidden="true" />Đang chờ quản lý xác nhận nhận thực tế, chưa hoàn tất trả kho.</p>
+                      <p v-else-if="record && record.outstandingQty === 0 && record.managerAcceptedQty > 0" class="inline-flex items-center gap-1.5 font-medium text-success-700"><CheckCircle2 :size="14" class="shrink-0" aria-hidden="true" />Đã nhận đủ số linh kiện hoàn trả.</p>
+                    </div>
+                    <div class="part-item-actions flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end" :data-testid="`part-actions-${item.id}`" role="group" :aria-label="`Sử dụng và khai trả ${item.partNameSnapshot}`">
+                      <template v-if="canRecordUsage(pr, item) && !record">
+                        <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] sm:flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border bg-white px-4 text-sm font-semibold transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                          :class="item.usageStatus === 'used' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
+                          :aria-pressed="item.usageStatus === 'used'" :aria-label="`Ghi nhận đã dùng ${item.partNameSnapshot}`"
+                          :disabled="actionLoading || disabled || usageLimit(item) < item.quantity" @click="handleUpdateUsage(pr.id, item.id, 'used')"><Check :size="16" class="shrink-0" aria-hidden="true" />Đã dùng</button>
+                        <button type="button" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] sm:flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border bg-white px-4 text-sm font-semibold transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                          :class="item.usageStatus === 'returned' ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-ink-300 text-ink-700 hover:bg-ink-50'"
+                          :aria-pressed="item.usageStatus === 'returned'" :aria-label="`Ghi nhận không dùng ${item.partNameSnapshot}`"
+                          :disabled="actionLoading || disabled" @click="handleUpdateUsage(pr.id, item.id, 'returned')"><RotateCcw :size="16" class="shrink-0" aria-hidden="true" />Hoàn trả</button>
+                      </template>
+                      <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && item.partSource === 'fixhome' && record && usageLimit(item) > 0" type="button"
+                        data-testid="edit-part-usage"
+                        class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] sm:flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-ink-300 bg-white px-4 text-sm font-semibold text-ink-800 hover:bg-ink-50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                        :disabled="actionLoading || disabled || returnsLoadError"
+                        :aria-label="`Ghi số lượng thực dùng ${item.partNameSnapshot}`"
+                        :aria-expanded="!!partialUsageEditing[item.id]" :aria-controls="`part-usage-editor-${item.id}`"
+                        @click="partialUsageEditing[item.id] = !partialUsageEditing[item.id]">
+                        <Check :size="16" class="shrink-0" aria-hidden="true" />{{ partialUsageEditing[item.id] ? 'Đóng nhập' : 'Ghi thực dùng' }}
+                      </button>
+                      <button v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && record && !record.usageRecorded && record.usedQty === 0 && usageLimit(item) === 0" type="button"
+                        data-testid="confirm-zero-usage" class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] sm:flex-none items-center justify-center gap-1.5 rounded-xl border border-ink-300 bg-white px-4 text-sm font-semibold text-ink-800 hover:bg-ink-50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                        :disabled="actionLoading || disabled || returnsLoadError" @click="partialUsageDraft[item.id] = 0; handlePartialUsage(pr.id, item.id)"><RotateCcw :size="16" aria-hidden="true" />Xác nhận không dùng</button>
+                      <button v-if="record && canDeclareMoreQty(record) > 0 && canDeclareReturn(pr, item)" type="button"
+                        data-testid="open-declare-return"
+                        class="inline-flex min-h-11 min-w-0 flex-[1_1_9rem] sm:flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-ink-300 bg-white px-4 text-sm font-semibold text-ink-800 hover:bg-ink-50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
+                        :aria-label="`Khai trả kho ${item.partNameSnapshot}`"
+                        :aria-expanded="declareTarget?.itemId === item.id" :aria-controls="`part-return-editor-${item.id}`"
+                        :disabled="declareSubmitting || returnsLoadError || disabled || bulkReturnOpen || !!pendingBulkDeclarations[item.id]" @click="openDeclareReturn(pr.id, item.id, item.partNameSnapshot, record)">
+                        <Undo2 :size="16" class="shrink-0" aria-hidden="true" />Khai trả kho
+                      </button>
+                    </div>
                   </div>
                   <div v-if="isUnderRepair && !usageFrozen && pr.status === 'received' && item.partSource === 'fixhome' && record && usageLimit(item) > 0 && partialUsageEditing[item.id]"
-                    :id="`part-usage-editor-${item.id}`" class="space-y-3 rounded-lg bg-ink-50 p-3" data-testid="partial-usage-editor">
+                    :id="`part-usage-editor-${item.id}`" class="space-y-3 rounded-xl bg-white border border-ink-200/80 p-3.5" data-testid="partial-usage-editor">
                     <p class="text-xs text-ink-700">Dự kiến cần trả: <strong>{{ record.issuedQty - (partialUsageDraft[item.id] ?? record.usedQty) - record.managerAcceptedQty }}</strong> · Đã nhận lại: {{ record.managerAcceptedQty }}</p>
                     <div class="flex flex-wrap items-end gap-2">
                       <label class="min-w-28 flex-1 text-xs font-medium text-ink-700">
