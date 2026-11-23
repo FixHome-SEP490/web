@@ -5,13 +5,13 @@ import {
   Bot,
   CalendarPlus,
   ChevronDown,
-  ClipboardList,
   Home,
   LayoutGrid,
   MessageSquare,
   ShieldCheck,
   Sparkles,
   TicketPercent,
+  Wrench,
 } from 'lucide-vue-next';
 import { FhButton } from '../index';
 import NotificationBellDropdown from '../notifications/NotificationBellDropdown.vue';
@@ -37,7 +37,7 @@ const prefetchRoute = useRoutePrefetch();
 
 const navItems = [
   { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
-  { to: '/app/orders', label: 'Đơn sửa chữa', icon: ClipboardList, exact: false },
+  { to: '/app/orders', label: 'Đơn sửa chữa', icon: Wrench, exact: false },
   { to: '/app/warranties', label: 'Bảo hành', icon: ShieldCheck, exact: false },
   { to: '/app/messages', label: 'Tin nhắn', icon: MessageSquare, exact: false },
   { to: '/app/vouchers', label: 'Ưu đãi', icon: TicketPercent, exact: false },

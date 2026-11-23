@@ -21,6 +21,7 @@ import { useCachedQuery } from '../../composables/useCachedQuery';
 import { sharedQueries } from '../../lib/queries';
 import type { ServiceOrderItem } from '../../api/orders.api';
 import { vnDateString, vnTimeString } from '../../utils/vn-time';
+import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const authStore = useAuthStore();
 const isServiceManager = computed(() => authStore.userRole === 'SERVICE_MANAGER');
@@ -315,10 +316,20 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
                 </td>
 
                 <!-- Dịch vụ -->
-                <td class="px-4 py-3.5 text-ink-900 font-medium max-w-[200px]">
-                  <span class="line-clamp-1" :title="row.serviceName">
-                    {{ row.serviceName || 'Dịch vụ sửa chữa' }}
-                  </span>
+                <td class="px-4 py-3.5 text-ink-900 font-medium max-w-[220px]">
+                  <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-blue-100/80 bg-blue-50/50 p-1 overflow-hidden">
+                      <img
+                        :src="getServiceArtworkUrl({ name: row.serviceName })"
+                        :alt="row.serviceName || 'Dịch vụ sửa chữa'"
+                        class="h-full w-full object-contain select-none pointer-events-none"
+                        loading="lazy"
+                      />
+                    </div>
+                    <span class="line-clamp-1 truncate" :title="row.serviceName">
+                      {{ row.serviceName || 'Dịch vụ sửa chữa' }}
+                    </span>
+                  </div>
                 </td>
 
                 <!-- Khách hàng -->
