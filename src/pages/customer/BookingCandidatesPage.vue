@@ -553,38 +553,40 @@ const selectedTechs = computed(() => {
     </Transition>
 
     <!-- Success Feedback Modal with Smooth Transitions -->
-    <Transition name="fh-modal">
-      <div
-        v-if="inviteSent"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/55 p-4"
-      >
-        <div class="fh-modal-panel bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
-          <div class="mx-auto max-w-[130px] flex items-center justify-center">
-            <img
-              :src="'/images/ui/booking-confirmed.png'"
-              alt="Thành công"
-              class="w-full h-auto max-h-32 object-contain drop-shadow-md select-none pointer-events-none"
-              loading="lazy"
-            />
+    <Teleport to="body">
+      <Transition name="fh-modal">
+        <div
+          v-if="inviteSent"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/55 p-4 backdrop-blur-xs"
+        >
+          <div class="fh-modal-panel bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
+            <div class="mx-auto max-w-[130px] flex items-center justify-center">
+              <img
+                :src="'/images/ui/booking-confirmed.png'"
+                alt="Thành công"
+                class="w-full h-auto max-h-32 object-contain drop-shadow-md select-none pointer-events-none"
+                loading="lazy"
+              />
+            </div>
+            <div class="space-y-1.5">
+              <h3 class="text-xl font-bold text-ink-900 tracking-tight">Đã gửi lời mời thành công</h3>
+              <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
+                {{ successMessage }}
+              </p>
+            </div>
+            <FhButton
+              data-testid="view-matching-booking"
+              variant="primary"
+              size="md"
+              class="w-full justify-center shadow-xs"
+              @click="router.push(backTarget)"
+            >
+              Xem trạng thái yêu cầu
+            </FhButton>
           </div>
-          <div class="space-y-1.5">
-            <h3 class="text-xl font-bold text-ink-900 tracking-tight">Đã gửi lời mời thành công</h3>
-            <p class="text-xs sm:text-sm text-ink-600 leading-relaxed text-pretty">
-              {{ successMessage }}
-            </p>
-          </div>
-          <FhButton
-            data-testid="view-matching-booking"
-            variant="primary"
-            size="md"
-            class="w-full justify-center shadow-xs"
-            @click="router.push(backTarget)"
-          >
-            Xem trạng thái yêu cầu
-          </FhButton>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
 
     <!-- Floating Sticky Action Bar -->
     <Transition name="fh-dock">

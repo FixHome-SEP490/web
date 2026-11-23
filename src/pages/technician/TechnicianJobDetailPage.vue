@@ -2241,6 +2241,17 @@ const openAcPartPicker = (replaceIndex: number | null = null) => {
   void loadAcCatalog();
 };
 
+const selectedCatalogPartQuantities = computed(() => {
+  const target = partPickerPurpose.value === 'quotation' ? quotationItems.value : acItems.value;
+  const counts = new Map<string, number>();
+  for (const item of target) {
+    if (item.type === 'PARTS' && item.partCatalogId) {
+      counts.set(item.partCatalogId, (counts.get(item.partCatalogId) ?? 0) + (item.quantity || 1));
+    }
+  }
+  return counts;
+});
+
 const selectPartForAc = (part: FixHomePart) => {
   acPartsMap.value.set(part.id, part);
   const newItem: QuotationItemPayload = {
@@ -2258,8 +2269,28 @@ const selectPartForAc = (part: FixHomePart) => {
 
   const target = partPickerPurpose.value === 'quotation' ? quotationItems : acItems;
   const index = acTargetItemIndex.value;
+  const existingIdx = target.value.findIndex(
+    (item) => item.type === 'PARTS' && item.partCatalogId === part.id,
+  );
+
   if (index !== null && target.value[index]) {
-    target.value[index] = { ...newItem, quantity: target.value[index].quantity || 1 };
+    const lineQty = target.value[index].quantity || 1;
+    if (existingIdx !== -1 && existingIdx !== index) {
+      target.value[existingIdx] = {
+        ...target.value[existingIdx],
+        quantity: (target.value[existingIdx].quantity || 1) + lineQty,
+      };
+      target.value.splice(index, 1);
+      notifySuccess(`Đã gộp "${part.name}" vào dòng có sẵn (SL: ${target.value[existingIdx > index ? existingIdx - 1 : existingIdx].quantity}).`);
+    } else {
+      target.value[index] = { ...newItem, quantity: lineQty };
+    }
+  } else if (existingIdx !== -1) {
+    target.value[existingIdx] = {
+      ...target.value[existingIdx],
+      quantity: (target.value[existingIdx].quantity || 1) + 1,
+    };
+    notifySuccess(`Đã tăng số lượng "${part.name}" lên ${target.value[existingIdx].quantity}.`);
   } else if (target.value.length === 1 && !target.value[0].description.trim() && target.value[0].unitPrice === 0) {
     target.value = [newItem];
   } else {
@@ -3874,6 +3905,7 @@ const toggleMore = async () => {
                     />
 
                     <input
+                      v-if="item.type === 'PARTS'"
                       v-model.number="item.quantity"
                       type="number"
                       min="1"
@@ -4079,7 +4111,7 @@ const toggleMore = async () => {
           aria-modal="true"
           aria-labelledby="departure-choice-title"
           aria-describedby="departure-choice-description"
-          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-xl p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -4108,7 +4140,7 @@ const toggleMore = async () => {
 
     <Transition name="fh-modal">
       <div v-if="completionConfirmOpen" class="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/50 sm:items-center sm:p-4 backdrop-blur-xs" @click.self="!actionLoading && (completionConfirmOpen = false)">
-        <section role="dialog" aria-modal="true" aria-labelledby="completion-confirm-title" class="fh-modal-panel fh-modal-panel--sheet w-full space-y-4 rounded-t-[20px] bg-white p-5 sm:max-w-lg sm:rounded-[20px] sm:p-6" data-testid="completion-confirm-dialog">
+        <section role="dialog" aria-modal="true" aria-labelledby="completion-confirm-title" class="fh-modal-panel fh-modal-panel--sheet w-full space-y-4 rounded-t-[20px] bg-white p-5 sm:max-w-xl sm:rounded-[20px] sm:p-6 max-h-[90dvh] overflow-y-auto overscroll-contain" data-testid="completion-confirm-dialog">
           <h2 id="completion-confirm-title" class="text-lg font-semibold text-ink-900">Còn khoản phát sinh chưa báo?</h2>
           <p class="text-sm text-ink-700">Hoàn tất sửa sẽ chốt quyết toán và khóa báo giá bổ sung ngay, kể cả khi khách chưa thanh toán. Kiểm tra tiền công, linh kiện và ảnh của máy này trước khi xác nhận.</p>
           <p class="text-sm text-ink-700">{{ additionalHistorySummary }}</p>
@@ -4170,7 +4202,7 @@ const toggleMore = async () => {
           role="dialog"
           aria-modal="true"
           aria-labelledby="cancel-order-title"
-          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
           data-testid="cancel-order-dialog"
         >
           <div class="flex items-start justify-between gap-3">
@@ -4225,7 +4257,7 @@ const toggleMore = async () => {
           role="dialog"
           aria-modal="true"
           aria-labelledby="overrun-release-title"
-          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-md p-5 sm:p-6 space-y-4"
+          class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-lg p-5 sm:p-6 space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain"
           data-testid="overrun-release-dialog"
         >
           <div>
@@ -4316,7 +4348,7 @@ const toggleMore = async () => {
         class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-900/50 backdrop-blur-xs"
         @click.self="showAcPartPicker = false"
       >
-        <div ref="partPickerDialog" role="dialog" aria-modal="true" aria-labelledby="part-picker-title" class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-2xl max-h-[85dvh] flex flex-col overflow-hidden">
+        <div ref="partPickerDialog" role="dialog" aria-modal="true" aria-labelledby="part-picker-title" class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-[20px] shadow-(--shadow-e3) w-full sm:max-w-2xl max-h-[90dvh] sm:min-h-[30rem] flex flex-col overflow-hidden">
         <div class="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
           <h3 id="part-picker-title" class="text-lg font-bold text-ink-900">Chọn linh kiện FixHome</h3>
           <button type="button" class="w-10 h-10 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 flex items-center justify-center" aria-label="Đóng" @click="showAcPartPicker = false">
@@ -4378,7 +4410,15 @@ const toggleMore = async () => {
                 @click="selectPartForAc(part)"
               >
                 <span class="min-w-0 flex-1">
-                  <span class="block font-medium text-ink-900 truncate">{{ part.name }}</span>
+                  <span class="flex items-center gap-2">
+                    <span class="block font-medium text-ink-900 truncate">{{ part.name }}</span>
+                    <span
+                      v-if="selectedCatalogPartQuantities.get(part.id)"
+                      class="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold font-num text-brand-700 border border-brand-200"
+                    >
+                      Đã chọn · SL {{ selectedCatalogPartQuantities.get(part.id) }}
+                    </span>
+                  </span>
                   <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-500">
                     <span v-if="part.sku" class="font-num whitespace-nowrap">{{ part.sku }}</span>
                     <span class="inline-flex items-center gap-1 text-success-700 whitespace-nowrap"><ShieldCheck :size="12" /> {{ formatAcWarrantyBadge(part.warrantyDays) }}</span>

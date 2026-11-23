@@ -2186,11 +2186,12 @@ const parsedReview = computed(() => {
     </div>
 
     <!-- Payment Modal -->
-    <div
-      v-if="showPaymentModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full max-h-[90dvh] overflow-y-auto p-6 space-y-4 shadow-xl">
+    <Transition name="fh-modal">
+      <div
+        v-if="showPaymentModal"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/55 backdrop-blur-xs sm:p-4"
+      >
+        <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-2xl w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5 shadow-2xl">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-ink-900">Thanh toán đơn</h3>
@@ -2321,8 +2322,9 @@ const parsedReview = computed(() => {
           >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>
           </template>
         </template>
+        </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Lightbox for repair photos -->
     <div

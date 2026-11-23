@@ -362,7 +362,7 @@ onBeforeUnmount(() => {
           :aria-labelledby="titleId"
           :aria-describedby="descriptionId"
           :aria-busy="state === 'loading' || previewLoading || applying"
-          class="voucher-sheet-panel flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[var(--radius-lg)] border border-ink-200 bg-white shadow-[var(--shadow-e3)] sm:rounded-[var(--radius-lg)]"
+          class="voucher-sheet-panel flex max-h-[92dvh] w-full sm:max-w-2xl sm:min-h-[32rem] flex-col overflow-hidden rounded-t-[var(--radius-lg)] border border-ink-200 bg-white shadow-[var(--shadow-e3)] sm:rounded-[var(--radius-lg)]"
           data-testid="voucher-selection-sheet"
           @keydown="onPanelKeydown"
         >
@@ -391,7 +391,7 @@ onBeforeUnmount(() => {
             </button>
           </header>
 
-          <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+          <div class="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
             <section
               class="rounded-[var(--radius-md)] border border-warning-200 bg-warning-50 p-3.5 text-warning-900"
               data-testid="voucher-selection-reservation"

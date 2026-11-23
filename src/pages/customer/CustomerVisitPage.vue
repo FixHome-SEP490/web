@@ -80,6 +80,7 @@ const childOrderStatusUnavailable = ref(false);
 const expandedDevices = ref<Record<string, boolean>>({});
 const selectedVisitItemId = ref<string | null>(null);
 const checkoutLoading = ref(false);
+const hasCompletedInitialRead = ref(false);
 const child = useVisitOrderDetails(() => visitId.value, load, isStoppedOrder);
 const { details: orderDetails, fresh: childDetailsFresh, deciding: childDeciding, feedback: childFeedback } = child;
 const quotationChecks = ref<Record<string, string>>({});
@@ -267,6 +268,9 @@ async function readVisit() {
     if (!disposed && lookupVersion === childOrderLookupVersion) {
       loading.value = false;
       checkoutLoading.value = reloadRequested || refreshTimer !== null;
+      if (visit.value && checkout.value && !childOrderStatusLoading.value) {
+        hasCompletedInitialRead.value = true;
+      }
     }
   }
 }
@@ -306,6 +310,7 @@ watch(visitId, () => {
   message.value = null;
   cancelOpen.value = false;
   rescheduleOpen.value = false;
+  hasCompletedInitialRead.value = false;
   loading.value = true;
   void load();
 });
@@ -405,14 +410,15 @@ const failedBookingIds = computed(() => {
 });
 const held = computed(() => (checkout.value?.devices ?? []).some((device) => device.serviceOrderId));
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
-const canChooseTechnician = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
+const actionVisibilityPending = computed(() => !hasCompletedInitialRead.value && checkoutLoading.value);
+const canChooseTechnician = computed(() => !actionVisibilityPending.value && !checkoutError.value && !cancelled.value && !held.value && ['SUBMITTED', 'CLOSED'].includes(matchingState.value));
 const rescheduled = computed(() => (visit.value?.items ?? []).some((item) => (item.booking?.rescheduleCount ?? 0) >= 1));
 const repairStarted = computed(() => (checkout.value?.devices ?? []).some((device) => device.state !== 'open')
   || childOrderStatusLoading.value
   || childOrderStatusUnavailable.value
   || Object.values(childOrderStatuses.value).some((status) => status === 'UNDER_REPAIR'));
-const canReschedule = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !rescheduled.value && !repairStarted.value);
-const canCancel = computed(() => !checkoutLoading.value && !checkoutError.value && !cancelled.value && !repairStarted.value);
+const canReschedule = computed(() => !actionVisibilityPending.value && !checkoutError.value && !cancelled.value && !rescheduled.value && !repairStarted.value);
+const canCancel = computed(() => !actionVisibilityPending.value && !checkoutError.value && !cancelled.value && !repairStarted.value);
 const outcomeProgress = computed(() => {
   if (cancelled.value || !checkout.value) return null;
   const devices = checkout.value.devices;
@@ -1169,6 +1175,7 @@ async function answerCash(agreed: boolean) {
               v-if="canChooseTechnician"
               variant="primary"
               size="md"
+              :disabled="checkoutLoading"
               data-testid="visit-choose-technician"
               @click="router.push(`/app/visits/${visitId}/candidates`)"
             >
@@ -1181,6 +1188,7 @@ async function answerCash(agreed: boolean) {
               v-if="canReschedule"
               variant="secondary"
               size="md"
+              :disabled="checkoutLoading"
               data-testid="visit-reschedule"
               @click="openReschedule"
             >
@@ -1203,6 +1211,7 @@ async function answerCash(agreed: boolean) {
               v-if="canCancel"
               variant="danger"
               size="md"
+              :disabled="checkoutLoading"
               data-testid="visit-cancel"
               @click="cancelOpen = true"
             >
@@ -1451,13 +1460,12 @@ async function answerCash(agreed: boolean) {
                   </div>
                   <div>
                     <h2 id="visit-invoice-summary-title" class="text-base font-bold text-ink-900">Hóa đơn cả lượt · {{ invoiceSummary.rows.length }} máy</h2>
-                    <p class="text-xs text-ink-500">Chi phí từng thiết bị và tổng cộng</p>
+                    <p class="text-xs text-ink-500">Chi phí từng thiết bị và tổng cộng<span v-if="checkoutLoading" role="status" class="ml-1.5 font-medium">· Đang cập nhật hóa đơn…</span></p>
                   </div>
                 </div>
               </div>
             </div>
             <div class="p-4 sm:p-5 space-y-3.5 bg-white">
-            <p v-if="checkoutLoading" role="status" class="text-ink-600">Đang cập nhật hóa đơn…</p>
             <ul class="divide-y divide-ink-100">
               <li v-for="row in invoiceSummary.rows" :key="row.item.id" class="py-2.5 first:pt-0 last:pb-0" :data-testid="`visit-invoice-row-${row.item.sequence}`">
                 <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
@@ -1511,11 +1519,10 @@ async function answerCash(agreed: boolean) {
 
           <section v-if="checkout && held" class="space-y-4 rounded-2xl border border-ink-200/85 bg-white p-4 text-sm sm:p-5 shadow-2xs" aria-labelledby="visit-checkout-title" data-testid="visit-checkout" :data-checkout-state="checkoutState" :aria-busy="checkoutLoading">
             <p v-if="financialFollowupRequired" role="status" data-testid="visit-financial-followup" class="rounded-xl border border-warning-200 bg-warning-50 p-3 text-warning-800">Có máy đã dừng sửa và chứng từ cũ cần đối soát. Số tiền phải trả hoặc hoàn tiền: Chưa xác định. Chưa thực hiện thanh toán mới cho lượt này; việc đặt lại chỉ mở khi đã xác minh đủ điều kiện.</p>
-            <p v-if="checkoutLoading" role="status" class="text-sm text-ink-600">Đang cập nhật thanh toán…</p>
             <div class="flex flex-col gap-2 pb-2 sm:flex-row sm:items-baseline sm:justify-between">
               <div>
                 <h2 id="visit-checkout-title" data-testid="visit-checkout-title" class="text-base font-semibold text-ink-900">Thanh toán</h2>
-                <p id="visit-checkout-scope" data-testid="visit-checkout-scope" class="text-xs text-ink-500">Gồm {{ checkout.devices.length }} thiết bị</p>
+                <p id="visit-checkout-scope" data-testid="visit-checkout-scope" class="text-xs text-ink-500">Gồm {{ checkout.devices.length }} thiết bị<span v-if="checkoutLoading" role="status" class="ml-1.5 font-medium text-ink-500">· Đang cập nhật…</span></p>
               </div>
               <span v-if="checkoutState === 'paid'" data-testid="visit-checkout-state" class="font-semibold text-success-700">Đã thanh toán</span>
               <span v-else-if="checkoutState === 'zero_due'" data-testid="visit-checkout-state" class="font-semibold text-ink-700">Không phát sinh khoản cần thanh toán</span>
@@ -1648,7 +1655,7 @@ async function answerCash(agreed: boolean) {
     <!-- Reschedule Modal -->
     <Transition name="fh-modal">
       <div v-if="rescheduleOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs p-0 sm:p-4" @click.self="rescheduleOpen = false">
-        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-lg space-y-4 overflow-y-auto rounded-t-[24px] sm:rounded-2xl bg-white p-5 sm:p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
+        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-xl space-y-4 overflow-y-auto overscroll-contain rounded-t-[24px] sm:rounded-2xl bg-white p-5 sm:p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-reschedule-title">
           <div class="flex items-start justify-between gap-3">
             <h2 id="visit-reschedule-title" class="text-lg font-bold text-ink-900">Đổi lịch cho cả lượt</h2>
             <button type="button" class="flex h-9 w-9 items-center justify-center rounded-xl text-ink-500 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600" aria-label="Đóng" @click="rescheduleOpen = false"><X :size="18" /></button>
@@ -1663,7 +1670,7 @@ async function answerCash(agreed: boolean) {
     <!-- Cancel Confirmation Modal (Professional UI according to UX/UI specification) -->
     <Transition name="fh-modal">
       <div v-if="cancelOpen" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/50 backdrop-blur-xs p-0 sm:p-4" @click.self="cancelOpen = false">
-        <div class="fh-modal-panel fh-modal-panel--sheet w-full sm:max-w-lg space-y-5 rounded-t-[24px] sm:rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
+        <div class="fh-modal-panel fh-modal-panel--sheet max-h-[90vh] w-full sm:max-w-xl space-y-5 overflow-y-auto overscroll-contain rounded-t-[24px] sm:rounded-2xl bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visit-cancel-title">
           <div class="flex items-start gap-4">
             <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-danger-100 text-danger-600 ring-8 ring-danger-50" aria-hidden="true">
               <AlertTriangle :size="24" />
