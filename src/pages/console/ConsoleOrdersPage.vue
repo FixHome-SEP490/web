@@ -337,14 +337,26 @@ function formatTechInfo(tech?: { id?: string; fullName?: string; phoneNumber?: s
       code,
     };
   }
-  const numPart = (tech.id || '').replace(/\D/g, '');
+  const parenMatch = tech.fullName.match(/^(.*?)\s*\(([^)]+)\)$/i);
+  let name = tech.fullName;
+  let codeSeed = '';
+  if (parenMatch) {
+    name = parenMatch[1].trim();
+    const digitsInParen = parenMatch[2].replace(/\D/g, '');
+    if (digitsInParen) {
+      codeSeed = digitsInParen;
+    }
+  }
+  const rawDigits = codeSeed || (tech.id || '').replace(/\D/g, '');
+  const trimmed = rawDigits.replace(/^0+/, '') || rawDigits;
+  const numPart = trimmed.length > 4 ? trimmed.slice(-4) : trimmed;
   const code = numPart
     ? `KTV-${numPart.padStart(3, '0')}`
     : tech.id
       ? `KTV-${tech.id.slice(0, 3).toUpperCase()}`
       : 'KTV';
   return {
-    name: tech.fullName,
+    name,
     code,
   };
 }
@@ -752,25 +764,25 @@ function exportToCsv() {
         <table class="w-full text-left text-sm">
           <thead>
             <tr class="border-b border-ink-100/90 bg-slate-50/70">
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500 first:pl-5">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500 first:pl-5">
                 Mã đơn
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500">
                 Dịch vụ
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500">
                 Khách hàng
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500">
                 Kỹ thuật viên
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500">
                 Tổng tiền
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-xs font-semibold text-ink-500">
                 Trạng thái
               </th>
-              <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-500 last:pr-5">
+              <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-right text-xs font-semibold text-ink-500 last:pr-5">
                 Thao tác
               </th>
             </tr>
@@ -805,7 +817,7 @@ function exportToCsv() {
               class="align-middle transition-colors duration-150 hover:bg-slate-50/70"
             >
               <!-- 1. Mã đơn -->
-              <td class="whitespace-nowrap px-4 py-4 first:pl-5">
+              <td class="whitespace-nowrap px-3.5 py-3.5 first:pl-5">
                 <router-link
                   :to="`/console/orders/${row.id}`"
                   class="block font-num text-sm font-semibold text-brand-600 transition-colors hover:underline"
@@ -818,10 +830,10 @@ function exportToCsv() {
               </td>
 
               <!-- 2. Dịch vụ (Đồng bộ icon/artwork sửa thiết bị chuẩn của khách hàng) -->
-              <td class="px-4 py-4">
-                <div class="flex items-center gap-3">
+              <td class="px-3.5 py-3.5">
+                <div class="flex items-center gap-2.5">
                   <div
-                    class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-blue-100/80 bg-blue-50/50 p-1"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-blue-100/80 bg-blue-50/50 p-1"
                   >
                     <img
                       v-if="!artworkErrors[row.id]"
@@ -839,7 +851,7 @@ function exportToCsv() {
                       aria-hidden="true"
                     />
                   </div>
-                  <div class="min-w-0 max-w-xs xl:max-w-sm">
+                  <div class="min-w-0 max-w-[170px] lg:max-w-[200px] xl:max-w-[240px]">
                     <div class="truncate text-sm font-medium text-ink-900" :title="row.serviceName">
                       {{ row.serviceName }}
                     </div>
@@ -851,13 +863,13 @@ function exportToCsv() {
               </td>
 
               <!-- 3. Khách hàng -->
-              <td class="whitespace-nowrap px-4 py-4">
-                <div class="flex items-center gap-3">
+              <td class="whitespace-nowrap px-3.5 py-3.5">
+                <div class="flex items-center gap-2.5">
                   <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
                     {{ getCustomerInitial(row.customerName) }}
                   </div>
-                  <div>
-                    <div class="text-sm font-medium text-ink-900">
+                  <div class="min-w-0 max-w-[110px] lg:max-w-[130px]">
+                    <div class="truncate text-sm font-medium text-ink-900" :title="row.customerName">
                       {{ row.customerName }}
                     </div>
                     <div class="mt-0.5 font-num text-xs text-ink-400">
@@ -868,8 +880,8 @@ function exportToCsv() {
               </td>
 
               <!-- 4. Kỹ thuật viên -->
-              <td class="whitespace-nowrap px-4 py-4">
-                <div v-if="row.technician" class="flex items-center gap-3">
+              <td class="whitespace-nowrap px-3.5 py-3.5">
+                <div v-if="row.technician" class="flex items-center gap-2.5">
                   <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-medium text-slate-700">
                     <img
                       v-if="row.technician.avatarUrl"
@@ -879,11 +891,11 @@ function exportToCsv() {
                     />
                     <User v-else :size="15" class="text-slate-500" aria-hidden="true" />
                   </div>
-                  <div>
-                    <div class="text-sm font-medium text-ink-900">
+                  <div class="min-w-0 max-w-[130px] lg:max-w-[150px]">
+                    <div class="truncate text-sm font-medium text-ink-900" :title="formatTechInfo(row.technician)?.name">
                       {{ formatTechInfo(row.technician)?.name }}
                     </div>
-                    <div class="mt-0.5 font-num text-xs text-ink-400">
+                    <div class="mt-0.5 truncate font-num text-xs text-ink-400" :title="formatTechInfo(row.technician)?.code">
                       {{ formatTechInfo(row.technician)?.code }}
                     </div>
                   </div>
@@ -894,12 +906,12 @@ function exportToCsv() {
               </td>
 
               <!-- 5. Tổng tiền -->
-              <td class="whitespace-nowrap px-4 py-4 font-num text-sm font-semibold text-ink-900">
+              <td class="whitespace-nowrap px-3.5 py-3.5 font-num text-sm font-semibold text-ink-900">
                 {{ formatCurrencyClean(row.grandTotal) }}
               </td>
 
               <!-- 6. Trạng thái -->
-              <td class="whitespace-nowrap px-4 py-4">
+              <td class="whitespace-nowrap px-3.5 py-3.5">
                 <span
                   v-if="row.workStopped === true && row.operationalDisposition === 'STOPPED'"
                   class="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800"
@@ -946,7 +958,7 @@ function exportToCsv() {
               </td>
 
               <!-- 7. Thao tác -->
-              <td class="whitespace-nowrap px-4 py-4 text-right last:pr-5">
+              <td class="whitespace-nowrap px-3.5 py-3.5 text-right last:pr-5">
                 <div class="flex items-center justify-end gap-1">
                   <!-- View detail action -->
                   <router-link
