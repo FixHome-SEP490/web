@@ -534,16 +534,16 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
         <ConsoleLoadError v-if="error" :message="error" class="p-6" @retry="loadQueue()" />
         <template v-else>
           <div class="overflow-x-auto overscroll-x-contain">
-            <table class="w-full text-left text-sm">
+            <table class="w-full min-w-[720px] md:min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr class="border-b border-ink-100 bg-slate-50/70 text-xs font-semibold text-ink-600">
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">Mã yêu cầu</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Hạng mục</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Trạng thái</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Kỹ thuật viên</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Khách hàng</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3">Thời gian</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">Thao tác</th>
+                  <th scope="col" class="w-[15%] min-w-[115px] px-2.5 py-3 pl-3 sm:pl-4">Mã yêu cầu</th>
+                  <th scope="col" class="w-[18%] min-w-[125px] px-2 py-3">Hạng mục</th>
+                  <th scope="col" class="w-[18%] min-w-[130px] px-2 py-3">Trạng thái</th>
+                  <th scope="col" class="w-[15%] min-w-[110px] px-2 py-3">Kỹ thuật viên</th>
+                  <th scope="col" class="w-[13%] min-w-[100px] px-2 py-3">Khách hàng</th>
+                  <th scope="col" class="w-[12%] min-w-[95px] px-2 py-3">Thời gian</th>
+                  <th scope="col" class="w-[9%] min-w-[65px] px-2 py-3 pr-3 sm:pr-4 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
@@ -569,23 +569,25 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                 <tr
                   v-for="row in filteredClaims"
                   :key="row.id"
-                  class="transition-colors hover:bg-slate-50/70"
+                  class="transition-colors hover:bg-slate-50/70 cursor-pointer"
+                  @click="$router.push(`/console/warranty/${row.id}`)"
                 >
                   <!-- 1. Mã yêu cầu -->
-                  <td class="whitespace-nowrap px-3.5 py-3 pl-4 sm:pl-5">
+                  <td class="px-2.5 py-2.5 pl-3 sm:pl-4" @click.stop>
                     <router-link
                       :to="`/console/warranty/${row.id}`"
-                      class="font-num text-xs sm:text-sm font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                      class="font-num text-xs sm:text-[13px] font-semibold text-brand-600 hover:text-brand-700 hover:underline block truncate"
+                      :title="'#' + (row.order.code || row.id)"
                     >
                       #{{ row.order.code || row.id.slice(0, 8) }}
                     </router-link>
                   </td>
 
                   <!-- 2. Hạng mục (Đồng bộ artwork dịch vụ 3D chuẩn FixHome) -->
-                  <td class="px-3.5 py-3">
-                    <div class="flex items-center gap-2.5">
+                  <td class="px-2 py-2.5">
+                    <div class="flex items-center gap-2 min-w-0">
                       <div
-                        class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-blue-100/80 bg-blue-50/50 p-1"
+                        class="flex h-7.5 w-7.5 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-blue-100/80 bg-blue-50/50 p-0.5"
                       >
                         <img
                           v-if="!artworkErrors[row.id]"
@@ -598,13 +600,13 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                         <component
                           v-else
                           :is="getServiceIcon(row.order.serviceName)"
-                          :size="16"
+                          :size="15"
                           class="text-brand-600"
                           aria-hidden="true"
                         />
                       </div>
-                      <div class="min-w-0 max-w-[130px] md:max-w-[160px] lg:max-w-[200px] xl:max-w-[240px]">
-                        <div class="truncate text-xs sm:text-sm font-medium text-ink-900" :title="row.order.serviceName">
+                      <div class="min-w-0 flex-1">
+                        <div class="truncate text-xs sm:text-[13px] font-medium text-ink-900" :title="row.order.serviceName">
                           {{ row.order.serviceName || 'Bảo hành dịch vụ' }}
                         </div>
                       </div>
@@ -612,38 +614,40 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   </td>
 
                   <!-- 3. Trạng thái -->
-                  <td class="px-3.5 py-3">
-                    <div class="flex flex-wrap items-center gap-1.5">
+                  <td class="px-2 py-2.5">
+                    <div class="flex flex-col items-start gap-1 min-w-0">
                       <span
-                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] sm:text-xs font-semibold whitespace-nowrap"
+                        class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
                         :class="warrantyClaimToneClasses[meta(row).tone]"
                       >
-                        <component :is="statusBadgeIcon(row)" :size="12" />
-                        <span>{{ meta(row).label }}</span>
+                        <component :is="statusBadgeIcon(row)" :size="11" class="shrink-0" />
+                        <span class="truncate">{{ meta(row).label }}</span>
                       </span>
-                      <span
-                        v-if="row.submittedAfterExpiry"
-                        class="inline-flex items-center rounded-full border border-warning-200/60 bg-warning-50 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-warning-700 whitespace-nowrap"
-                      >
-                        Gửi sau hạn
-                      </span>
-                      <span
-                        v-if="row.autoApproved"
-                        class="inline-flex items-center rounded-full bg-ink-100 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-ink-600 whitespace-nowrap"
-                      >
-                        Tự động duyệt
-                      </span>
+                      <div v-if="row.submittedAfterExpiry || row.autoApproved" class="flex flex-wrap items-center gap-1">
+                        <span
+                          v-if="row.submittedAfterExpiry"
+                          class="inline-flex items-center rounded-full border border-warning-200/60 bg-warning-50 px-1.5 py-0.2 text-[10px] font-medium text-warning-700 whitespace-nowrap"
+                        >
+                          Gửi sau hạn
+                        </span>
+                        <span
+                          v-if="row.autoApproved"
+                          class="inline-flex items-center rounded-full bg-ink-100 px-1.5 py-0.2 text-[10px] font-medium text-ink-600 whitespace-nowrap"
+                        >
+                          Tự động duyệt
+                        </span>
+                      </div>
                     </div>
                   </td>
 
                   <!-- 4. Kỹ thuật viên -->
-                  <td class="px-3.5 py-3">
-                    <div class="flex items-center gap-2">
-                      <div class="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 overflow-hidden ring-1 ring-slate-300/50">
+                  <td class="px-2 py-2.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700 overflow-hidden ring-1 ring-slate-300/50">
                         <span>{{ getInitials(row.technician?.fullName) }}</span>
                       </div>
-                      <div class="min-w-0 max-w-[110px] lg:max-w-[140px] xl:max-w-[180px]">
-                        <span class="block truncate text-xs sm:text-sm font-medium text-ink-800" :title="row.technician?.fullName">
+                      <div class="min-w-0 flex-1">
+                        <span class="block truncate text-xs sm:text-[13px] font-medium text-ink-800" :title="row.technician?.fullName">
                           {{ row.technician?.fullName || '—' }}
                         </span>
                       </div>
@@ -651,10 +655,10 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   </td>
 
                   <!-- 5. Khách hàng -->
-                  <td class="px-3.5 py-3">
-                    <div class="flex items-center gap-1.5 text-xs sm:text-sm text-ink-800">
-                      <User :size="13" class="text-ink-400 shrink-0" />
-                      <div class="min-w-0 max-w-[100px] lg:max-w-[130px] xl:max-w-[160px]">
+                  <td class="px-2 py-2.5">
+                    <div class="flex items-center gap-1.5 min-w-0 text-xs sm:text-[13px] text-ink-800">
+                      <User :size="12" class="text-ink-400 shrink-0" />
+                      <div class="min-w-0 flex-1">
                         <span class="block truncate font-medium text-ink-800" :title="row.order.customerName">
                           {{ row.order.customerName }}
                         </span>
@@ -663,49 +667,54 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   </td>
 
                   <!-- 6. Thời gian -->
-                  <td class="whitespace-nowrap px-3.5 py-3">
-                    <div class="flex items-center gap-1.5 text-xs font-num text-ink-600">
-                      <Clock :size="13" class="text-ink-400 shrink-0" />
+                  <td class="px-2 py-2.5">
+                    <div class="flex items-center gap-1 text-xs font-num text-ink-600 whitespace-nowrap" :title="formatDateTimeVN(row.submittedAt)">
+                      <Clock :size="12" class="text-ink-400 shrink-0 hidden sm:inline" />
                       <span>{{ formatDateTimeVN(row.submittedAt) }}</span>
                     </div>
                   </td>
 
                   <!-- 7. Thao tác -->
-                  <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">
-                    <div class="flex items-center justify-end gap-1.5">
+                  <td class="px-2 py-2.5 pr-3 sm:pr-4 text-right whitespace-nowrap" @click.stop>
+                    <div class="flex items-center justify-end gap-1">
                       <!-- Decision buttons for Service Manager -->
                       <template v-if="canDecide && !closed(row)">
                         <FhButton
                           v-if="row.declineReview === 'pending'"
                           variant="primary"
                           size="sm"
+                          class="!px-2 !py-1 text-xs shrink-0"
                           @click="openModal(row, 'review')"
                         >
-                          Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}
+                          <span>Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}</span>
                         </FhButton>
                         <FhButton
                           v-else-if="row.status === 'inspected'"
                           variant="primary"
                           size="sm"
+                          class="!px-2 !py-1 text-xs shrink-0"
                           @click="openModal(row, 'approve')"
                         >
-                          Duyệt kết luận
+                          <span>Duyệt kết luận</span>
                         </FhButton>
                         <FhButton
                           v-else-if="['submitted', 'accepted'].includes(row.status)"
                           variant="secondary"
                           size="sm"
+                          class="!px-2 !py-1 text-xs shrink-0"
                           @click="openModal(row, 'assign')"
                         >
-                          {{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}
+                          <span class="hidden 2xl:inline">{{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}</span>
+                          <span class="2xl:hidden">{{ row.technician ? 'Đổi thợ' : 'Phân công' }}</span>
                         </FhButton>
                         <FhButton
                           v-else-if="['in_progress', 'awaiting_customer', 'disputed'].includes(row.status)"
                           variant="primary"
                           size="sm"
+                          class="!px-2 !py-1 text-xs shrink-0"
                           @click="openModal(row, 'close')"
                         >
-                          Đóng yêu cầu
+                          <span>Đóng yêu cầu</span>
                         </FhButton>
                       </template>
 
