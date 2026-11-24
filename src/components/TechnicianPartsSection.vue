@@ -1653,33 +1653,54 @@ const getStatusBadgeClass = (status: string) => {
           </section>
 
           <!-- Delivery Shipping & Terms Panels if applicable -->
-          <div v-if="pr.fulfillmentMethod === 'delivery'" class="space-y-3">
-            <DeliveryPhysicalPreview
+          <div v-if="pr.fulfillmentMethod === 'delivery'" class="space-y-2">
+            <p
+              v-if="pr.serviceOrderId === orderId && pr.requestType === 'additional' && isDeliveryPhysicalRequestId(pr.id)"
+              class="px-0.5 text-xs text-ink-500"
+              data-testid="tech-delivery-flow-hint"
+            >
+              Quy trình giao qua ĐVVC: Quản lý kho đề xuất → Khách &amp; Thợ đồng ý → Kho bàn giao &amp; rời kho → Thợ xác nhận đã nhận.
+            </p>
+            <p
+              v-else-if="pr.requestType !== 'additional'"
+              class="rounded-[var(--radius-sm)] bg-ink-50 px-3 py-2 text-xs text-ink-600"
+              data-testid="tech-delivery-non-additional-hint"
+            >
+              Hình thức giao tận nơi cho phiếu trước sửa chữa hoặc bảo hành chưa có thao tác xác nhận giao nhận trực tuyến; liên hệ Quản lý kho để nhận linh kiện hoặc đặt lại nhận tại kho.
+            </p>
+            <div
               v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
-              :request-id="pr.id"
-              :fulfillment-method="pr.fulfillmentMethod"
-              audience="technician"
-            />
-            <DeliveryOperationsPanel
-              v-if="pr.serviceOrderId === orderId && isDeliveryPhysicalRequestId(pr.id)"
-              :request-id="pr.id"
-              :fulfillment-method="pr.fulfillmentMethod"
-              :request-type="pr.requestType"
-              :shipping-fee="pr.shippingFee"
-              audience="technician"
-              :source-owner-id="pr.technicianId"
-            />
-            <DeliveryTermsPanel
-              v-if="pr.serviceOrderId === orderId && pr.requestType === 'additional' && pr.shippingFee > 0 && isDeliveryPhysicalRequestId(pr.id)"
-              :request-id="pr.id"
-              :request-type="pr.requestType"
-              :fulfillment-method="pr.fulfillmentMethod"
-              :shipping-fee="pr.shippingFee"
-              audience="technician"
-              :technician-id="pr.technicianId"
-            />
-            <div v-if="pr.shippingFee > 0 || pr.shippingPolicyVersion" class="text-xs text-brand-700 font-medium">
-              <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
+              class="rounded-[var(--radius-md)] border border-ink-200/80 bg-ink-25/50 divide-y divide-ink-100 overflow-hidden"
+            >
+              <DeliveryPhysicalPreview
+                :request-id="pr.id"
+                :fulfillment-method="pr.fulfillmentMethod"
+                audience="technician"
+                embedded
+              />
+              <DeliveryOperationsPanel
+                :request-id="pr.id"
+                :fulfillment-method="pr.fulfillmentMethod"
+                :request-type="pr.requestType"
+                :shipping-fee="pr.shippingFee"
+                audience="technician"
+                :source-owner-id="pr.technicianId"
+                embedded
+              />
+              <DeliveryTermsPanel
+                v-if="pr.requestType === 'additional' && pr.shippingFee > 0"
+                :request-id="pr.id"
+                :request-type="pr.requestType"
+                :fulfillment-method="pr.fulfillmentMethod"
+                :shipping-fee="pr.shippingFee"
+                audience="technician"
+                :technician-id="pr.technicianId"
+                embedded
+                :delivery-completed="displayPartRequestStatus(pr) === 'received' || pr.status.toLowerCase() === 'completed'"
+              />
+              <div v-if="pr.shippingFee > 0 || pr.shippingPolicyVersion" class="px-4 py-3 text-xs text-brand-700 font-medium">
+                <ShippingShareBreakdown :snapshot="pr" role="technician" :fulfillment-method="pr.fulfillmentMethod" />
+              </div>
             </div>
           </div>
 
@@ -1793,13 +1814,13 @@ const getStatusBadgeClass = (status: string) => {
                       </p>
                     </div>
                     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Còn phải khai</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
-                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Đã khai, chờ nhận</dt><dd class="mt-1 font-num text-base font-bold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-700' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
-                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Khách duyệt tối đa (cả máy)</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
-                      <div class="rounded-lg bg-white border border-ink-200/70 px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Quản lý đã nhận</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
+                      <div class="rounded-[var(--radius-sm)] bg-white px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Còn phải khai</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ canDeclareMoreQty(record) }}</dd></div>
+                      <div class="rounded-[var(--radius-sm)] bg-white px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Đã khai, chờ nhận</dt><dd class="mt-1 font-num text-base font-bold" :class="pendingDeclaredQty(record) > 0 ? 'text-warning-700' : 'text-ink-900'">{{ pendingDeclaredQty(record) }}</dd></div>
+                      <div class="rounded-[var(--radius-sm)] bg-white px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Khách duyệt tối đa (cả máy)</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ approvedPartQuantities && item.partCatalogId ? approvedPartQuantities[item.partCatalogId] ?? 0 : 'Chưa kiểm tra được' }}</dd></div>
+                      <div class="rounded-[var(--radius-sm)] bg-white px-3 py-2.5"><dt class="text-[11px] font-medium text-ink-500">Quản lý đã nhận</dt><dd class="mt-1 font-num text-base font-bold text-ink-900">{{ record.managerAcceptedQty }}</dd></div>
                     </dl>
                   </div>
-                  <div v-else class="space-y-1.5 text-xs text-ink-700 rounded-lg bg-white border border-ink-200/70 px-3 py-2.5">
+                  <div v-else class="space-y-1.5 text-xs text-ink-700 rounded-[var(--radius-sm)] bg-white px-3 py-2.5">
                     <div class="flex flex-wrap items-baseline justify-between gap-2">
                       <p>Số lượng yêu cầu/cấp <strong class="font-num text-ink-900">{{ item.quantity }}</strong></p>
                       <p>Giá trị theo số lượng yêu cầu <FhMoney :amount="item.unitPriceSnapshot * item.quantity" class="font-semibold text-ink-900" /></p>

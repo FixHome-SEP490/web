@@ -77,6 +77,7 @@ const sortOrder = ref<'newest' | 'oldest'>('newest');
 
 const qrModalRequest = ref<PartRequest | null>(null);
 const inspectionRequest = ref<PartRequest | null>(null);
+const deliveryHasQuote = ref<Record<string, boolean>>({});
 
 const selectedId = ref<string | null>(null);
 const selected = computed(() => requests.value.find((row) => row.id === selectedId.value) ?? requests.value[0] ?? null);
@@ -202,7 +203,7 @@ const serverStatusCounts = ref<Record<string, number> | null>(null);
 const stats = computed(() => {
   const reqs = requests.value;
   const counts = serverStatusCounts.value;
-  const count = (status: string) => counts ? (counts[status] ?? 0) : reqs.filter((r) => r.status.toLowerCase() === status).length;
+  const count = (status: string) => counts ? (counts[status] ?? 0) : reqs.filter((r) => displayPartRequestStatus(r).toLowerCase() === status).length;
   return [
     { key: 'requested', label: 'Chờ chuẩn bị', value: count('requested'), statusValue: 'REQUESTED' },
     { key: 'ready', label: 'Sẵn sàng', value: count('ready'), statusValue: 'READY' },
@@ -236,7 +237,7 @@ function statIconBg(key: string) {
 
 const countFor = (status: string) => {
   const counts = serverStatusCounts.value;
-  return counts ? (counts[status] ?? 0) : requests.value.filter((r) => r.status.toLowerCase() === status).length;
+  return counts ? (counts[status] ?? 0) : requests.value.filter((r) => displayPartRequestStatus(r).toLowerCase() === status).length;
 };
 
 const setStatusFilter = (val: string) => {
@@ -621,9 +622,9 @@ function formatInfoDate(dateStr?: string | null): string {
 }
 
 function timelineState(req: PartRequest, step: 2 | 3 | 4): { completed: boolean; active: boolean; time: string } {
-  const status = req.status.toLowerCase();
+  const status = displayPartRequestStatus(req).toLowerCase();
   if (step === 2) {
-    const completed = status !== 'requested';
+    const completed = !['requested', 'cancelled'].includes(status);
     const active = status === 'requested';
     const time = completed ? formatTimelineDate(req.qrGeneratedAt || req.updatedAt) : '';
     return { completed, active, time };
@@ -633,7 +634,7 @@ function timelineState(req: PartRequest, step: 2 | 3 | 4): { completed: boolean;
     const active = ['ready', 'delivering'].includes(status);
     const time = completed
       ? formatTimelineDate(allocationFor(req)?.handedOverAt || req.receivedAt || req.updatedAt)
-      : (status === 'delivering' ? formatTimelineDate(req.updatedAt) : '');
+      : (active ? formatTimelineDate(req.updatedAt) : '');
     return { completed, active, time };
   }
   if (step === 4) {
@@ -646,7 +647,7 @@ function timelineState(req: PartRequest, step: 2 | 3 | 4): { completed: boolean;
 }
 
 function isConfirmedReceived(req: PartRequest) {
-  const status = req.status.toLowerCase();
+  const status = displayPartRequestStatus(req).toLowerCase();
   const allocation = allocationFor(req);
   return status === 'received' || status === 'completed' || allocation?.status === 'received';
 }
@@ -664,7 +665,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
   if (record && typeof record.issuedQty === 'number') {
     return record.issuedQty;
   }
-  const status = req.status.toLowerCase();
+  const status = displayPartRequestStatus(req).toLowerCase();
   if (status === 'received' || status === 'completed' || status === 'ready' || status === 'delivering') {
     return item.quantity;
   }
@@ -1082,7 +1083,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
           <!-- 2. Tiến trình xử lý (Horizontal Stepper) -->
           <div class="py-3 px-2 border-b border-slate-100">
             <!-- Cancelled timeline -->
-            <div v-if="selected.status.toLowerCase() === 'cancelled'" class="flex items-center justify-center gap-8 py-2">
+            <div v-if="displayPartRequestStatus(selected).toLowerCase() === 'cancelled'" class="flex items-center justify-center gap-8 py-2">
               <div class="flex flex-col items-center">
                 <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
                   <Check :size="15" aria-hidden="true" />
@@ -1176,7 +1177,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div class="flex justify-between items-baseline gap-2">
                   <span class="text-slate-500 shrink-0">Kho xuất</span>
                   <span class="font-medium text-slate-900 text-right truncate">
-                    {{ allocationFor(selected)?.warehouseName || warehouseLabel(selected) || (selected.fulfillmentMethod === 'delivery' ? 'Chọn ở mục giao hàng bên dưới' : 'Chưa phân bổ kho') }}
+                    {{ allocationFor(selected)?.warehouseName || warehouseLabel(selected) || (isConfirmedReceived(selected) && selected.fulfillmentMethod === 'delivery' ? 'Đã xuất kho qua ĐVVC' : selected.fulfillmentMethod === 'delivery' ? 'Chọn ở mục giao hàng bên dưới' : 'Chưa phân bổ kho') }}
                   </span>
                 </div>
 
@@ -1188,7 +1189,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div class="flex justify-between items-baseline gap-2">
                   <span class="text-slate-500 shrink-0">Đã nhận</span>
                   <span class="font-mono text-slate-800 text-right">
-                    {{ selected.receivedAt ? formatInfoDate(selected.receivedAt) : 'Chưa nhận' }}
+                    {{ selected.receivedAt ? formatInfoDate(selected.receivedAt) : (isConfirmedReceived(selected) ? (formatInfoDate(selected.updatedAt) || 'Đã xác nhận nhận') : 'Chưa nhận') }}
                   </span>
                 </div>
 
@@ -1237,7 +1238,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div class="flex items-start gap-1.5 text-slate-600">
                   <MapPin :size="14" class="text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
                   <span class="line-clamp-2">
-                    Địa chỉ: {{ allocationFor(selected)?.warehouseAddress || (selected.fulfillmentMethod === 'delivery' ? 'Xem thông tin kho xử lý giao hàng bên dưới' : 'Chưa có địa chỉ kho phân bổ') }}
+                    Địa chỉ: {{ allocationFor(selected)?.warehouseAddress || (isConfirmedReceived(selected) && selected.fulfillmentMethod === 'delivery' ? 'Đã hoàn tất giao qua đơn vị vận chuyển' : selected.fulfillmentMethod === 'delivery' ? 'Xem thông tin kho xử lý giao hàng bên dưới' : 'Chưa có địa chỉ kho phân bổ') }}
                   </span>
                 </div>
 
@@ -1287,25 +1288,54 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
           <!-- Delivery operations panels if applicable -->
           <div v-if="selected.fulfillmentMethod === 'delivery'" class="space-y-3">
             <ShippingShareBreakdown :snapshot="selected" role="manager" :fulfillment-method="selected.fulfillmentMethod" />
-            <DeliveryOperationsPanel
+            <div
+              v-if="!canOperate"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-700"
+              data-testid="delivery-manager-role-hint"
+            >
+              Chỉ tài khoản Quản lý dịch vụ được gán phụ trách kho mới có quyền thao tác đề xuất và bàn giao cho đơn vị giao hàng.
+            </div>
+            <div
+              v-else-if="selected.requestType !== 'additional'"
+              class="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs text-amber-800"
+              data-testid="delivery-request-type-hint"
+            >
+              Luồng điều phối giao tận nơi trực tuyến hiện chỉ áp dụng cho yêu cầu Phát sinh (đã được khách duyệt). Với phiếu Trước sửa chữa hoặc Bảo hành, kho phối hợp bàn giao trực tiếp.
+            </div>
+            <div
+              v-else-if="!isDeliveryPhysicalRequestId(selected.id)"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-700"
+              data-testid="delivery-legacy-id-hint"
+            >
+              Mã yêu cầu này chưa thuộc phạm vi điều phối giao nhận trực tuyến W3.
+            </div>
+            <div
               v-if="selected.requestType === 'additional' && selected.shippingFee >= 0 && isDeliveryPhysicalRequestId(selected.id)"
-              :key="`ops-${selected.id}`"
-              :request-id="selected.id"
-              :fulfillment-method="selected.fulfillmentMethod"
-              :request-type="selected.requestType"
-              :shipping-fee="selected.shippingFee"
-              audience="manager"
-            />
-            <DeliveryTermsPanel
-              v-if="selected.requestType === 'additional' && selected.shippingFee > 0 && isDeliveryPhysicalRequestId(selected.id)"
-              :key="`terms-${selected.id}`"
-              :request-id="selected.id"
-              :request-type="selected.requestType"
-              :fulfillment-method="selected.fulfillmentMethod"
-              :shipping-fee="selected.shippingFee"
-              audience="manager"
-              :technician-id="selected.technicianId"
-            />
+              class="rounded-[var(--radius-md)] border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
+            >
+              <DeliveryOperationsPanel
+                :key="`ops-${selected.id}`"
+                :request-id="selected.id"
+                :fulfillment-method="selected.fulfillmentMethod"
+                :request-type="selected.requestType"
+                :shipping-fee="selected.shippingFee"
+                audience="manager"
+                embedded
+                @quote-state="deliveryHasQuote[selected.id] = $event"
+              />
+              <DeliveryTermsPanel
+                v-if="selected.shippingFee > 0 && deliveryHasQuote[selected.id]"
+                :key="`terms-${selected.id}`"
+                :request-id="selected.id"
+                :request-type="selected.requestType"
+                :fulfillment-method="selected.fulfillmentMethod"
+                :shipping-fee="selected.shippingFee"
+                audience="manager"
+                :technician-id="selected.technicianId"
+                embedded
+                :delivery-completed="isConfirmedReceived(selected)"
+              />
+            </div>
           </div>
 
           <!-- 4. Danh sách linh kiện (Table) -->

@@ -861,6 +861,32 @@ describe('TechnicianPartsSection inside the job page', () => {
     expect(terms.attributes('data-fee')).toBe('35000');
     expect(terms.attributes('data-aud')).toBe('technician');
     expect(terms.attributes('data-tech')).toBe('t-1');
+    expect(wrapper.get('[data-testid="tech-delivery-flow-hint"]').text()).toContain('Quy trình giao qua ĐVVC');
+    wrapper.unmount();
+  });
+
+  it('shows non-additional delivery hint on technician pre-repair delivery requests', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([{
+      ...request('requested'),
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      requestType: 'pre_repair',
+      fulfillmentMethod: 'delivery',
+      shippingFee: 0,
+    }]);
+
+    const wrapper = mount(TechnicianPartsSection, {
+      props: { orderId: 'so-1', orderStatus: 'ACCEPTED' },
+      global: {
+        stubs: {
+          ...stubs,
+          DeliveryPhysicalPreview: true,
+          DeliveryOperationsPanel: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="tech-delivery-non-additional-hint"]').text()).toContain('chưa có thao tác xác nhận giao nhận trực tuyến');
     wrapper.unmount();
   });
 });

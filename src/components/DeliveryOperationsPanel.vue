@@ -20,10 +20,15 @@ const props = defineProps<{
   shippingFee: number | null | undefined;
   audience: 'customer' | 'technician' | 'manager';
   sourceOwnerId?: string | null;
+  embedded?: boolean;
+}>();
+const emit = defineEmits<{
+  (e: 'quote-state', hasQuote: boolean): void;
 }>();
 const auth = useAuthStore();
 const readState = ref<DeliveryOperationsRead | null>(null);
 const readStatus = ref<'idle' | 'loading' | 'ready' | 'unavailable' | 'error' | 'forbidden'>('idle');
+const lastReadHttpStatus = ref<number | null>(null);
 const message = ref('');
 const requiresReload = ref(false);
 const busy = ref(false);
@@ -90,12 +95,119 @@ const statusLabel = computed(() => {
   return physical.value ? labels[physical.value.status] ?? 'Trạng thái chưa xác định' : 'Chưa ghi nhận giao nhận';
 });
 
+const deliveryBlockerHints: Record<string, string> = {
+  DELIVERY_SCOPE_FROZEN: 'Đơn đã hoàn tất, đã có yêu cầu hoàn tất hoặc đã xuất hóa đơn nên không thể giao thêm linh kiện qua ĐVVC.',
+  DELIVERY_RELEASE_REQUIRED: 'Yêu cầu đang có phân bổ giao trước đó; cần hủy phân bổ cũ trước khi đề xuất lại.',
+  FINANCE_LEDGER_SOURCE_REQUIRED: 'Luồng phí giao có phí hiện chưa mở chốt nguồn tài chính từ hệ thống.',
+  DELIVERY_WAREHOUSE_UNAVAILABLE: 'Kho đã chọn không còn hoạt động hoặc bạn không còn phụ trách kho này.',
+  DELIVERY_PROPOSAL_INVALIDATED: 'Dữ liệu đề xuất không còn khớp với trạng thái đơn hoặc kho.',
+  DELIVERY_APPROVED_SHIPPING_SOURCE_REQUIRED: 'Yêu cầu phát sinh nguồn chưa ở trạng thái đã duyệt giao tận nơi.',
+  W3_SHIPPING_CAP_EXCEEDED: 'Trần phí giao mới «w3.shipping.max_new_fee_vnd» trong Cấu hình hệ thống (/console/admin/config) đang đặt bằng 0 ₫ hoặc thấp hơn mức phí đề xuất; Quản trị viên cần tăng cấu hình này lên trước.',
+};
+
+function extractErrorDetails(error: unknown) {
+  const responseData = typeof error === 'object' && error !== null && 'response' in error
+    ? (error as { response?: { status?: number; data?: { code?: unknown; message?: unknown; details?: { blocker?: unknown }; error?: { code?: unknown; details?: { blocker?: unknown }; message?: unknown } } } }).response
+    : undefined;
+  const status = responseData?.status;
+  const rawCode = responseData?.data?.error?.code ?? responseData?.data?.code;
+  const errorCode = typeof rawCode === 'string' ? rawCode : null;
+  const rawBlocker = responseData?.data?.error?.details?.blocker ?? responseData?.data?.details?.blocker ?? errorCode;
+  const blocker = typeof rawBlocker === 'string' ? rawBlocker : null;
+  const blockerHint = blocker ? deliveryBlockerHints[blocker] ?? null : null;
+  const rawMessage = responseData?.data?.message ?? responseData?.data?.error?.message;
+  const serverMessage = typeof rawMessage === 'string' && rawMessage.trim() ? rawMessage.trim() : null;
+  return { status, errorCode, blockerHint, serverMessage };
+}
+
+const deliverySteps = computed(() => {
+  const hasQuote = !!quote.value;
+  const bothConsented = hasQuote && !!readState.value?.customerConsented && !!readState.value?.technicianConsented;
+  const hasActual = actualRecorded.value;
+  const physicalStatus = physical.value?.status;
+  const reserved = !!physicalStatus && ['RESERVED', 'ISSUED_TO_COURIER', 'DISPATCH_RECORDED', 'TECHNICIAN_RECEIVED'].includes(physicalStatus);
+  const dispatched = !!physicalStatus && ['DISPATCH_RECORDED', 'TECHNICIAN_RECEIVED'].includes(physicalStatus);
+  const received = physicalStatus === 'TECHNICIAN_RECEIVED';
+  const list = [
+    { key: 'proposal', label: '1. SM đề xuất giao', done: hasQuote },
+    { key: 'consent', label: '2. Khách & Thợ đồng ý', done: bothConsented },
+    { key: 'actual', label: '3. SM ghi phí thực tế', done: hasActual },
+    { key: 'reserve', label: '4. Thợ xin phân bổ kho', done: reserved },
+    { key: 'dispatch', label: '5. Kho bàn giao & rời kho', done: dispatched },
+    { key: 'receipt', label: '6. Thợ xác nhận nhận', done: received },
+  ];
+  const firstPendingIdx = list.findIndex(step => !step.done);
+  return list.map((step, idx) => ({ ...step, active: idx === firstPendingIdx }));
+});
+
+const nextWaitingHint = computed(() => {
+  if (props.audience === 'manager' && managerMode.value === 'bootstrap') {
+    if (!selectedWarehouse.value) return 'Chọn kho đang hoạt động bạn phụ trách để kiểm tra hoặc đề xuất giao hàng.';
+    return 'Nhập mã tham chiếu và tải ảnh đề xuất giao hàng bên dưới để gửi đề xuất lần đầu (hoặc bấm «Đối chiếu trạng thái đã có» nếu phiếu đã gửi đề xuất trước đó).';
+  }
+  const current = readState.value;
+  if (!current || current.invalidated || requiresReload.value || physical.value?.status === 'TECHNICIAN_RECEIVED') return null;
+  if (!quote.value) {
+    return props.audience === 'manager'
+      ? 'Chưa có đề xuất giao hàng. Chọn kho phụ trách để gửi đề xuất.'
+      : 'Đang chờ Quản lý dịch vụ chọn kho và gửi đề xuất giao hàng.';
+  }
+  if (!current.customerConsented || !current.technicianConsented) {
+    if (props.audience === 'manager') return 'Đang chờ Khách hàng và Kỹ thuật viên xác nhận đồng ý trước khi ghi nhận phí thực tế.';
+    const ownConsented = props.audience === 'customer' ? current.customerConsented : current.technicianConsented;
+    if (!ownConsented) {
+      return positive.value
+        ? 'Hãy xác nhận đồng ý tại mục Điều khoản phí giao hàng.'
+        : 'Hãy tích đồng ý và bấm «Ghi nhận đồng ý» bên dưới.';
+    }
+    return props.audience === 'customer'
+      ? 'Bạn đã đồng ý. Đang chờ Kỹ thuật viên xác nhận đồng ý.'
+      : 'Bạn đã đồng ý. Đang chờ Khách hàng xác nhận đồng ý.';
+  }
+  if (!actualRecorded.value) {
+    return props.audience === 'manager'
+      ? 'Cả hai bên đã đồng ý. Hãy ghi nhận phí giao thực tế và ảnh đối chiếu để mở bước phân bổ kho.'
+      : 'Cả hai bên đã đồng ý. Đang chờ Quản lý dịch vụ ghi nhận phí giao thực tế.';
+  }
+  const physicalStatus = physical.value?.status;
+  if (!physicalStatus || ['INELIGIBLE', 'PENDING_ASSISTANCE', 'RELEASED'].includes(physicalStatus)) {
+    return props.audience === 'technician'
+      ? 'Đã đủ điều kiện. Hãy bấm «Yêu cầu phân bổ kho» bên dưới để kho chuẩn bị giao hàng.'
+      : 'Đang chờ Kỹ thuật viên bấm «Yêu cầu phân bổ kho».';
+  }
+  if (physicalStatus === 'RESERVED') {
+    return props.audience === 'manager'
+      ? 'Thợ đã yêu cầu phân bổ kho. Hãy tải ảnh và bàn giao cho đơn vị giao hàng.'
+      : 'Kho đã giữ hàng. Đang chờ Quản lý dịch vụ bàn giao cho đơn vị giao hàng.';
+  }
+  if (physicalStatus === 'ISSUED_TO_COURIER') {
+    return props.audience === 'manager'
+      ? 'Đã bàn giao cho đơn vị giao hàng. Hãy tải ảnh xác nhận rời kho.'
+      : 'Đang chờ Quản lý dịch vụ xác nhận hàng đã rời kho.';
+  }
+  if (physicalStatus === 'DISPATCH_RECORDED') {
+    return props.audience === 'technician'
+      ? 'Hàng đã rời kho. Khi nhận được linh kiện, hãy tải ảnh và bấm «Ghi nhận nhận linh kiện».'
+      : 'Hàng đã rời kho. Đang chờ Kỹ thuật viên xác nhận đã nhận linh kiện.';
+  }
+  return null;
+});
+
+const proposalMissingFields = computed(() => {
+  const missing: string[] = [];
+  if (positive.value && proposedFee.value === null) missing.push('Tổng phí giao hợp lệ');
+  if (!courierReference.value.trim()) missing.push('Mã tham chiếu');
+  if (!quotePhoto.value) missing.push('Ảnh đề xuất giao hàng');
+  return missing;
+});
+
 function scopeKey() { return `${props.requestId}:${auth.user?.id ?? ''}:${props.audience}`; }
 function isCurrent(token: number, key: string) { return alive && token === generation.value && key === scopeKey(); }
 async function load() {
   const token = ++generation.value;
   const key = scopeKey();
   readState.value = null;
+  lastReadHttpStatus.value = null;
   message.value = '';
   accepted.value = false;
   busy.value = false;
@@ -111,9 +223,25 @@ async function load() {
     if (!isCurrent(token, key)) return;
     const status = typeof error === 'object' && error !== null && 'response' in error
       ? (error as { response?: { status?: number } }).response?.status : undefined;
+    lastReadHttpStatus.value = status ?? null;
     readState.value = null;
     readStatus.value = status === 404 || status === 503 ? 'unavailable' : status === 401 || status === 403 ? 'forbidden' : 'error';
   }
+}
+function clearPendingCommands() {
+  const prefix = `fixhome:w3-delivery:${scopeKey()}:`;
+  for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const k = sessionStorage.key(i);
+    if (k && k.startsWith(prefix)) sessionStorage.removeItem(k);
+  }
+}
+async function manualReload() {
+  clearPendingCommands();
+  retryAction.value = null;
+  quotePhoto.value = null;
+  actualPhoto.value = null;
+  stagePhoto.value = null;
+  await load();
 }
 async function loadManagerWarehouses() {
   const token = ++generation.value;
@@ -147,6 +275,7 @@ function initialize() {
   readState.value = null;
   managerMode.value = 'bootstrap';
   managerInspected.value = false;
+  lastReadHttpStatus.value = null;
   proposedShippingFee.value = '';
   actualShippingFee.value = '';
   readStatus.value = 'idle';
@@ -157,6 +286,7 @@ function initialize() {
 watch(() => [props.requestId, props.fulfillmentMethod, props.requestType, props.shippingFee,
   props.audience, props.sourceOwnerId, auth.user?.id, auth.user?.role, auth.token] as const,
 initialize, { immediate: true, flush: 'sync' });
+watch(quote, val => emit('quote-state', Boolean(val)), { immediate: true, flush: 'sync' });
 onBeforeUnmount(() => { alive = false; ++generation.value; });
 
 function pendingKey(action: string) { return `fixhome:w3-delivery:${scopeKey()}:${action}`; }
@@ -200,14 +330,39 @@ async function runCommand(action: string, expectedVersion: number, fields: Recor
     else message.value = 'Thao tác đã được ghi nhận; chưa tải lại được trạng thái.';
   } catch (error) {
     if (isCurrent(token, key)) {
-      const status = typeof error === 'object' && error !== null && 'response' in error
-        ? (error as { response?: { status?: number } }).response?.status : undefined;
+      const { status, blockerHint, serverMessage } = extractErrorDetails(error);
       if (status === 409) {
-        requiresReload.value = true;
+        sessionStorage.removeItem(pendingKey(action));
+        if (!(props.audience === 'manager' && managerMode.value === 'bootstrap')) requiresReload.value = true;
         retryAction.value = null;
-        message.value = 'Trạng thái đã thay đổi. Hãy tải lại trước khi tiếp tục.';
+        const stageHint = ['physical-issue-to-courier', 'physical-dispatch', 'physical-receipt'].includes(action)
+          ? 'Nếu đang gửi ảnh xác nhận, đảm bảo ảnh khác hoàn toàn với các bước trước và đơn chưa hoàn tất.'
+          : action === 'terms-proposal'
+            ? `${serverMessage ? `${serverMessage} ` : ''}Kiểm tra: (1) Cấu hình «w3.shipping.max_new_fee_vnd» trong /console/admin/config phải >= mức phí đề xuất (mặc định đang là 0 ₫); (2) Đơn phải có hạng mục Tiền công đã được khách duyệt và cấu hình «commission.rate_bps» hợp lệ; (3) Nếu phiếu đã từng gửi đề xuất trước đó, bấm «Đối chiếu trạng thái đã có».`
+            : null;
+        const extra = blockerHint || stageHint || (serverMessage && !serverMessage.startsWith('Yêu cầu chưa đủ điều kiện') ? serverMessage : null);
+        message.value = extra
+          ? `Trạng thái đã thay đổi. Hãy tải lại trước khi tiếp tục. (${extra})`
+          : 'Trạng thái đã thay đổi. Hãy tải lại trước khi tiếp tục.';
+      } else if (status === 400) {
+        sessionStorage.removeItem(pendingKey(action));
+        retryAction.value = null;
+        message.value = serverMessage || 'Thông tin đầu vào chưa hợp lệ. Kiểm tra mã tham chiếu (chữ không dấu, số, không khoảng trắng) và ảnh đính kèm.';
+      } else if (status === 403 || status === 404) {
+        sessionStorage.removeItem(pendingKey(action));
+        retryAction.value = null;
+        message.value = blockerHint || (serverMessage ? `${serverMessage} Hãy tải lại trạng thái.` : 'Không tìm thấy hoặc không có quyền thao tác ở bước này. Hãy tải lại trạng thái.');
+      } else if (status === 429) {
+        message.value = 'Chưa xác định được kết quả: thao tác quá nhanh, đợi vài giây rồi thử lại.';
+      } else if (status && status >= 500) {
+        message.value = blockerHint || (serverMessage ? `Chưa xác định được kết quả (lỗi ${status}: ${serverMessage}).` : `Chưa xác định được kết quả (lỗi máy chủ ${status}). Có thể thử lại cùng thao tác hoặc tải lại trạng thái.`);
+      } else if (error instanceof Error && (error.message.startsWith('Hãy tải lại') || error.message.startsWith('Chưa thể đối chiếu'))) {
+        retryAction.value = null;
+        message.value = props.audience === 'manager' && managerMode.value === 'bootstrap'
+          ? `${error.message} Bấm «Xóa thao tác dở cũ» hoặc «Đối chiếu trạng thái đã có» để thử lại.`
+          : `${error.message} Bấm «Tải lại trạng thái» để xóa thao tác dở cũ và thử lại.`;
       } else {
-        message.value = 'Chưa xác định được kết quả. Có thể thử lại cùng thao tác hoặc tải lại trạng thái.';
+        message.value = blockerHint || 'Chưa xác định được kết quả. Có thể thử lại cùng thao tác hoặc tải lại trạng thái.';
       }
     }
   } finally {
@@ -233,8 +388,14 @@ async function upload(file: File | null, purpose: DeliveryEvidencePurpose, quote
     const evidence = await w3DeliveryOperationsApi.uploadEvidence(props.requestId,
       { warehouseId, purpose, quoteVersion, file });
     return isCurrent(token, key) ? evidence.evidenceId : null;
-  } catch {
-    if (isCurrent(token, key)) message.value = 'Chưa tải được ảnh bằng chứng. Hãy tải lại trạng thái trước khi thử ảnh khác.';
+  } catch (error) {
+    if (isCurrent(token, key)) {
+      const { status, blockerHint, serverMessage } = extractErrorDetails(error);
+      message.value = blockerHint
+        || (status === 429 ? 'Tải ảnh quá nhanh, đợi vài giây rồi thử lại.' : null)
+        || (serverMessage ? `Chưa tải được ảnh bằng chứng (${serverMessage}).` : null)
+        || 'Chưa tải được ảnh bằng chứng. Hãy tải lại trạng thái trước khi thử ảnh khác.';
+    }
     return null;
   } finally {
     if (isCurrent(token, key)) busy.value = false;
@@ -255,8 +416,14 @@ async function uploadTermsEvidence(file: File | null, purpose: 'QUOTE' | 'ACTUAL
     const evidence = await w3DeliveryTermsApi.uploadEvidence(props.requestId,
       { warehouseId, purpose, quoteVersion, file });
     return isCurrent(token, key) ? evidence.evidenceId : null;
-  } catch {
-    if (isCurrent(token, key)) message.value = 'Chưa tải được ảnh bằng chứng. Hãy tải lại trạng thái trước khi thử ảnh khác.';
+  } catch (error) {
+    if (isCurrent(token, key)) {
+      const { status, blockerHint, serverMessage } = extractErrorDetails(error);
+      message.value = blockerHint
+        || (status === 429 ? 'Tải ảnh quá nhanh, đợi vài giây rồi thử lại.' : null)
+        || (serverMessage ? `Chưa tải được ảnh bằng chứng (${serverMessage}).` : null)
+        || 'Chưa tải được ảnh bằng chứng. Hãy tải lại trạng thái trước khi thử ảnh khác.';
+    }
     return null;
   } finally {
     if (isCurrent(token, key)) busy.value = false;
@@ -272,7 +439,7 @@ async function propose() {
     body => w3DeliveryOperationsApi.propose(props.requestId, body as never), true);
 }
 async function proposePositive() {
-  if (!selectedWarehouse.value || !quotePhoto.value || !managerInspected.value || proposedFee.value === null
+  if (!selectedWarehouse.value || !quotePhoto.value || proposedFee.value === null
     || props.audience !== 'manager' || managerMode.value !== 'bootstrap') return;
   const version = readState.value?.version ?? 0;
   const quoteVersion = (quote.value?.quoteVersion ?? 0) + 1;
@@ -285,12 +452,20 @@ async function proposePositive() {
 }
 async function openExisting() {
   if (props.audience !== 'manager' || !selectedWarehouse.value) return;
+  clearPendingCommands();
+  retryAction.value = null;
   const inspectingPositive = positive.value;
   managerMode.value = 'operations';
   await load();
-  if (inspectingPositive && readStatus.value === 'ready') {
+  if (inspectingPositive && (readStatus.value === 'ready' || (readStatus.value === 'unavailable' && lastReadHttpStatus.value === 404))) {
     managerInspected.value = true;
-    if (!readState.value?.quote) managerMode.value = 'bootstrap';
+    if (readStatus.value === 'unavailable') {
+      readStatus.value = 'idle';
+      managerMode.value = 'bootstrap';
+      message.value = 'Chưa có đề xuất trước đó gắn với kho; bạn có thể gửi đề xuất phí giao mới bên dưới.';
+    } else if (!readState.value?.quote) {
+      managerMode.value = 'bootstrap';
+    }
   }
 }
 async function consent() {
@@ -342,13 +517,13 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
 </script>
 
 <template>
-  <section v-if="panelContextValid" class="space-y-3.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4" :aria-busy="readStatus === 'loading' || warehouseLoadStatus === 'loading'">
-    <div class="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-3">
+  <section v-if="panelContextValid" :class="embedded ? 'space-y-3 p-4' : 'space-y-3.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4'" :aria-busy="readStatus === 'loading' || warehouseLoadStatus === 'loading'">
+    <div v-if="!(embedded && readStatus === 'ready' && physical?.status === 'TECHNICIAN_RECEIVED')" class="flex flex-wrap items-start justify-between gap-2 pb-2" :class="embedded ? '' : 'border-b border-ink-100 pb-3'">
       <div class="min-w-0">
         <h3 class="text-sm font-semibold text-ink-900">{{ positive ? 'Giao linh kiện · phí 70/30' : 'Giao linh kiện · 0 ₫' }}</h3>
-        <p class="mt-0.5 break-all font-mono text-xs text-ink-500">Mã yêu cầu: {{ requestId }}</p>
+        <p v-if="!embedded" class="mt-0.5 break-all font-mono text-[11px] text-ink-400">Mã yêu cầu: {{ requestId }}</p>
       </div>
-      <span class="rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap" :class="positive ? 'border-brand-200 bg-brand-50 text-brand-700' : 'border-ink-200 bg-ink-50 text-ink-700'">
+      <span class="rounded-full px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap" :class="positive ? 'bg-brand-50 text-brand-700' : 'bg-ink-100/80 text-ink-600'">
         {{ positive ? 'Điều khoản trước hóa đơn' : 'Không phát sinh phí' }}
       </span>
     </div>
@@ -368,72 +543,112 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
         </label>
         <template v-if="selectedWarehouse">
           <FhButton variant="secondary" :disabled="busy || readStatus === 'loading'" @click="openExisting">{{ readStatus === 'loading' ? 'Đang đối chiếu…' : 'Đối chiếu trạng thái đã có' }}</FhButton>
+          <p v-if="nextWaitingHint" class="rounded-[var(--radius-sm)] border border-brand-200/80 bg-brand-50/50 px-3 py-2 text-xs text-brand-800" data-testid="delivery-next-step">
+            {{ nextWaitingHint }}
+          </p>
           <template v-if="positive">
-            <p v-if="!managerInspected" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 px-3 py-2 text-xs sm:text-sm text-ink-600">Đối chiếu trạng thái do Backend ghi nhận trước khi ghi đề xuất phí dương.</p>
-            <div v-else-if="!quote" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
+            <div v-if="!quote" class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
               <p class="text-sm text-ink-700">Chưa có điều khoản phí giao. Đề xuất không được vượt mức phí đã duyệt <strong class="font-num text-ink-900">{{ shippingFee }} ₫</strong>.</p>
               <label class="block text-xs font-semibold text-ink-700">Tổng phí giao đề xuất (VND)
                 <input v-model="proposedShippingFee" data-testid="positive-shipping-fee" type="number" min="1" :max="shippingFee ?? undefined" inputmode="numeric" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal font-num text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
               </label>
               <label class="block text-xs font-semibold text-ink-700">Mã tham chiếu đơn vị giao hàng
-                <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
+                <input v-model="courierReference" maxlength="256" autocomplete="off" placeholder="VD: AHM-241124 hoặc GRAB-001" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
+                <span class="mt-1 block text-[11px] font-normal text-ink-500">Mã vận đơn ĐVVC hoặc mã nội bộ; chỉ dùng chữ không dấu, số và các ký tự . _ : / - (không khoảng trắng).</span>
               </label>
               <label class="block text-xs font-semibold text-ink-700">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
+                <span class="mt-0.5 block text-[11px] font-normal text-ink-500">Chụp ảnh báo giá cước từ app giao hàng hoặc ảnh phiếu giao/gói hàng trước khi gửi.</span>
                 <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'quote')" />
+                <span v-if="quotePhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ quotePhoto.name }}</span>
               </label>
               <FhButton :disabled="busy || proposedFee === null || !courierReference.trim() || !quotePhoto" @click="proposePositive">{{ busy ? 'Đang ghi nhận…' : 'Ghi đề xuất phí giao' }}</FhButton>
+              <p v-if="proposalMissingFields.length" class="text-[11px] text-ink-500" data-testid="proposal-missing-hint">Cần hoàn tất để mở nút gửi: {{ proposalMissingFields.join(' · ') }}.</p>
             </div>
             <p v-else class="text-sm text-ink-700">Đã có đề xuất phí giao. Chuyển sang phần giao nhận bên dưới.</p>
           </template>
           <div v-else class="space-y-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
             <label class="block text-xs font-semibold text-ink-700">Mã tham chiếu đơn vị giao hàng
-              <input v-model="courierReference" maxlength="256" autocomplete="off" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
+              <input v-model="courierReference" maxlength="256" autocomplete="off" placeholder="VD: AHM-241124 hoặc GRAB-001" class="mt-1.5 min-h-11 w-full rounded-[var(--radius-sm)] border border-ink-200 bg-white px-3 text-sm font-normal text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-hidden" />
+              <span class="mt-1 block text-[11px] font-normal text-ink-500">Mã vận đơn ĐVVC hoặc mã nội bộ; chỉ dùng chữ không dấu, số và các ký tự . _ : / - (không khoảng trắng).</span>
             </label>
             <label class="block text-xs font-semibold text-ink-700">Ảnh đề xuất giao hàng (JPEG, PNG hoặc WebP, tối đa 10 MB)
+              <span class="mt-0.5 block text-[11px] font-normal text-ink-500">Chụp ảnh báo giá cước từ app giao hàng hoặc ảnh phiếu giao/gói hàng trước khi gửi.</span>
               <input data-testid="quote-evidence" type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'quote')" />
+              <span v-if="quotePhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ quotePhoto.name }}</span>
             </label>
             <FhButton :disabled="busy || !courierReference.trim() || !quotePhoto" @click="propose">{{ busy ? 'Đang ghi nhận…' : 'Đề xuất phí giao 0 ₫' }}</FhButton>
+            <p v-if="proposalMissingFields.length" class="text-[11px] text-ink-500" data-testid="proposal-missing-hint">Cần hoàn tất để mở nút gửi: {{ proposalMissingFields.join(' · ') }}.</p>
           </div>
         </template>
       </div>
       <p v-if="message" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status">{{ message }}</p>
-      <FhButton v-if="retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
+      <div v-if="retryAction || message.includes('Xóa thao tác dở cũ')" class="flex flex-wrap gap-2">
+        <FhButton v-if="retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
+        <FhButton v-if="message.includes('Xóa thao tác dở cũ')" variant="secondary" size="sm" :disabled="busy" @click="clearPendingCommands(); message = ''; retryAction = null">Xóa thao tác dở cũ</FhButton>
+      </div>
     </template>
     <p v-else-if="readStatus === 'loading'" class="text-sm text-ink-600" role="status">Đang tải tình trạng giao linh kiện…</p>
     <div v-else-if="readStatus === 'unavailable'" class="space-y-2 text-sm text-ink-700" role="status">
-      <p>Chưa khả dụng.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      <p>Chưa khả dụng.</p>
+      <div class="flex flex-wrap gap-2">
+        <FhButton variant="secondary" size="sm" :disabled="busy" @click="manualReload">Tải lại trạng thái</FhButton>
+        <FhButton v-if="audience === 'manager'" variant="ghost" size="sm" @click="managerMode = 'bootstrap'">Quay lại form đề xuất</FhButton>
+      </div>
     </div>
     <div v-else-if="readStatus === 'forbidden'" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">Bạn không có quyền xem thông tin giao linh kiện này.</div>
     <div v-else-if="readStatus === 'error'" class="space-y-2 text-sm" role="alert">
-      <p class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+      <p class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-danger-700">Chưa thể kiểm tra trạng thái giao linh kiện.</p><FhButton variant="secondary" size="sm" :disabled="busy" @click="manualReload">Tải lại trạng thái</FhButton>
     </div>
     <template v-else-if="readStatus === 'ready' && readState">
       <!-- Once the technician has the parts the order moves on, so the server reports the terms as
            no longer current; that is the end of the delivery, not a change to review (13/11). -->
-      <p v-if="physical?.status === 'TECHNICIAN_RECEIVED'" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-3 py-2.5 text-sm font-medium text-success-800" role="status" data-testid="delivery-operations-done">Đã giao xong: kỹ thuật viên đã nhận linh kiện.</p>
-      <p v-else-if="readState.invalidated" class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2.5 text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
+      <div v-if="physical?.status === 'TECHNICIAN_RECEIVED'" class="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-success-50/80 px-3 py-2">
+        <p class="text-sm font-medium text-success-800" role="status" data-testid="delivery-operations-done">Đã giao xong: kỹ thuật viên đã nhận linh kiện.</p>
+        <FhButton variant="ghost" size="sm" :disabled="busy" @click="manualReload">Tải lại trạng thái</FhButton>
+      </div>
+      <p v-else-if="readState.invalidated" class="rounded-[var(--radius-sm)] bg-warning-50 px-3 py-2.5 text-sm text-warning-800" role="status">Dữ liệu nguồn đã thay đổi. Cần Quản lý dịch vụ kiểm tra lại.</p>
       <template v-else-if="requiresReload">
-        <p class="rounded-[var(--radius-sm)] border border-warning-200 bg-warning-50 px-3 py-2 text-sm text-warning-800" role="alert">{{ message }}</p>
-        <FhButton variant="secondary" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+        <p class="rounded-[var(--radius-sm)] bg-warning-50 px-3 py-2 text-sm text-warning-800" role="alert">{{ message }}</p>
+        <FhButton variant="secondary" size="sm" :disabled="busy" @click="manualReload">Tải lại trạng thái</FhButton>
       </template>
       <template v-else>
-        <dl v-if="quote" class="grid gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25/70 p-3 text-sm sm:grid-cols-2">
-          <div><dt class="inline text-ink-600">{{ positive ? 'Phí giao theo thỏa thuận: ' : 'Phí giao thực tế: ' }}</dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.totalShippingFee" /></dd></div>
-          <div><dt class="inline text-ink-600">Mã phiên báo giá: </dt><dd class="inline font-num font-semibold text-ink-900">{{ quote.quoteVersion }}</dd></div>
-          <div v-if="positive"><dt class="inline text-ink-600">Khách hàng chịu (70%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.customerShippingShare" /></dd></div>
-          <div v-if="positive"><dt class="inline text-ink-600">Kỹ thuật viên chịu (30%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.technicianShippingShare" /></dd></div>
-          <div v-if="readState.actual"><dt class="inline text-ink-600">Phí thực tế đã ghi nhận: </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="readState.actual.totalShippingFee" /></dd></div>
-          <div><dt class="inline text-ink-600">Đồng thuận khách hàng: </dt><dd class="inline font-medium" :class="readState.customerConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.customerConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
-          <div><dt class="inline text-ink-600">Đồng thuận kỹ thuật viên: </dt><dd class="inline font-medium" :class="readState.technicianConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.technicianConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
+        <dl v-if="quote" class="grid gap-2 rounded-[var(--radius-sm)] bg-ink-50/70 p-3 text-xs sm:text-sm sm:grid-cols-2">
+          <div><dt class="inline text-ink-500">{{ positive ? 'Phí giao theo thỏa thuận: ' : 'Phí giao thực tế: ' }}</dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.totalShippingFee" /></dd></div>
+          <div><dt class="inline text-ink-500">Mã phiên báo giá: </dt><dd class="inline font-num font-semibold text-ink-900">{{ quote.quoteVersion }}</dd></div>
+          <div v-if="positive"><dt class="inline text-ink-500">Khách hàng chịu (70%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.customerShippingShare" /></dd></div>
+          <div v-if="positive"><dt class="inline text-ink-500">Kỹ thuật viên chịu (30%): </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="quote.technicianShippingShare" /></dd></div>
+          <div v-if="readState.actual"><dt class="inline text-ink-500">Phí thực tế đã ghi nhận: </dt><dd class="inline font-num font-semibold text-ink-900"><FhMoney :amount="readState.actual.totalShippingFee" /></dd></div>
+          <div><dt class="inline text-ink-500">Đồng thuận khách hàng: </dt><dd class="inline font-medium" :class="readState.customerConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.customerConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
+          <div><dt class="inline text-ink-500">Đồng thuận kỹ thuật viên: </dt><dd class="inline font-medium" :class="readState.technicianConsented ? 'text-success-700' : 'text-ink-700'">{{ readState.technicianConsented ? 'Đã ghi nhận' : 'Chưa ghi nhận' }}</dd></div>
         </dl>
-        <p v-else class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25 px-3 py-2 text-sm text-ink-700">
+        <p v-else class="rounded-[var(--radius-sm)] bg-ink-50 px-3 py-2 text-sm text-ink-700">
           {{ positive ? 'Chưa có điều khoản phí giao.' : 'Chưa có đề xuất phí giao 0 ₫.' }}
         </p>
-        <div class="rounded-[var(--radius-sm)] border border-ink-100 bg-ink-25/50 px-3 py-2 text-sm text-ink-800">
+        <p class="text-xs sm:text-sm text-ink-700">
           Giao nhận: <strong class="font-semibold text-ink-900">{{ statusLabel }}</strong>.
+        </p>
+        <ol class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 text-[11px]" aria-label="Tiến trình giao nhận" data-testid="delivery-progress-steps">
+          <li
+            v-for="step in deliverySteps"
+            :key="step.key"
+            class="rounded-[var(--radius-sm)] px-2.5 py-1.5 font-medium"
+            :class="step.done
+              ? 'bg-success-50 text-success-800'
+              : step.active
+                ? 'bg-brand-50 text-brand-800 font-semibold'
+                : 'bg-ink-50/70 text-ink-500'"
+          >
+            {{ step.label }}
+          </li>
+        </ol>
+        <p v-if="nextWaitingHint" class="rounded-[var(--radius-sm)] bg-brand-50/70 px-3 py-2 text-xs font-medium text-brand-800" data-testid="delivery-next-step">
+          {{ nextWaitingHint }}
+        </p>
+        <div v-if="audience === 'manager' && !quote">
+          <FhButton variant="secondary" size="sm" @click="managerMode = 'bootstrap'">Mở form đề xuất giao</FhButton>
         </div>
-        <p v-if="positive" class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/60 px-3 py-2 text-xs text-warning-800">Giao nhận vật lý khả dụng khi cả hai bên đồng thuận và phí thực tế đã được ghi nhận. Thanh toán hoặc chi trả chỉ sau hóa đơn W3 đã khóa và đủ điều kiện; khoản phí này chưa được thanh toán.</p>
-        <p v-else class="rounded-[var(--radius-sm)] border border-warning-200/80 bg-warning-50/60 px-3 py-2 text-xs text-warning-800">Phí giao và mọi phần chia đều bằng 0 ₫. Không ghi nhận thanh toán hoặc xác minh bên giao hàng.</p>
+        <p v-if="positive" class="text-[11px] leading-relaxed text-ink-500">Giao nhận vật lý khả dụng khi cả hai bên đồng thuận và phí thực tế đã được ghi nhận. Thanh toán hoặc chi trả chỉ sau hóa đơn W3 đã khóa và đủ điều kiện; khoản phí này chưa được thanh toán.</p>
+        <p v-else class="text-[11px] leading-relaxed text-ink-500">Phí giao và mọi phần chia đều bằng 0 ₫. Không ghi nhận thanh toán hoặc xác minh bên giao hàng.</p>
         <p v-if="positive && quote" class="text-xs font-medium" :class="canOperatePhysical ? 'text-success-700' : 'text-ink-600'">{{ canOperatePhysical ? 'Đã đủ điều kiện ghi nhận giao nhận vật lý.' : 'Chưa đủ điều kiện giao nhận vật lý: cần cả hai đồng thuận và phí thực tế.' }}</p>
 
         <div v-if="audience === 'customer' || audience === 'technician'" data-testid="delivery-operations-actions" class="space-y-3">
@@ -448,6 +663,7 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
           <div v-if="audience === 'technician' && canOperatePhysical && physical?.status === 'DISPATCH_RECORDED'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3">
             <label class="block text-xs font-semibold text-ink-700">Ảnh xác nhận nhận linh kiện
               <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
+              <span v-if="stagePhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ stagePhoto.name }}</span>
             </label>
             <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('receipt')">Ghi nhận nhận linh kiện</FhButton>
           </div>
@@ -461,12 +677,14 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
               </label>
               <label class="block text-xs font-semibold text-ink-700">{{ positive ? 'Ảnh đối chiếu phí giao thực tế' : 'Ảnh đối chiếu phí giao thực tế 0 ₫' }}
                 <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'actual')" />
+                <span v-if="actualPhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ actualPhoto.name }}</span>
               </label>
               <FhButton :disabled="busy || !actualPhoto || (positive && actualFee === null)" @click="recordActual">{{ positive ? 'Ghi nhận phí thực tế' : 'Ghi nhận phí giao thực tế 0 ₫' }}</FhButton>
             </div>
             <div v-if="canOperatePhysical && physical?.status === 'RESERVED'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
               <label class="block text-xs font-semibold text-ink-700">Ảnh bàn giao cho đơn vị giao hàng
                 <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
+                <span v-if="stagePhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ stagePhoto.name }}</span>
               </label>
               <div class="flex flex-wrap gap-2">
                 <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('issue-to-courier')">Ghi nhận bàn giao cho đơn vị giao hàng</FhButton>
@@ -476,16 +694,17 @@ function setFile(event: Event, target: 'quote' | 'actual' | 'stage') {
             <div v-if="canOperatePhysical && physical?.status === 'ISSUED_TO_COURIER'" class="space-y-2.5 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-25 p-3.5">
               <label class="block text-xs font-semibold text-ink-700">Ảnh xác nhận rời kho
                 <input type="file" accept="image/jpeg,image/png,image/webp" class="mt-1.5 block w-full rounded-[var(--radius-sm)] border border-dashed border-ink-300 bg-white p-2 text-xs text-ink-600 cursor-pointer file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-700 hover:file:bg-brand-100" @change="setFile($event, 'stage')" />
+                <span v-if="stagePhoto" class="mt-1 block text-[11px] font-normal text-success-700">Đã chọn: {{ stagePhoto.name }}</span>
               </label>
               <FhButton variant="secondary" :disabled="busy || !stagePhoto" @click="physicalAction('dispatch')">Ghi nhận rời kho</FhButton>
             </div>
           </template>
         </div>
       </template>
-      <p v-if="message" class="rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status">{{ message }}</p>
-      <div class="flex flex-wrap items-center gap-2">
+      <p v-if="message && !requiresReload" class="rounded-[var(--radius-sm)] bg-ink-50 px-3 py-2 text-sm text-ink-700" role="status">{{ message }}</p>
+      <div v-if="!requiresReload && physical?.status !== 'TECHNICIAN_RECEIVED'" class="flex flex-wrap items-center gap-2">
         <FhButton v-if="message.includes('Chưa xác định') && retryAction" variant="secondary" size="sm" :disabled="busy" @click="retryAction?.()">Thử lại cùng thao tác</FhButton>
-        <FhButton variant="ghost" size="sm" :disabled="busy" @click="load">Tải lại trạng thái</FhButton>
+        <FhButton variant="ghost" size="sm" :disabled="busy" @click="manualReload">Tải lại trạng thái</FhButton>
       </div>
     </template>
   </section>

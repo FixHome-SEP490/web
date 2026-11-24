@@ -452,4 +452,142 @@ describe('W3 delivery operations panel', () => {
     expect(wrapper.text()).toContain('Đã đủ điều kiện ghi nhận giao nhận vật lý.');
     wrapper.unmount();
   });
+
+  it('shows the 6-step delivery progress, next waiting hint, missing fields, and blocker explanation on 409', async () => {
+    signIn(UserRole.SERVICE_MANAGER, 'sm-a');
+    vi.spyOn(warehousesApi, 'list').mockResolvedValue([
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Kho của tôi', address: null, status: 'active', responsibleUserId: 'sm-a', createdAt: '', updatedAt: '' },
+    ]);
+    vi.spyOn(w3DeliveryOperationsApi, 'uploadEvidence').mockResolvedValue({
+      evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', purpose: 'QUOTE', quoteVersion: 1,
+    });
+    vi.spyOn(w3DeliveryOperationsApi, 'propose').mockRejectedValue({
+      response: { status: 409, data: { error: { details: { blocker: 'DELIVERY_SCOPE_FROZEN' } } } },
+    });
+    vi.spyOn(w3DeliveryOperationsApi, 'read').mockResolvedValue(projection());
+
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, audience: 'manager' } });
+    await flushPromises();
+    await wrapper.get('select').setValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+
+    expect(wrapper.get('[data-testid="delivery-next-step"]').text()).toContain('Nhập mã tham chiếu');
+    expect(wrapper.get('[data-testid="proposal-missing-hint"]').text()).toContain('Mã tham chiếu');
+    expect(wrapper.get('[data-testid="proposal-missing-hint"]').text()).toContain('Ảnh đề xuất giao hàng');
+
+    await wrapper.get('input[autocomplete="off"]').setValue('SHIP-FROZEN');
+    const evidenceInput = wrapper.get('[data-testid="quote-evidence"]');
+    Object.defineProperty(evidenceInput.element, 'files', { value: [new File(['photo'], 'quote.png', { type: 'image/png' })] });
+    await evidenceInput.trigger('change');
+    expect(wrapper.find('[data-testid="proposal-missing-hint"]').exists()).toBe(false);
+
+    await wrapper.findAll('button').find(button => button.text() === 'Đề xuất phí giao 0 ₫')?.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Đơn đã hoàn tất, đã có yêu cầu hoàn tất hoặc đã xuất hóa đơn');
+
+    await wrapper.findAll('button').find(button => button.text() === 'Đối chiếu trạng thái đã có')?.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="delivery-progress-steps"]').findAll('li')).toHaveLength(6);
+    expect(wrapper.get('[data-testid="delivery-next-step"]').text()).toContain('Khách hàng và Kỹ thuật viên');
+    wrapper.unmount();
+  });
+
+  it('clears stuck sessionStorage command lock when user reloads status for technician receipt', async () => {
+    signIn(UserRole.TECHNICIAN, 'tech-a');
+    const warehouseId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const dispatched = {
+      status: 'DISPATCH_RECORDED' as const,
+      reason: null,
+      warehouseId,
+      responsibleUserId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      courierReference: 'SHIP-0',
+      evidence: [],
+      version: 3,
+    };
+    const dispatchedProj = projection({
+      customerConsented: true, technicianConsented: true,
+      actual: { totalShippingFee: 0, quoteVersion: 1 },
+      physical: dispatched,
+    });
+    vi.spyOn(w3DeliveryOperationsApi, 'read')
+      .mockResolvedValueOnce(dispatchedProj)
+      .mockResolvedValueOnce(dispatchedProj)
+      .mockResolvedValue(projection({
+        customerConsented: true, technicianConsented: true,
+        actual: { totalShippingFee: 0, quoteVersion: 1 },
+        physical: { ...dispatched, status: 'TECHNICIAN_RECEIVED', version: 4 },
+      }));
+    vi.spyOn(w3DeliveryOperationsApi, 'uploadEvidence')
+      .mockResolvedValueOnce({ evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', purpose: 'TECHNICIAN_RECEIPT', quoteVersion: 1 })
+      .mockResolvedValueOnce({ evidenceId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', purpose: 'TECHNICIAN_RECEIPT', quoteVersion: 1 });
+    vi.spyOn(w3DeliveryOperationsApi, 'physical')
+      .mockRejectedValueOnce({ response: { status: 500, data: { message: 'Lỗi lưu kho' } } })
+      .mockResolvedValueOnce({ state: { ...dispatched, status: 'TECHNICIAN_RECEIVED', version: 4 }, replayed: false });
+
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, audience: 'technician', sourceOwnerId: 'tech-a' } });
+    await flushPromises();
+
+    let fileInput = wrapper.get('input[type="file"]');
+    Object.defineProperty(fileInput.element, 'files', { value: [new File(['r1'], 'r1.png', { type: 'image/png' })] });
+    await fileInput.trigger('change');
+    expect(wrapper.text()).toContain('Đã chọn: r1.png');
+    await wrapper.findAll('button').find(button => button.text().includes('nhận linh kiện'))?.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('lỗi 500: Lỗi lưu kho');
+
+    await wrapper.findAll('button').find(button => button.text() === 'Tải lại trạng thái')?.trigger('click');
+    await flushPromises();
+
+    fileInput = wrapper.get('input[type="file"]');
+    Object.defineProperty(fileInput.element, 'files', { value: [new File(['r2'], 'r2.png', { type: 'image/png' })] });
+    await fileInput.trigger('change');
+    await wrapper.findAll('button').find(button => button.text().includes('nhận linh kiện'))?.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="delivery-operations-done"]').text()).toContain('Đã giao xong');
+    wrapper.unmount();
+  });
+
+  it('opens the positive-fee proposal form when initial manager inspection returns 404 before any warehouse is bound', async () => {
+    signIn(UserRole.SERVICE_MANAGER, 'sm-a');
+    vi.spyOn(warehousesApi, 'list').mockResolvedValue([
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'Kho của tôi', address: null, status: 'active', responsibleUserId: 'sm-a', createdAt: '', updatedAt: '' },
+    ]);
+    const positiveQuote = { ...quote, totalShippingFee: 10000, customerShippingShare: 7000, technicianShippingShare: 3000 };
+    vi.spyOn(w3DeliveryOperationsApi, 'read')
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockResolvedValue(projection({ quote: positiveQuote }));
+    const upload = vi.spyOn(w3DeliveryTermsApi, 'uploadEvidence').mockResolvedValue({
+      evidenceId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', purpose: 'QUOTE', quoteVersion: 1,
+    });
+    const propose = vi.spyOn(w3DeliveryTermsApi, 'propose').mockResolvedValue({
+      state: {
+        version: 1, scope: 'CONDITIONAL_TERMS_ONLY',
+        quote: { quoteVersion: 1, policyVersion: 'W3_70_30_V1', totalShippingFee: 10000, customerShippingShare: 7000, technicianShippingShare: 3000, fingerprint },
+        customerConsented: false, technicianConsented: false, actual: null,
+        financialExecution: 'BLOCKED', laborBudget: null, aggregateBudgetVerified: false, paymentVerified: false,
+      },
+      replayed: false,
+    });
+
+    const wrapper = mount(DeliveryOperationsPanel, { props: { ...props, shippingFee: 10000, audience: 'manager' } });
+    await flushPromises();
+    await wrapper.get('select').setValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    await wrapper.findAll('button').find(button => button.text() === 'Đối chiếu trạng thái đã có')?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="positive-shipping-fee"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="positive-shipping-fee"]').setValue('10000');
+    await wrapper.get('input[autocomplete="off"]').setValue('AHM-01');
+    const input = wrapper.get('[data-testid="quote-evidence"]');
+    Object.defineProperty(input.element, 'files', { value: [new File(['photo'], 'quote.png', { type: 'image/png' })] });
+    await input.trigger('change');
+    await wrapper.findAll('button').find(button => button.text() === 'Ghi đề xuất phí giao')?.trigger('click');
+    await flushPromises();
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(propose).toHaveBeenCalledWith(requestId, expect.objectContaining({
+      expectedVersion: 0, totalShippingFee: 10000, warehouseId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', courierReference: 'AHM-01',
+    }));
+    expect(wrapper.text()).toContain('7.000');
+    wrapper.unmount();
+  });
 });
