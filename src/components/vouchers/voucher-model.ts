@@ -134,7 +134,7 @@ export function generalOffer(campaign: GeneralVoucher): VoucherOffer {
   };
 }
 
-function campaignTerms(draft: VoucherCampaignDraft): CreateVoucherCampaign {
+export function campaignTerms(draft: VoucherCampaignDraft): CreateVoucherCampaign {
   const errors = validateVoucherCampaignDraft(draft);
   if (errors.length) throw new Error(errors[0]);
   return {
@@ -258,6 +258,22 @@ export function formatVoucherDate(value: string): string {
     year: 'numeric',
     timeZone: 'Asia/Ho_Chi_Minh',
   }).format(date);
+}
+
+export function formatVoucherDateTime(value: string | null | undefined): string {
+  if (!value) return 'Chưa thiết lập';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Chưa xác định';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const period = hours >= 12 ? 'CH' : 'SA';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  const formattedHours = String(hours).padStart(2, '0');
+  return `${day}/${month}/${year} ${formattedHours}:${minutes} ${period}`;
 }
 
 export function voucherDiscountLabel(offer: VoucherOffer): string {
