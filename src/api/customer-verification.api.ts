@@ -42,7 +42,7 @@ export interface CustomerVerification {
   verifiedFullName: string | null;
   documents: CustomerVerificationDocument[];
   /** Admin lists only. */
-  customer?: { id: string; fullName: string; email: string; phoneNumber: string | null; status: string };
+  customer?: { id: string; fullName: string; email: string; phoneNumber: string | null; status: string; avatarUrl?: string | null };
   reviewedBy?: { id: string; fullName: string } | null;
 }
 

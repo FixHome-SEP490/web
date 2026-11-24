@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component 
 import { useRoute } from 'vue-router';
 import {
   Bell,
-  ClipboardList,
   History,
   LayoutGrid,
   LogOut,
@@ -11,6 +10,7 @@ import {
   User,
   Wallet,
   TicketPercent,
+  Wrench,
 } from 'lucide-vue-next';
 import AccountAvatarBadge from './AccountAvatarBadge.vue';
 import { useAuthStore } from '../../stores/auth';
@@ -35,7 +35,7 @@ const triggerRef = ref<HTMLButtonElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 
 const icons: Record<AccountMenuIcon, Component> = {
-  orders: ClipboardList,
+  orders: Wrench,
   history: History,
   warranty: ShieldCheck,
   wallet: Wallet,
