@@ -46,7 +46,6 @@ const SUGGESTIONS_MAP: Record<number, string[]> = {
     'Tay nghề chuyên môn cao',
     'Giá cả minh bạch',
     'Dọn dẹp sạch sẽ',
-    'Sẽ tiếp tục ủng hộ',
   ],
   4: [
     'Hài lòng với dịch vụ',
@@ -54,6 +53,7 @@ const SUGGESTIONS_MAP: Record<number, string[]> = {
     'Xử lý nhanh nhẹn',
     'Kỹ năng chuyên môn tốt',
     'Chi phí hợp lý',
+    'Đúng hẹn & gọn gàng',
   ],
   3: [
     'Chất lượng tạm ổn',
@@ -61,7 +61,7 @@ const SUGGESTIONS_MAP: Record<number, string[]> = {
     'Chi phí hơi cao',
     'Đúng hẹn',
     'Cần tư vấn rõ hơn',
-    'Thái độ dịch vụ',
+    'Thái độ phục vụ ổn',
   ],
   2: [
     'Đến muộn giờ hẹn',
@@ -69,18 +69,20 @@ const SUGGESTIONS_MAP: Record<number, string[]> = {
     'Chưa dọn dẹp sạch sẽ',
     'Phát sinh thêm chi phí',
     'Cần nâng cao tay nghề',
+    'Tư vấn chưa rõ ràng',
   ],
   1: [
     'Thái độ chưa tốt',
     'Tay nghề kém',
-    'Không khắc phục triệt để lỗi',
+    'Chưa xử lý triệt để lỗi',
     'Trễ hẹn quá lâu',
     'Chi phí bất hợp lý',
+    'Thiếu chuyên nghiệp',
   ],
 };
 
 const currentChips = computed(() => {
-  return SUGGESTIONS_MAP[activeRating.value] || SUGGESTIONS_MAP[5];
+  return SUGGESTIONS_MAP[selectedRating.value] || SUGGESTIONS_MAP[5];
 });
 
 const selectedChips = ref<string[]>([]);
@@ -177,18 +179,18 @@ const handleSubmit = async () => {
   <Transition name="fh-modal">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/60 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/60 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-labelledby="review-modal-title"
       @click.self="handleClose"
     >
       <div
-        class="fh-modal-panel bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-ink-100 flex flex-col max-h-[92vh]"
+        class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-2xl max-w-md w-full h-[min(90dvh,720px)] max-h-[92dvh] shadow-2xl overflow-hidden border border-ink-100 flex flex-col"
         @click.stop
       >
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-ink-100 flex items-center justify-between bg-ink-25">
+        <div class="px-5 py-4 border-b border-ink-100 flex items-center justify-between bg-ink-25 shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-warning-50 border border-warning-200 flex items-center justify-center text-warning-500 shadow-xs">
               <Star :size="18" class="fill-warning-400 text-warning-400" />
@@ -237,7 +239,7 @@ const handleSubmit = async () => {
           </div>
 
           <!-- Body / Form -->
-          <div v-else key="form" class="p-6 space-y-5 overflow-y-auto flex-1">
+          <div v-else key="form" class="p-5 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
             <!-- Technician Card Info -->
             <div class="flex items-center gap-3.5 p-3.5 rounded-xl bg-ink-50/70 border border-ink-100">
               <div class="w-12 h-12 rounded-full overflow-hidden bg-brand-50 border border-brand-200 flex items-center justify-center shrink-0 text-brand-600 font-bold text-sm">
@@ -309,15 +311,15 @@ const handleSubmit = async () => {
                 <span class="text-xs text-ink-400">Chọn nhiều thẻ</span>
               </div>
 
-              <div class="flex flex-wrap gap-2">
+              <div class="flex flex-wrap content-start gap-2 min-h-[7.25rem]">
                 <button
                   v-for="chip in currentChips"
                   :key="chip"
                   type="button"
-                  class="inline-flex items-center justify-center px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 active:scale-95 border select-none cursor-pointer"
+                  class="inline-flex items-center justify-center px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-150 active:scale-95 border select-none cursor-pointer"
                   :class="
                     selectedChips.includes(chip)
-                      ? 'bg-brand-50 border-brand-600 text-brand-700 font-semibold shadow-xs ring-1 ring-brand-500/20'
+                      ? 'bg-brand-50 border-brand-600 text-brand-700 shadow-xs ring-1 ring-brand-500/20'
                       : 'bg-white border-ink-200 text-ink-700 hover:bg-ink-50 hover:border-ink-300'
                   "
                   @click="toggleChip(chip)"
@@ -360,7 +362,7 @@ const handleSubmit = async () => {
         </Transition>
 
         <!-- Footer Buttons -->
-        <div v-if="!isSuccess" class="px-6 py-4 border-t border-ink-100 bg-ink-25 flex items-center gap-3">
+        <div v-if="!isSuccess" class="px-5 py-4 border-t border-ink-100 bg-ink-25 flex items-center gap-3 shrink-0">
           <FhButton
             variant="secondary"
             size="md"

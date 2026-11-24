@@ -21,6 +21,7 @@ export interface VerificationTechnician {
   dateOfBirth?: string | null;
   gender?: string | null;
   citizenIdNumber?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface VerificationProfileSkill {
@@ -122,6 +123,7 @@ function normalizeTechnician(payload: unknown): VerificationTechnician | null {
     dateOfBirth: t.dateOfBirth == null ? null : String(t.dateOfBirth),
     gender: t.gender == null ? null : String(t.gender),
     citizenIdNumber: t.citizenIdNumber == null ? null : String(t.citizenIdNumber),
+    avatarUrl: t.avatarUrl == null ? null : String(t.avatarUrl),
   };
 }
 

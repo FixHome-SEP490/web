@@ -1276,26 +1276,36 @@ const parsedReview = computed(() => {
     <!-- Result of the last action -->
     <div
       v-if="actionMessage"
-      role="status"
-      class="p-3.5 rounded-xl text-sm flex items-center gap-2"
-      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border border-success-200' : 'bg-danger-50 text-danger-800 border border-danger-200'"
+      :role="actionMessage.type === 'success' ? 'status' : 'alert'"
+      class="px-4 py-3 rounded-xl text-sm flex items-start gap-2 border"
+      :class="actionMessage.type === 'success' ? 'bg-success-50 text-success-800 border-success-200' : 'bg-danger-50 text-danger-800 border-danger-200'"
     >
-      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="16" class="text-success-600 shrink-0" />
-      <AlertCircle v-else :size="16" class="text-danger-600 shrink-0" />
-      <span class="text-pretty">{{ actionMessage.text }}</span>
+      <CheckCircle2 v-if="actionMessage.type === 'success'" :size="18" class="text-success-600 shrink-0 mt-px" />
+      <AlertCircle v-else :size="18" class="text-danger-600 shrink-0 mt-px" />
+      <span class="flex-1 min-w-0 text-pretty">{{ actionMessage.text }}</span>
+      <button type="button" class="shrink-0 -m-1 p-1 rounded-lg text-ink-400 hover:text-ink-700" aria-label="Đóng thông báo" @click="actionMessage = null">
+        <X :size="16" />
+      </button>
     </div>
 
-    <!-- Loading: the shape of the page -->
-    <div v-if="loading" class="space-y-6 animate-slide-up-delay-1" aria-busy="true" aria-label="Đang tải đơn">
-      <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
-        <FhSkeleton width="55%" height="26px" />
-        <FhSkeleton width="30%" height="16px" />
-        <FhSkeleton height="16px" :count="2" />
-        <FhSkeleton height="56px" rounded="md" />
-      </section>
+    <!-- Loading: 2-column shape mirroring desktop & mobile layout -->
+    <div v-if="loading" class="animate-slide-up-delay-1 lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)] lg:items-start gap-5 space-y-5 lg:space-y-0" aria-busy="true" aria-label="Đang tải đơn">
+      <div class="space-y-5">
+        <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-4">
+          <FhSkeleton width="55%" height="26px" />
+          <FhSkeleton width="30%" height="16px" />
+          <FhSkeleton height="16px" :count="2" />
+          <FhSkeleton height="56px" rounded="md" />
+        </section>
+        <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-3">
+          <FhSkeleton width="25%" height="20px" />
+          <FhSkeleton height="18px" :count="4" />
+        </section>
+      </div>
       <section class="rounded-2xl bg-white border border-ink-200 p-5 sm:p-6 space-y-3">
-        <FhSkeleton width="25%" height="20px" />
-        <FhSkeleton height="18px" :count="4" />
+        <FhSkeleton width="45%" height="22px" />
+        <FhSkeleton height="64px" rounded="md" />
+        <FhSkeleton height="44px" rounded="md" />
       </section>
     </div>
 
@@ -2164,33 +2174,37 @@ const parsedReview = computed(() => {
     />
 
     <!-- Tracking Modal -->
-    <div
-      v-if="showTrackingModal && !workStopped"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-      @keydown.esc="showTrackingModal = false"
-    >
-      <div role="dialog" aria-modal="true" aria-label="Vị trí kỹ thuật viên" class="bg-white rounded-[var(--radius-md)] max-w-lg w-full p-6 space-y-4 shadow-xl">
-        <div class="flex items-center justify-between gap-3">
-          <h3 class="text-base font-semibold text-ink-900">Vị trí kỹ thuật viên</h3>
-          <span v-if="order?.technicianLocation?.updatedAt" class="text-sm text-ink-500 whitespace-nowrap">
-            Cập nhật {{ vnTimeString(order.technicianLocation.updatedAt) }}
-          </span>
+    <Transition name="fh-modal">
+      <div
+        v-if="showTrackingModal && !workStopped"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/55 backdrop-blur-xs sm:p-4"
+        @click.self="showTrackingModal = false"
+        @keydown.esc="showTrackingModal = false"
+      >
+        <div role="dialog" aria-modal="true" aria-label="Vị trí kỹ thuật viên" class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-4 shadow-2xl">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-base font-semibold text-ink-900">Vị trí kỹ thuật viên</h3>
+            <span v-if="order?.technicianLocation?.updatedAt" class="text-sm text-ink-500 whitespace-nowrap">
+              Cập nhật {{ vnTimeString(order.technicianLocation.updatedAt) }}
+            </span>
+          </div>
+          <MapTilerMap
+            :center="order?.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order?.destination || { lat: 21.0285, lng: 105.8542 })"
+            :markers="trackingMarkers"
+            height-class="h-72"
+          />
+          <FhButton variant="secondary" size="md" class="w-full" @click="showTrackingModal = false">Đóng</FhButton>
         </div>
-        <MapTilerMap
-          :center="order?.technicianLocation ? { lat: order.technicianLocation.lat, lng: order.technicianLocation.lng } : (order?.destination || { lat: 21.0285, lng: 105.8542 })"
-          :markers="trackingMarkers"
-          height-class="h-72"
-        />
-        <FhButton variant="secondary" size="md" class="w-full" @click="showTrackingModal = false">Đóng</FhButton>
       </div>
-    </div>
+    </Transition>
 
     <!-- Payment Modal -->
-    <div
-      v-if="showPaymentModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/50 backdrop-blur-xs p-4"
-    >
-      <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="bg-white rounded-[var(--radius-md)] max-w-sm w-full max-h-[90dvh] overflow-y-auto p-6 space-y-4 shadow-xl">
+    <Transition name="fh-modal">
+      <div
+        v-if="showPaymentModal"
+        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink-950/55 backdrop-blur-xs sm:p-4"
+      >
+        <div ref="paymentDialog" role="dialog" aria-modal="true" aria-label="Thanh toán đơn" @keydown="onPaymentKeydown" class="fh-modal-panel fh-modal-panel--sheet bg-white rounded-t-[20px] sm:rounded-2xl w-full sm:max-w-xl max-h-[92dvh] overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5 shadow-2xl">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-ink-900">Thanh toán đơn</h3>
@@ -2321,8 +2335,9 @@ const parsedReview = computed(() => {
           >{{ cashFirstEnabled ? 'Yêu cầu trả tiền mặt' : 'Đã hiểu' }}</FhButton>
           </template>
         </template>
+        </div>
       </div>
-    </div>
+    </Transition>
 
     <!-- Lightbox for repair photos -->
     <div

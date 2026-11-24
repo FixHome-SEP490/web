@@ -570,7 +570,7 @@ export const ordersApi = {
     return normalizeTechnicianOrder(res.data.data);
   },
 
-  async getConsoleOrders(statusFilter?: string): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined}}); return res.data.data.map(normalizeOrder); },
+  async getConsoleOrders(statusFilter?: string, pageSize = 100): Promise<ServiceOrderItem[]> { const res = await apiClient.get<{data: ServiceOrderItem[]}>('/service-orders', {params:{status:statusFilter?.toLowerCase() || undefined, pageSize}}); return res.data.data.map(normalizeOrder); },
 
   /** Staff board, one page; `search` matches order code, customer and service name. */
   async getConsoleOrdersPage(page: number, pageSize: number, filter: ListFilter = {}): Promise<PageResult<ServiceOrderItem>> {

@@ -13,7 +13,7 @@ import {
   User,
   MessageSquare,
   Home,
-  ClipboardList,
+  Wrench,
 } from 'lucide-vue-next';
 import { ChatFloatingWidget, AiAssistantWidget } from '../components';
 import CustomerTopHeader from '../components/account/CustomerTopHeader.vue';
@@ -147,7 +147,7 @@ const unreadNotif = computed(() => (effectiveNotifCount.value > 99 ? '99+' : Str
 
 const tabItems = [
   { to: '/app', label: 'Trang chủ', icon: Home, exact: true },
-  { to: '/app/orders', label: 'Đơn của tôi', icon: ClipboardList, exact: false },
+  { to: '/app/orders', label: 'Đơn của tôi', icon: Wrench, exact: false },
   { to: '/app/messages', label: 'Tin nhắn', icon: MessageSquare, exact: false },
   { to: '/app/notifications', label: 'Thông báo', icon: Bell, exact: false },
   { to: '/app/profile', label: 'Tài khoản', icon: User, exact: false },
