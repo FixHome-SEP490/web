@@ -3,12 +3,20 @@ import { flushPromises, mount } from '@vue/test-utils';
 
 const mocks = vi.hoisted(() => ({
   getConsoleOrderContext: vi.fn(),
+  listCases: vi.fn(),
+  getAdditionalCosts: vi.fn(),
   authStore: { userRole: 'ADMIN' as string, hasPermission: () => true },
   route: { params: { id: 'order-1' } },
 }));
 
 vi.mock('../src/api/console-order-context.api', () => ({
   consoleOrderContextApi: { getConsoleOrderContext: mocks.getConsoleOrderContext },
+}));
+vi.mock('../src/api/support-cases.api', () => ({
+  supportCasesApi: { listCases: mocks.listCases },
+}));
+vi.mock('../src/api/orders.api', () => ({
+  ordersApi: { getAdditionalCosts: mocks.getAdditionalCosts, cancelOrder: vi.fn() },
 }));
 vi.mock('../src/api/bookings.api', () => ({
   bookingsApi: { getBooking: vi.fn() },
@@ -42,7 +50,7 @@ const mountPage = () => mount(ConsoleOrderDetailPage, {
     stubs: {
       FhCard: { template: '<section><slot /></section>' },
       FhSkeleton: true,
-      FhStatusPill: true,
+      FhStatusPill: { props: ['status', 'label'], template: '<span :data-status="status">{{ label }}</span>' },
       FhMoney: true,
       BookingMediaViewer: true,
       ConsolePageHeader: { template: '<header><slot name="badges" /><slot name="actions" /></header>' },
@@ -68,6 +76,10 @@ describe('Service Manager console order timeline', () => {
     mocks.route.params.id = 'order-1';
     mocks.getConsoleOrderContext.mockReset();
     mocks.getConsoleOrderContext.mockResolvedValue(order());
+    mocks.listCases.mockReset();
+    mocks.listCases.mockResolvedValue({ data: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    mocks.getAdditionalCosts.mockReset();
+    mocks.getAdditionalCosts.mockResolvedValue([]);
   });
 
   it.each(['ADMIN', 'SERVICE_MANAGER'])('%s sees localized primary statuses and preserves entry order, actor, and time', async (role) => {
@@ -164,6 +176,58 @@ describe('Service Manager console order timeline', () => {
 
     expect(wrapper.text()).toContain('Chưa có lịch sử trạng thái.');
     expect(wrapper.findAll('.relative.group')).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it.each(['ADMIN', 'SERVICE_MANAGER'])('%s sees order support cases, stop/replace requests, and additional costs directly on the order page', async (role) => {
+    mocks.authStore.userRole = role;
+    mocks.listCases.mockResolvedValueOnce({
+      data: [{
+        id: 'case-stop-1',
+        caseType: 'mid_job_interruption',
+        requestIntent: 'stop_or_replace',
+        status: 'open',
+        reason: 'Khách yêu cầu đổi kỹ thuật viên khác',
+        isUrgent: true,
+        holdCompletion: true,
+        createdAt: '2026-11-24T10:00:00.000Z',
+        updatedAt: '2026-11-24T10:00:00.000Z',
+      }],
+      meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+    mocks.getAdditionalCosts.mockResolvedValueOnce([{
+      id: 'cost-1',
+      serviceOrderId: 'order-1',
+      technicianId: 'tech-1',
+      status: 'PENDING_APPROVAL',
+      reason: 'Thay tụ điện máy lạnh bị phồng',
+      totalLaborDelta: 50000,
+      totalPartsDelta: 120000,
+      fulfillmentMethod: 'delivery',
+      shippingFee: 10000,
+      expiresAt: '2026-11-24T12:00:00.000Z',
+      items: [{
+        id: 'item-1',
+        type: 'PARTS_EQUIPMENT',
+        description: 'Tụ điện 35uF',
+        quantity: 1,
+        unitPrice: 120000,
+        lineTotal: 120000,
+      }],
+    }]);
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const supportPanel = wrapper.get('[data-testid="order-support-cases-panel"]');
+    expect(supportPanel.text()).toContain('Khách yêu cầu dừng sửa / Đổi thợ');
+    expect(supportPanel.text()).toContain('Khách yêu cầu đổi kỹ thuật viên khác');
+    expect(supportPanel.text()).toContain(role === 'SERVICE_MANAGER' ? 'Xem & xử lý' : 'Xem chi tiết');
+
+    const additionalPanel = wrapper.get('[data-testid="order-additional-costs-panel"]');
+    expect(additionalPanel.text()).toContain('Thay tụ điện máy lạnh bị phồng');
+    expect(additionalPanel.text()).toContain('Chờ khách duyệt');
+    expect(additionalPanel.text()).toContain('Tụ điện 35uF');
     wrapper.unmount();
   });
 });

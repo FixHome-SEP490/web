@@ -185,8 +185,9 @@ describe('ConsoleOrderDetail read-only regression', () => {
   });
 
   it('keeps exception handling in support and cancels only through the real cancel API (PO 12/11/2026)', () => {
-    // The only write on this page: a Service Manager cancels before repair starts.
-    expect(source.match(/ordersApi\.\w+/g)).toEqual(['ordersApi.cancelOrder']);
+    // The only write on this page: a Service Manager cancels before repair starts (getAdditionalCosts is read-only).
+    const writeCalls = (source.match(/ordersApi\.\w+/g) ?? []).filter((call) => call !== 'ordersApi.getAdditionalCosts');
+    expect(writeCalls).toEqual(['ordersApi.cancelOrder']);
     expect(source).toMatch(/isServiceManager\.value\s*&& \['accepted', 'en_route'\]/);
     expect(source).toContain('/console/support');
     expect(source).toContain('/console/cancellations');

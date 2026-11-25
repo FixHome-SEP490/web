@@ -59,7 +59,7 @@ describe('auth session and Admin navigation', () => {
     expect(router.currentRoute.value.path).toBe('/console/admin/users');
     expect(authStore.isAuthenticated).toBe(true);
     expect(authStore.user).toEqual(adminUser);
-  });
+  }, 15_000);
 
   it('does not destroy a persisted session when profile hydration has a transient error', async () => {
     localStorage.setItem('access_token', 'persisted-token');

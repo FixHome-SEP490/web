@@ -21,6 +21,7 @@ import {
   MessageSquare,
   ZoomIn,
   Star,
+  AlertTriangle,
 } from 'lucide-vue-next';
 import { extractConsoleOrderDetails } from '../../components/console/console-order-fields';
 import {
@@ -41,10 +42,12 @@ import { orderStatusLabel, paymentStatusLabel, roleLabel } from '../../component
 import { consoleOrderContextApi, type ConsoleOrderContext } from '../../api/console-order-context.api';
 import { bookingsApi, isFullBookingWithMedia, type BookingItem, type BookingMedia } from '../../api/bookings.api';
 import { catalogApi, type ServiceCategory } from '../../api/catalog.api';
+import { supportCasesApi, type SupportCaseSummary } from '../../api/support-cases.api';
+import { supportCaseStatusLabels, supportCaseTypeLabels } from './support-cases.utils';
 import { categoryIcon } from '../../components/booking/service-icons';
 import { useAuthStore } from '../../stores/auth';
 import { vnDateTimeString } from '../../utils/vn-time';
-import { ordersApi } from '../../api/orders.api';
+import { ordersApi, type AdditionalCostRecord } from '../../api/orders.api';
 import { consoleTextarea } from '../../components/console/console-ui';
 import { userFacingError } from '../../utils/user-facing-error';
 import { useLiveOrderRefresh } from '../../composables/useLiveOrderRefresh';
@@ -69,6 +72,25 @@ const bookingMediaBookingId = computed(() => bookingForMedia.value?.id ?? '');
 const categories = ref<ServiceCategory[]>([]);
 const isQuotationCollapsed = ref(false);
 const selectedFallbackImage = ref<string | null>(null);
+const orderSupportCases = ref<SupportCaseSummary[]>([]);
+const orderAdditionalCosts = ref<AdditionalCostRecord[]>([]);
+const openSupportCasesCount = computed(
+  () => orderSupportCases.value.filter((item) => item.status === 'open' || item.status === 'in_review').length,
+);
+
+const additionalCostStatusLabels: Record<AdditionalCostRecord['status'], string> = {
+  PENDING_APPROVAL: 'Chờ khách duyệt',
+  APPROVED: 'Khách đã duyệt',
+  REJECTED: 'Khách từ chối',
+  EXPIRED: 'Đã hết hạn',
+  CANCELLED: 'Đã huỷ',
+};
+
+function supportCaseTitle(item: SupportCaseSummary): string {
+  return item.requestIntent === 'stop_or_replace'
+    ? 'Khách yêu cầu dừng sửa / Đổi thợ'
+    : (supportCaseTypeLabels[item.caseType] || 'Yêu cầu hỗ trợ');
+}
 
 const loadOrder = async (requestedOrderId = orderId, quiet = false) => {
   const generation = ++loadGeneration;
@@ -81,6 +103,8 @@ const loadOrder = async (requestedOrderId = orderId, quiet = false) => {
   if (!quiet) {
     loadError.value = false;
     bookingForMedia.value = null;
+    orderSupportCases.value = [];
+    orderAdditionalCosts.value = [];
   }
   try {
     const nextOrder = await consoleOrderContextApi.getConsoleOrderContext(requestedOrderId);
@@ -88,6 +112,37 @@ const loadOrder = async (requestedOrderId = orderId, quiet = false) => {
     order.value = nextOrder;
 
     const bookingId = typeof nextOrder.bookingId === 'string' ? nextOrder.bookingId.trim() : '';
+    const canReadSupport = isAdminOrSm.value
+      && typeof authStore.hasPermission === 'function'
+      && authStore.hasPermission('support:read_all')
+      && typeof supportCasesApi?.listCases === 'function';
+    const canReadAdditionalCosts = isAdminOrSm.value
+      && typeof ordersApi?.getAdditionalCosts === 'function';
+
+    if (canReadSupport) {
+      void supportCasesApi.listCases({
+        serviceOrderId: requestedOrderId,
+        limit: 20,
+        sort: 'priority',
+      }).then((result) => {
+        if (isCurrent() && Array.isArray(result?.data)) {
+          orderSupportCases.value = result.data;
+        }
+      }).catch(() => {
+        if (isCurrent() && !quiet) orderSupportCases.value = [];
+      });
+    }
+
+    if (canReadAdditionalCosts) {
+      void ordersApi.getAdditionalCosts(requestedOrderId).then((costs) => {
+        if (isCurrent() && Array.isArray(costs)) {
+          orderAdditionalCosts.value = costs;
+        }
+      }).catch(() => {
+        if (isCurrent() && !quiet) orderAdditionalCosts.value = [];
+      });
+    }
+
     if (isStaffMediaViewerAllowed.value && bookingId) {
       try {
         const booking = await bookingsApi.getBooking(bookingId);
@@ -386,6 +441,12 @@ function scrollToAudit() {
             >
               <Headphones :size="16" aria-hidden="true" />
               <span>Yêu cầu hỗ trợ</span>
+              <span
+                v-if="openSupportCasesCount > 0"
+                class="inline-flex min-w-5 items-center justify-center rounded-full bg-danger-50 border border-danger-200 px-1.5 py-0.5 font-num text-[11px] font-bold text-danger-700"
+              >
+                {{ openSupportCasesCount }}
+              </span>
             </button>
 
             <button
@@ -643,6 +704,69 @@ function scrollToAudit() {
       </Transition>
 
       <!-- Incident & Stopped Work Panels (Audits/Disputes) -->
+      <section
+        v-if="orderSupportCases.length > 0"
+        class="rounded-2xl border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) space-y-3"
+        data-testid="order-support-cases-panel"
+        aria-label="Khiếu nại, đổi thợ và yêu cầu hỗ trợ"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 pb-3">
+          <div class="flex items-center gap-2">
+            <AlertTriangle :size="18" class="text-warning-600 shrink-0" aria-hidden="true" />
+            <h2 class="text-base font-bold text-ink-950">Khiếu nại, đổi thợ &amp; báo cáo của đơn này</h2>
+            <span class="rounded-full bg-ink-100 px-2 py-0.5 font-num text-xs font-semibold text-ink-700">
+              {{ orderSupportCases.length }}
+            </span>
+          </div>
+          <router-link
+            :to="{ path: '/console/support', query: { serviceOrderId: order.id } }"
+            class="text-xs sm:text-sm font-semibold text-brand-700 hover:text-brand-800 hover:underline"
+          >
+            Mở danh sách hỗ trợ
+          </router-link>
+        </div>
+
+        <ul class="divide-y divide-ink-100">
+          <li
+            v-for="item in orderSupportCases"
+            :key="item.id"
+            class="flex flex-col gap-2 py-3 first:pt-1 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
+          >
+            <div class="min-w-0 space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-sm text-ink-950">{{ supportCaseTitle(item) }}</span>
+                <FhStatusPill :status="item.status" :label="supportCaseStatusLabels[item.status]" />
+                <span
+                  v-if="item.isUrgent && (item.status === 'open' || item.status === 'in_review')"
+                  class="rounded-full border border-danger-200 bg-danger-50 px-2 py-0.5 text-[11px] font-medium text-danger-700"
+                >
+                  Cần xử lý ngay
+                </span>
+                <span
+                  v-if="item.holdCompletion"
+                  class="rounded-full bg-info-50 px-2 py-0.5 text-[11px] font-medium text-info-600"
+                >
+                  Đang giữ đơn
+                </span>
+              </div>
+              <p class="text-xs sm:text-sm text-ink-700 whitespace-pre-line">{{ item.reason }}</p>
+              <p v-if="item.resolutionReason" class="rounded-lg bg-ink-50 px-2.5 py-1.5 text-xs text-ink-700">
+                <span class="font-semibold">Kết quả xử lý:</span> {{ item.resolutionReason }}
+              </p>
+              <p class="font-num text-xs text-ink-500">
+                Gửi lúc {{ vnDateTimeString(item.createdAt) }}
+              </p>
+            </div>
+            <router-link
+              :to="`/console/support/${encodeURIComponent(item.id)}`"
+              class="inline-flex shrink-0 items-center self-start rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100/80 transition-colors"
+            >
+              {{ isServiceManager ? 'Xem & xử lý' : 'Xem chi tiết' }}
+            </router-link>
+          </li>
+        </ul>
+      </section>
+
       <GroupStopIncidentsPanel :key="`group:${order.id}`" :order-id="order.id" :group-id="order.visitGroupId ?? null" />
       <div id="staff-finance-audit-panel">
         <StoppedWorkFinancePanel :key="order.id" :order-id="order.id" />
@@ -833,7 +957,48 @@ function scrollToAudit() {
               </table>
 
               <div v-if="quotationItems.length === 0" class="py-6 text-center text-xs text-ink-400">
-                Chưa có hạng mục báo giá phát sinh.
+                Chưa có hạng mục báo giá.
+              </div>
+
+              <div
+                v-if="orderAdditionalCosts.length > 0"
+                class="mt-4 border-t border-ink-100 pt-4 space-y-3"
+                data-testid="order-additional-costs-panel"
+              >
+                <h3 class="text-xs sm:text-sm font-bold text-ink-900">
+                  Chi phí &amp; linh kiện phát sinh ({{ orderAdditionalCosts.length }})
+                </h3>
+                <ul class="divide-y divide-ink-100 rounded-xl border border-ink-100 bg-ink-25/40">
+                  <li v-for="cost in orderAdditionalCosts" :key="cost.id" class="p-3.5 space-y-2 text-xs sm:text-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                      <div class="min-w-0 space-y-0.5">
+                        <p class="font-medium text-ink-900 text-pretty">{{ cost.reason }}</p>
+                        <p class="font-num text-xs text-ink-500">
+                          {{ cost.fulfillmentMethod === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho / Thợ tự mang' }}
+                          <template v-if="cost.decidedAt"> · Quyết định lúc {{ vnDateTimeString(cost.decidedAt) }}</template>
+                        </p>
+                      </div>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <FhStatusPill :status="cost.status" :label="additionalCostStatusLabels[cost.status]" />
+                        <span class="font-num font-semibold text-ink-950">
+                          <FhMoney :amount="Number(cost.totalLaborDelta) + Number(cost.totalPartsDelta) + Number(cost.shippingFee || 0)" />
+                        </span>
+                      </div>
+                    </div>
+                    <ul v-if="cost.items?.length" class="space-y-1 border-t border-ink-100/80 pt-2 text-xs text-ink-600">
+                      <li v-for="item in cost.items" :key="item.id" class="flex items-center justify-between gap-3">
+                        <span class="min-w-0 truncate">
+                          {{ item.description }} · <span class="font-num">{{ item.quantity }} × <FhMoney :amount="item.unitPrice" /></span>
+                        </span>
+                        <span class="font-num shrink-0 font-medium text-ink-800"><FhMoney :amount="item.lineTotal" /></span>
+                      </li>
+                      <li v-if="Number(cost.shippingFee || 0) > 0" class="flex items-center justify-between gap-3">
+                        <span>Phí giao linh kiện</span>
+                        <span class="font-num shrink-0 font-medium text-ink-800"><FhMoney :amount="Number(cost.shippingFee)" /></span>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>

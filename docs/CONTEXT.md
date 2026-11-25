@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-22 16:14 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-25 11:13 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -623,6 +623,9 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-25 11:13 (UTC+7) | Lạc Vỹ | LacVy | Hỗ trợ Admin/SM theo dõi khiếu nại và yêu cầu đổi thợ từ Dashboard/Đơn hàng, gắn nhãn dừng sửa/đổi thợ trên SupportQueuePage, SupportDetailPage và tự chuyển resolve-interruption khi hoàn tất kiểm tra
+- 2026-11-24 20:39 (UTC+7) | Lạc Vỹ | LacVy | Sửa stepper và lỗi 404/409 luồng giao linh kiện W3 có phí/0 ₫ (ConsolePartRequestsPage, DeliveryOperationsPanel, DeliveryTermsPanel), đồng thời mở thêm linh kiện trước sửa và thu gọn UI giao nhận/điều khoản 70/30 cho khách và thợ
+- 2026-11-23 17:00 (UTC+7) | Lạc Vỹ | LacVy | Đồng bộ giao diện và luồng tải lại giữa khách và thợ tại TechnicianJobDetailPage, CustomerOrderDetailPage, CustomerVisitPage, BookingCandidatesPage, TechnicianPartReturnsPage và ReviewTechnicianModal
 - 2026-11-22 16:14 (UTC+7) | Hgnv11 | dev | Trang Linh kiện cần trả của thợ hiện linh kiện hỏng cần nộp của bảo hành
 - 2026-11-22 15:17 (UTC+7) | Hgnv11 | dev | Bảo hành web: thợ nhận và khai dùng linh kiện thay thế, khoá báo xong khi chưa khai, realtime trang chi tiết, khách xem kết quả kiểm tra
 - 2026-11-22 13:12 (UTC+7) | ToanAltF4 | feat/sm-per-account-permissions | BUG 261: trang phân quyền SM chọn từng tài khoản, nút về mặc định theo vai trò; menu SM ẩn theo quyền thực
@@ -660,6 +663,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-16 13:12 (UTC+7) | Lạc Vỹ | LacVy | Hoàn tất bộ 13 PNG 3D tách nền với `customer-orders-board.png` & đồng bộ Header Banner/Card cho 3 trang Khách hàng cuối (`CustomerOrdersPage.vue`, `BookingDetailPage.vue`, `BookingCandidatesPage.vue`, bỏ qua Profile/KYC) tiếp nối 7 trang Thợ (`tech-jobs-toolkit.png`, `tech-invitations-radar.png`, `tech-earnings-chart.png`), `<Teleport to="body">` menu avatar `AppSidebar.vue` & quét radar `3600ms` (`TechnicianRadarLoader.vue`); focused 12 file Khách hàng mới (124/124) + `vue-tsc -b` + `eslint --max-warnings=0` PASS, 11 file Thợ (167/167) từ lượt liền trước chưa sửa thêm, trình duyệt CHƯA KIỂM CHỨNG.
 - 2026-11-15 19:02 (UTC+7) | Lạc Vỹ | LacVy | Chuyển artwork 3D header banner sang bên trái theo flex flow + vạch phân cách dọc ở `CustomerWarrantiesPage.vue`, `CustomerWalletPage.vue`, `CustomerHistoryPage.vue` và `CustomerVouchersPage.vue` (gọn tương phản & một lớp nâng viền); đồng thời fix `:src="'/images/landing-cta-house.png'"` ở `LandingPage.vue`; focused 6 file (62/62) + `landing-page.spec.ts` (19/19), `vue-tsc -b` + `eslint --max-warnings=0` PASS, trình duyệt CHƯA KIỂM CHỨNG.
 - 2026-11-15 13:53 (UTC+7) | Lạc Vỹ | LacVy | Đặt nhiều thiết bị trên `NewBookingWizardPage.vue` đồng bộ card artwork 3D dịch vụ cho Bước 1 và Bước 4 giống đặt 1 máy, và thêm ảnh minh họa cố định trên card `BookingSummary.vue`; trình duyệt CHƯA KIỂM CHỨNG.
-- 2026-11-14 17:10 (UTC+7) | Lạc Vỹ | LacVy | Nâng cấp UX Khách hàng (ảnh dịch vụ các màn đơn/lượt/bảo hành/chi tiết, mặc định tab Đơn sửa chữa, khung giờ thuần 08:00–23:00, radar dò thợ `TechnicianRadarLoader.vue`, theo dõi thợ di chuyển `LiveArrivalCard.vue`) và hộp thoại xem ảnh chat `ChatImageLightbox.vue`; trình duyệt CHƯA KIỂM CHỨNG.
-- 2026-11-13 18:20 (UTC+7) | ToanAltF4 | fix/w3-paid-ops-web | W3 có phí: SM đối chiếu 404 quay về form đề xuất; khối điều khoản hiện đủ 4 trần (số lượt, tổng, phần khách, phần thợ)
-- 2026-11-13 15:20 (UTC+7) | ToanAltF4 | fix/w3-receipt-blocker | Phiếu W3 thợ đã nhận đọc như đã nhận ở trang đơn: thợ ghi nhận dùng và gửi hoàn thành được (trước đó kẹt 'cần nhận bằng QR')
