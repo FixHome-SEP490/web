@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleVoucherWorkspace from '../../components/vouchers/ConsoleVoucherWorkspace.vue';
-import { voucherAdapter, type VoucherOffer, type VoucherCampaignDraft } from '../../components/vouchers/voucher-model';
+import { voucherAdapter, campaignTerms, type VoucherOffer, type VoucherCampaignDraft } from '../../components/vouchers/voucher-model';
 import { catalogApi, type ServiceCategory, type ServiceItem } from '../../api/catalog.api';
+import { vouchersApi } from '../../api/vouchers.api';
 import { getHttpStatus } from '../../api/client';
 import { useAuthStore } from '../../stores/auth.store';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -108,7 +108,25 @@ async function runAction(action: () => Promise<void>, success: string) {
 }
 function createCampaign(draft: VoucherCampaignDraft) {
   const key = `create:${JSON.stringify(draft)}`;
-  return runAction(async () => { await voucherAdapter.createCampaign(draft, commandIdFor(key)); pendingCommands.delete(key); await load(); }, 'Đã lưu chiến dịch ưu đãi.');
+  return runAction(async () => {
+    await voucherAdapter.createCampaign(draft, commandIdFor(key));
+    pendingCommands.delete(key);
+    await load();
+  }, 'Đã lưu bản nháp chiến dịch ưu đãi.');
+}
+function createAndPublishCampaign(draft: VoucherCampaignDraft) {
+  const key = `create:${JSON.stringify(draft)}`;
+  return runAction(async () => {
+    const terms = campaignTerms(draft);
+    const created = await vouchersApi.create({ ...terms, commandId: commandIdFor(key) });
+    pendingCommands.delete(key);
+    if (created?.id && created.version) {
+      const pubKey = `lifecycle:${created.id}:${created.version}:PUBLISHED`;
+      await voucherAdapter.transitionCampaign(created.id, 'PUBLISHED', created.version, commandIdFor(pubKey));
+      pendingCommands.delete(pubKey);
+    }
+    await load();
+  }, 'Đã tạo và phát hành chiến dịch ưu đãi thành công.');
 }
 function updateDraftCampaign(id: string, draft: VoucherCampaignDraft) {
   const row = campaigns.value.find(c => c.id === id);
@@ -141,17 +159,29 @@ function setCampaignStatus(id: string, active: boolean) {
 </script>
 
 <template>
-  <div lang="vi" class="space-y-5" data-testid="console-vouchers-page">
-    <ConsolePageHeader class="animate-slide-up" title="Quản lý ưu đãi" />
-    <div class="animate-slide-up-delay-1">
+  <div lang="vi" class="space-y-6" data-testid="console-vouchers-page">
+    <div class="animate-slide-up">
       <ConsoleVoucherWorkspace
         :key="adminId ?? 'guest'"
-        :state="state" :campaigns="campaigns" :connected="true"
-        :can-manage="Boolean(adminId)" :busy="busy" :message="message"
-        :feedback="feedback" :feedback-error="feedbackError"
-        :categories="categories" :services="services" :criteria-error="criteriaError" :criteria-loading="criteriaLoading"
-        @retry="load" @retry-criteria="loadCriteria" @create-campaign="createCampaign" @set-campaign-status="setCampaignStatus"
-        @update-draft-campaign="updateDraftCampaign" @transition-campaign="transitionCampaign"
+        :state="state"
+        :campaigns="campaigns"
+        :connected="true"
+        :can-manage="Boolean(adminId)"
+        :busy="busy"
+        :message="message"
+        :feedback="feedback"
+        :feedback-error="feedbackError"
+        :categories="categories"
+        :services="services"
+        :criteria-error="criteriaError"
+        :criteria-loading="criteriaLoading"
+        @retry="load"
+        @retry-criteria="loadCriteria"
+        @create-campaign="createCampaign"
+        @create-and-publish-campaign="createAndPublishCampaign"
+        @set-campaign-status="setCampaignStatus"
+        @update-draft-campaign="updateDraftCampaign"
+        @transition-campaign="transitionCampaign"
       />
     </div>
   </div>
