@@ -54,7 +54,10 @@ describe('Console sidebar', () => {
     expect(sm).toContain('/console/part-returns');
     expect(admin).not.toContain('/console/cancellations');
     expect(admin).not.toContain('/console/reputation');
-    expect(sm.some((p) => p.startsWith('/console/admin/'))).toBe(false);
+    expect(sm.filter((p) => p.startsWith('/console/admin/'))).toEqual(['/console/admin/profile-reviews', '/console/admin/skill-verifications']);
+    expect(sm).toEqual(expect.arrayContaining(['/console/technicians', '/console/office-visits']));
+    expect(admin).toEqual(expect.arrayContaining(['/console/technicians', '/console/admin/visit-offices']));
+    expect(sm).not.toContain('/console/admin/visit-offices');
     expect(admin).toEqual(expect.arrayContaining(['/console/admin/users', '/console/admin/config', '/console/warranty']));
     expect(consoleNavigation('CUSTOMER')).toEqual([]);
   });

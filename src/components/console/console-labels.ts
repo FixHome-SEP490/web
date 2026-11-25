@@ -33,7 +33,7 @@ export const reviewStageLabel = lookup(
     visit_required: 'Chờ thợ đặt lịch',
     visit_scheduled: 'Đã đặt lịch lên trụ sở',
     visit_blocked: 'Bị khóa đặt lịch (vắng nhiều lần)',
-    profile_review: 'Đã gặp, chờ duyệt hồ sơ',
+    profile_review: 'Đã có mặt, chờ duyệt hồ sơ',
     approved: 'Đã duyệt',
     identity_rejected: 'Danh tính bị từ chối',
     profile_rejected: 'Hồ sơ bị từ chối',

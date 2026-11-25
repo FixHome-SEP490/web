@@ -3,7 +3,46 @@ import type { PaginationMeta } from '../types';
 
 export type SkillVerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
-export interface SkillVerificationDocument {
+/** Same wording as the technician app, so the reviewer reads what the technician picked. */
+export const SKILL_EVIDENCE_TYPE_LABEL: Record<string, string> = {
+  national_skill_certificate: 'Chứng chỉ kỹ năng nghề quốc gia',
+  vocational_diploma: 'Bằng trung cấp hoặc cao đẳng nghề',
+  electrical_safety_card: 'Thẻ an toàn điện',
+  manufacturer_training: 'Chứng nhận đào tạo của hãng',
+  employer_confirmation: 'Xác nhận của nơi làm cũ',
+  social_insurance: 'Sổ bảo hiểm xã hội',
+  work_photos: 'Ảnh công trình đã làm',
+  other: 'Giấy tờ khác',
+};
+
+export const SKILL_EVIDENCE_GROUP_LABEL: Record<string, string> = {
+  official: 'Chính thức',
+  verifiable: 'Kiểm chứng được',
+  self_declared: 'Tự khai',
+};
+
+export const SKILL_EVIDENCE_REVIEW_LABEL: Record<string, string> = {
+  pending: 'Chờ xem xét',
+  valid: 'Hợp lệ',
+  invalid: 'Không hợp lệ',
+  need_more: 'Cần bổ sung',
+};
+
+/** The details the technician declared for one paper, as the backend sends them. */
+export interface SkillEvidenceDetails {
+  evidenceType: string | null;
+  evidenceGroup: string | null;
+  issuer: string | null;
+  referenceNumber: string | null;
+  /** `YYYY-MM-DD`, as the backend stores it. */
+  issuedAt: string | null;
+  expiresAt: string | null;
+  claimedYears: number | null;
+  reviewStatus?: string | null;
+  reviewNote?: string | null;
+}
+
+export interface SkillVerificationDocument extends SkillEvidenceDetails {
   id: string;
   documentType: string;
   fileName: string;
@@ -41,9 +80,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function normalizeDocument(payload: unknown): SkillVerificationDocument {
+const text = (value: unknown) => (value == null || value === '' ? null : String(value));
+
+export function normalizeDocument(payload: unknown): SkillVerificationDocument {
   const doc = isRecord(payload) ? payload : {};
   return {
+    evidenceType: text(doc.evidenceType),
+    evidenceGroup: text(doc.evidenceGroup),
+    issuer: text(doc.issuer),
+    referenceNumber: text(doc.referenceNumber),
+    issuedAt: text(doc.issuedAt),
+    expiresAt: text(doc.expiresAt),
+    claimedYears: doc.claimedYears == null ? null : Number(doc.claimedYears),
+    reviewStatus: text(doc.reviewStatus),
+    reviewNote: text(doc.reviewNote),
     id: String(doc.id ?? ''),
     documentType: String(doc.documentType ?? 'other'),
     fileName: String(doc.fileName ?? ''),

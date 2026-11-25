@@ -56,6 +56,9 @@ const orders = item('Đơn sửa chữa', '/console/orders', Wrench);
 const partRequests = item('Yêu cầu linh kiện', '/console/part-requests', Boxes);
 const partReturns = item('Hoàn trả linh kiện', '/console/part-returns', PackageCheck);
 const officeVisits = item('Lịch hẹn trụ sở', '/console/office-visits', CalendarClock);
+const identityReview = item('Duyệt danh tính', '/console/technicians', UserCheck);
+const profileReview = item('Duyệt hồ sơ', '/console/admin/profile-reviews', ClipboardCheck);
+const skillReview = item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award);
 const support =item('Yêu cầu hỗ trợ', '/console/support', LifeBuoy);
 const warranty = item('Bảo hành', '/console/warranty', ShieldCheck);
 const checkinFaces = item('Xác nhận khuôn mặt', '/console/checkin-faces', ScanFace);
@@ -81,6 +84,10 @@ export function consoleNavigation(
         items: [overview, orders, checkinFaces, warehouses, partRequests, partReturns, payouts, serviceAreas],
       },
       {
+        group: 'Kỹ thuật viên',
+        items: [identityReview, profileReview, officeVisits, skillReview],
+      },
+      {
         group: 'Hỗ trợ',
         items: [
           item(support.label, support.path, support.icon, 'support:read_all'),
@@ -101,11 +108,11 @@ export function consoleNavigation(
       {
         group: 'Kỹ thuật viên',
         items: [
-          item('Duyệt danh tính', '/console/technicians', UserCheck),
-          item('Duyệt hồ sơ', '/console/admin/profile-reviews', ClipboardCheck),
+          identityReview,
+          profileReview,
           officeVisits,
           item('Trụ sở nhận hồ sơ', '/console/admin/visit-offices', Building2),
-          item('Duyệt kỹ năng', '/console/admin/skill-verifications', Award),
+          skillReview,
           item('Tra cứu', '/console/admin/technician-directory', UserSearch),
         ],
       },

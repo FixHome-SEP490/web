@@ -354,9 +354,9 @@ const routes: RouteRecordRaw[] = [
         path: 'technicians',
         name: 'console-technicians',
         component: () => import('../pages/console/ConsoleTechniciansPage.vue'),
-        // KYC decisions are Admin's (BRX-041): technicians, and customers before
-        // their first withdrawal (PO 14/10/2026). The page has nothing else.
-        meta: { title: 'Duyệt xác minh danh tính', roles: ['ADMIN'] },
+        // KYC decisions are the Service Manager's (PO 25/11/2026): technicians, and customers before
+        // their first withdrawal (PO 14/10/2026). Admin opens the page to read only.
+        meta: { title: 'Duyệt xác minh danh tính', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'cancellations',
@@ -434,7 +434,7 @@ const routes: RouteRecordRaw[] = [
         path: 'admin/profile-reviews',
         name: 'admin-profile-reviews',
         component: () => import('../pages/console/admin/AdminProfileReviewsPage.vue'),
-        meta: { title: 'Duyệt hồ sơ', roles: ['ADMIN'] },
+        meta: { title: 'Duyệt hồ sơ', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'admin/visit-offices',
@@ -446,7 +446,7 @@ const routes: RouteRecordRaw[] = [
         path: 'admin/skill-verifications',
         name: 'admin-skill-verifications',
         component: () => import('../pages/console/admin/AdminSkillVerificationsPage.vue'),
-        meta: { title: 'Duyệt kỹ năng', roles: ['ADMIN'] },
+        meta: { title: 'Duyệt kỹ năng', roles: ['SERVICE_MANAGER', 'ADMIN'] },
       },
       {
         path: 'admin/technician-directory',

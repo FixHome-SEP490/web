@@ -9,16 +9,22 @@ import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../../components/console/ConsoleSearch.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
 import { CONSOLE_LOAD_ERROR, consoleField, consoleTextarea } from '../../../components/console/console-ui';
-import { reviewStageLabel, skillLevelLabel } from '../../../components/console/console-labels';
+import { reviewStageLabel } from '../../../components/console/console-labels';
 import { userFacingError } from '../../../utils/user-facing-error';
 import { vnDateTimeString } from '../../../utils/vn-time';
 import { adminVerificationsApi } from '../../../api/admin-verifications.api';
+import { adminSkillVerificationsApi } from '../../../api/admin-skill-verifications.api';
 import {
   adminOfficeVisitsApi,
   type ProfileReviewDetail,
+  type ProfileReviewEvidence,
   type ProfileReviewRow,
   type ReviewStage,
 } from '../../../api/admin-office-visits.api';
+import ProfileSkillGroups from '../../../components/console/ProfileSkillGroups.vue';
+import { useCanDecideReview } from '../../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 // Duyệt hồ sơ cuối: thợ đã được xác nhận danh tính và (sau khi gặp trực tiếp) admin kiểm bằng cấp, xác nhận cấp độ rồi duyệt.
 const columns: ConsoleColumn[] = [
@@ -27,8 +33,6 @@ const columns: ConsoleColumn[] = [
   { key: 'visit', label: 'Lịch hẹn', hideBelow: 'lg' },
   { key: 'actions', label: '', align: 'right' },
 ];
-
-const LEVELS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'];
 
 const rows = ref<ProfileReviewRow[]>([]);
 const loading = ref(true);
@@ -75,7 +79,11 @@ const formatTime = (value: string | null | undefined) => (value ? vnDateTimeStri
 // ---- Chi tiết ----
 const detail = ref<ProfileReviewDetail | null>(null);
 const detailLoading = ref(false);
-const decisions = reactive<Record<string, { level: string; approved: boolean }>>({});
+const decisions = reactive<Record<string, { level: string; approved: boolean; reason: string }>>({});
+const showReasonErrors = ref(false);
+const changeDecisions = (ids: string[], patch: Partial<{ level: string; approved: boolean; reason: string }>) => {
+  for (const id of ids) if (decisions[id]) Object.assign(decisions[id], patch);
+};
 const documentUrls = ref<Record<string, string>>({});
 const isLoadingUrls = ref(false);
 
@@ -138,7 +146,8 @@ const openDetail = async (technicianId: string) => {
   try {
     const data = await adminOfficeVisitsApi.getReview(technicianId);
     for (const key of Object.keys(decisions)) delete decisions[key];
-    for (const skill of data.skills) decisions[skill.id] = { level: skill.level, approved: true };
+    showReasonErrors.value = false;
+    for (const skill of data.skills) decisions[skill.id] = { level: skill.level, approved: true, reason: '' };
     detail.value = data;
     void loadDocumentUrls(data);
   } catch (reason) {
@@ -175,7 +184,18 @@ const reopen = () =>
 const approve = async () => {
   if (!detail.value || busy.value) return;
   const technicianId = detail.value.technicianId;
-  const skills = detail.value.skills.map((s) => ({ skillId: s.id, level: decisions[s.id].level, approved: decisions[s.id].approved }));
+  const skills = detail.value.skills.map((s) => ({
+    skillId: s.id,
+    level: decisions[s.id].level,
+    approved: decisions[s.id].approved,
+    reason: decisions[s.id].approved ? undefined : decisions[s.id].reason.trim(),
+  }));
+  if (skills.some((s) => !s.approved && (s.reason?.length ?? 0) < 5)) {
+    showReasonErrors.value = true;
+    error.value = 'Ghi lý do (ít nhất 5 ký tự) cho mỗi kỹ năng chưa xác nhận.';
+    return;
+  }
+  error.value = '';
   await act(
     async () => {
       await adminOfficeVisitsApi.approveReview(technicianId, skills);
@@ -218,6 +238,23 @@ const openDocument = async (title: string, doc: { id: string; documentType?: str
     const url = await adminVerificationsApi.getDocumentAccess(detail.value.verificationId, doc.id);
     documentUrls.value[doc.id] = url;
     previewUrl.value = url;
+  } catch {
+    showPreviewModal.value = false;
+    error.value = 'Chưa mở được tài liệu, vui lòng thử lại.';
+  } finally {
+    previewLoading.value = false;
+  }
+};
+
+// A paper sent for a skill: shown in the same viewer as the identity papers.
+const previewEvidence = async (item: ProfileReviewEvidence) => {
+  previewTitle.value = item.fileName;
+  previewKind.value = item.mimeType.startsWith('image/') ? 'image' : 'file';
+  previewUrl.value = '';
+  showPreviewModal.value = true;
+  previewLoading.value = true;
+  try {
+    previewUrl.value = (await adminSkillVerificationsApi.getDocumentAccess(item.verificationId, item.documentId)).signedUrl;
   } catch {
     showPreviewModal.value = false;
     error.value = 'Chưa mở được tài liệu, vui lòng thử lại.';
@@ -269,7 +306,7 @@ const confirmReject = async () => {
         <option value="ALL">Mọi giai đoạn</option>
         <option value="visit_required">Chờ thợ đặt lịch</option>
         <option value="visit_scheduled">Đã đặt lịch lên trụ sở</option>
-        <option value="profile_review">Đã gặp, chờ duyệt hồ sơ</option>
+        <option value="profile_review">Đã có mặt, chờ duyệt hồ sơ</option>
         <option value="profile_rejected">Hồ sơ bị từ chối</option>
         <option value="visit_blocked">Bị khóa đặt lịch</option>
       </select>
@@ -354,29 +391,23 @@ const confirmReject = async () => {
                 <p v-if="scheduledVisit" class="text-sm text-ink-700">
                   {{ scheduledVisit.officeName }}, <span class="font-num">{{ formatTime(scheduledVisit.scheduledAt) }}</span>
                 </p>
-                <p v-else-if="attendedVisit" class="text-sm font-medium text-success-700">Đã gặp trực tiếp ({{ attendedVisit.officeName }}, <span class="font-num">{{ formatTime(attendedVisit.scheduledAt) }}</span>).</p>
+                <p v-else-if="attendedVisit" class="text-sm font-medium text-success-700">Đã có mặt tại trụ sở ({{ attendedVisit.officeName }}, <span class="font-num">{{ formatTime(attendedVisit.scheduledAt) }}</span>).</p>
                 <p v-else class="text-sm text-ink-500">Thợ chưa đặt lịch.</p>
-                <p v-if="!attendedVisit" class="text-xs text-ink-500">Quản lý dịch vụ ghi nhận buổi gặp (đã gặp, vắng, cho đặt lại) ở mục "Lịch hẹn trụ sở".</p>
+                <p v-if="!attendedVisit" class="text-xs text-ink-500">Quản lý dịch vụ ghi nhận buổi gặp (có mặt, vắng, cho đặt lại) ở mục "Lịch hẹn trụ sở".</p>
               </section>
 
               <section class="space-y-2">
                 <h4 class="text-sm font-semibold text-ink-900">Kỹ năng và cấp độ</h4>
-                <p class="text-xs text-ink-500">Xác nhận cấp độ dựa trên bản công chứng bằng cấp. Bỏ chọn "Xác nhận" nếu chưa đủ căn cứ.</p>
-                <ul class="max-h-80 divide-y divide-ink-100 overflow-y-auto overscroll-contain rounded-[var(--radius-md)] border border-ink-200 bg-white">
-                  <li v-for="skill in detail.skills" :key="skill.id" class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                    <div class="min-w-0 flex-1">
-                      <div class="font-medium text-ink-900">{{ skill.serviceName }}</div>
-                      <div class="text-xs text-ink-500">Tự khai: {{ skillLevelLabel(skill.declaredLevel) }}</div>
-                    </div>
-                    <select v-model="decisions[skill.id].level" :class="consoleField" :aria-label="`Cấp độ xác nhận cho ${skill.serviceName}`">
-                      <option v-for="level in LEVELS" :key="level" :value="level">{{ skillLevelLabel(level) }}</option>
-                    </select>
-                    <label class="flex cursor-pointer items-center gap-1.5 text-sm text-ink-700">
-                      <input v-model="decisions[skill.id].approved" type="checkbox" class="h-4 w-4 accent-brand-600" /> Xác nhận
-                    </label>
-                  </li>
-                  <li v-if="detail.skills.length === 0" class="px-4 py-3 text-sm text-ink-400">Thợ chưa chọn kỹ năng.</li>
-                </ul>
+                <p class="text-xs text-ink-500">Mở từng nhóm để xem giấy tờ thợ nộp, chọn cấp độ và xác nhận cho cả nhóm. Bỏ chọn "Xác nhận" nếu chưa đủ căn cứ.</p>
+                <ProfileSkillGroups
+                  :skills="detail.skills"
+                  :evidence="detail.evidence ?? []"
+                  :decisions="decisions"
+                  :readonly="!canDecide"
+                  :show-reason-errors="showReasonErrors"
+                  @change="changeDecisions"
+                  @preview="previewEvidence"
+                />
               </section>
 
               <section class="space-y-3">
@@ -526,9 +557,9 @@ const confirmReject = async () => {
               <span v-else />
               <div class="flex flex-wrap justify-end gap-2">
                 <FhButton variant="secondary" size="sm" @click="closeDetail">Đóng</FhButton>
-                <FhButton v-if="detail.stage === 'profile_rejected'" variant="secondary" size="sm" :disabled="busy" @click="reopen">Mở lại hồ sơ</FhButton>
-                <FhButton v-if="detail.stage !== 'profile_rejected' && detail.stage !== 'approved'" variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
-                <FhButton v-if="detail.stage === 'profile_review'" variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
+                <FhButton v-if="canDecide && detail.stage === 'profile_rejected'" variant="secondary" size="sm" :disabled="busy" @click="reopen">Mở lại hồ sơ</FhButton>
+                <FhButton v-if="canDecide && detail.stage !== 'profile_rejected' && detail.stage !== 'approved'" variant="secondary" size="sm" :disabled="busy" @click="showReject = true; rejectReason = ''; rejectError = ''">Từ chối</FhButton>
+                <FhButton v-if="canDecide && detail.stage === 'profile_review'" variant="primary" size="sm" :loading="busy" :disabled="busy" @click="approve">Duyệt hồ sơ</FhButton>
               </div>
             </footer>
           </section>

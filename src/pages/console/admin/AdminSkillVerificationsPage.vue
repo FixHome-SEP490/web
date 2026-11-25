@@ -29,6 +29,9 @@ import {
 } from '../../../api/admin-skill-verifications.api';
 import SkillVerificationDrawer from '../../../components/console/SkillVerificationDrawer.vue';
 import { vnDateString } from '../../../utils/vn-time';
+import { useCanDecideReview } from '../../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 // ---- State ----
 const statusFilter = ref<SkillVerificationStatus | 'ALL'>('ALL');
@@ -691,7 +694,7 @@ const confirmReject = async () => {
               <td class="pl-2 pr-4 sm:pl-3 sm:pr-5 py-3.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button
-                    v-if="row.status === 'PENDING'"
+                    v-if="canDecide && row.status === 'PENDING'"
                     type="button"
                     class="inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
                     title="Xem hồ sơ và duyệt"
@@ -721,13 +724,13 @@ const confirmReject = async () => {
                       Xem chứng chỉ
                     </ConsoleMenuItem>
                     <ConsoleMenuItem
-                      v-if="row.status === 'PENDING'"
+                      v-if="canDecide && row.status === 'PENDING'"
                       @click="openApprove(row)"
                     >
                       Duyệt và cấp chứng chỉ
                     </ConsoleMenuItem>
                     <ConsoleMenuItem
-                      v-if="row.status === 'PENDING'"
+                      v-if="canDecide && row.status === 'PENDING'"
                       danger
                       :disabled="Boolean(actionLoadingId)"
                       @click="openReject(row)"

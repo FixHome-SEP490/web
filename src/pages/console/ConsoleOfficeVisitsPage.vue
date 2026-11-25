@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Service Manager (và Admin): lịch thợ hẹn lên trụ sở. Ghi nhận thợ đã gặp / vắng, và cho thợ bị khóa đặt lịch đặt lại.
+// Service Manager (và Admin): lịch thợ hẹn lên trụ sở. Ghi nhận thợ có mặt / vắng, và cho thợ bị khóa đặt lịch đặt lại.
 // Duyệt hồ sơ cuối vẫn do Admin ở mục "Duyệt hồ sơ".
 import { computed, onMounted, ref, watch } from 'vue';
 import {
@@ -34,6 +34,9 @@ import {
   type OfficeVisitRow,
   type OfficeVisitStatus,
 } from '../../api/admin-office-visits.api';
+import { useCanDecideReview } from '../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 const columns: ConsoleColumn[] = [
   { key: 'technician', label: 'Thợ / SĐT' },
@@ -59,7 +62,7 @@ const STATUS_CONFIG: Record<OfficeVisitStatus, {
     icon: Clock,
   },
   attended: {
-    label: 'Đã gặp',
+    label: 'Đã có mặt',
     pillBg: 'bg-emerald-50',
     pillText: 'text-emerald-700',
     pillBorder: 'border-emerald-200/80',
@@ -302,7 +305,7 @@ onMounted(async () => {
         <div class="min-w-0">
           <h1 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Lịch hẹn trụ sở</h1>
           <p class="mt-0.5 text-xs text-ink-500 sm:text-sm text-pretty">
-            Theo dõi và quản lý lịch hẹn của kỹ thuật viên tại các trụ sở. Ghi nhận trạng thái đã gặp, vắng, hủy và hỗ trợ cho phép đặt lại khi cần.
+            Theo dõi và quản lý lịch hẹn của kỹ thuật viên tại các trụ sở. Ghi nhận trạng thái đã có mặt, vắng, hủy và hỗ trợ cho phép đặt lại khi cần.
           </p>
         </div>
       </div>
@@ -329,19 +332,19 @@ onMounted(async () => {
         </div>
       </button>
 
-      <!-- Đã gặp -->
+      <!-- Đã có mặt -->
       <button
         type="button"
         class="flex items-center gap-3.5 rounded-2xl border bg-white p-4 text-left transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
         :class="statusFilter === 'attended' ? 'border-emerald-300 bg-emerald-50/30 shadow-xs ring-1 ring-emerald-300' : 'border-ink-100 hover:border-ink-200 hover:shadow-xs'"
-        title="Bấm để lọc lịch đã gặp"
+        title="Bấm để lọc lịch đã có mặt"
         @click="setStatusFilter('attended')"
       >
         <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100/80 bg-emerald-50 text-emerald-600">
           <CheckCircle2 :size="20" class="stroke-[2]" aria-hidden="true" />
         </div>
         <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đã gặp</div>
+          <div class="text-xs font-medium text-ink-500">Đã có mặt</div>
           <div class="mt-0.5 font-num text-2xl font-bold text-ink-900">
             {{ loading && !allVisits.length ? '—' : stats.attended }}
           </div>
@@ -401,7 +404,7 @@ onMounted(async () => {
             >
               <option value="">Tất cả trạng thái</option>
               <option value="scheduled">Chờ xác nhận</option>
-              <option value="attended">Đã gặp</option>
+              <option value="attended">Đã có mặt</option>
               <option value="missed">Vắng mặt</option>
               <option value="cancelled">Đã hủy</option>
             </select>
@@ -590,10 +593,10 @@ onMounted(async () => {
                 <span>Xem chi tiết</span>
               </ConsoleMenuItem>
 
-              <template v-if="row.status === 'scheduled'">
+              <template v-if="canDecide && row.status === 'scheduled'">
                 <ConsoleMenuItem @click="promptAttended(row)">
                   <Check :size="15" class="text-emerald-600" aria-hidden="true" />
-                  <span>Đã gặp</span>
+                  <span>Đã có mặt</span>
                 </ConsoleMenuItem>
                 <ConsoleMenuItem danger @click="promptMissed(row)">
                   <UserX :size="15" aria-hidden="true" />
@@ -601,7 +604,7 @@ onMounted(async () => {
                 </ConsoleMenuItem>
               </template>
 
-              <ConsoleMenuItem v-else-if="row.status === 'missed'" @click="promptReset(row)">
+              <ConsoleMenuItem v-else-if="canDecide && row.status === 'missed'" @click="promptReset(row)">
                 <RotateCcw :size="15" class="text-blue-600" aria-hidden="true" />
                 <span>Cho phép đặt lại</span>
               </ConsoleMenuItem>
@@ -766,7 +769,7 @@ onMounted(async () => {
             <!-- Drawer Footer Actions -->
             <footer class="shrink-0 space-y-2.5 border-t border-ink-100 bg-white p-5">
               <!-- When MISSED: Cho phép đặt lại (Primary Blue) + Liên hệ + Đóng -->
-              <template v-if="selected.status === 'missed'">
+              <template v-if="canDecide && selected.status === 'missed'">
                 <button
                   type="button"
                   class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 font-medium text-white shadow-xs transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:opacity-50"
@@ -795,8 +798,8 @@ onMounted(async () => {
                 </button>
               </template>
 
-              <!-- When SCHEDULED: Xác nhận đã gặp (Primary) + Ghi nhận vắng (Secondary) + Liên hệ + Đóng -->
-              <template v-else-if="selected.status === 'scheduled'">
+              <!-- When SCHEDULED: Xác nhận có mặt (Primary) + Ghi nhận vắng (Secondary) + Liên hệ + Đóng -->
+              <template v-else-if="canDecide && selected.status === 'scheduled'">
                 <button
                   type="button"
                   class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 font-medium text-white shadow-xs transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer disabled:opacity-50"
@@ -804,7 +807,7 @@ onMounted(async () => {
                   @click="promptAttended(selected)"
                 >
                   <Check :size="16" aria-hidden="true" />
-                  <span>Xác nhận đã gặp</span>
+                  <span>Xác nhận có mặt</span>
                 </button>
 
                 <button
@@ -952,7 +955,7 @@ onMounted(async () => {
                 size="md"
                 @click="confirmAction"
               >
-                <template v-if="actionModal.type === 'attended'">Xác nhận đã gặp</template>
+                <template v-if="actionModal.type === 'attended'">Xác nhận có mặt</template>
                 <template v-else-if="actionModal.type === 'missed'">Ghi nhận vắng</template>
                 <template v-else>Cho phép đặt lại</template>
               </FhButton>
