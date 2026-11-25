@@ -102,4 +102,8 @@ describe('Notification bell role-safe references', () => {
   it.each(['SERVICE_MANAGER', 'ADMIN'])('opens the check-in face review page for %s', async role => {
     await clickNotice(role, notification({ type: 'CHECKIN_FACE_REVIEW_REQUIRED', referenceType: 'SERVICE_ORDER', referenceId: 'order-1' }), '/console/checkin-faces');
   });
+
+  it('opens the identity review when a technician submits the profile', async () => {
+    await clickNotice('SERVICE_MANAGER', notification({ type: 'TECHNICIAN_PROFILE_SUBMITTED', referenceType: 'technician_profile', referenceId: 'tech-1' }), '/console/technicians');
+  });
 });

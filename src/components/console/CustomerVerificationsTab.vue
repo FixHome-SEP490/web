@@ -33,6 +33,9 @@ import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { useQueryChoice, useQueryPage, useQuerySearch } from '../../composables/useQueryState';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { userFacingError } from '../../utils/user-facing-error';
+import { useCanDecideReview } from '../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 const emit = defineEmits<{
   (e: 'updated'): void;
@@ -513,7 +516,7 @@ function getInitials(name?: string | null): string {
                 <!-- 6. Thao tác -->
                 <td class="py-3.5 pl-4 pr-6 text-right whitespace-nowrap">
                   <div class="flex items-center justify-end gap-2">
-                    <template v-if="row.status === 'pending'">
+                    <template v-if="canDecide && row.status === 'pending'">
                       <button
                         type="button"
                         class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs transition-colors hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 cursor-pointer"

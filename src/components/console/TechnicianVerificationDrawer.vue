@@ -17,6 +17,9 @@ import {
 } from 'lucide-vue-next';
 import type { TechnicianVerification, VerificationDocument } from '../../api/admin-verifications.api';
 import { adminVerificationsApi } from '../../api/admin-verifications.api';
+import { useCanDecideReview } from '../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 const props = defineProps<{
   open: boolean;
@@ -470,7 +473,7 @@ const recordCode = computed(() => {
           </button>
 
           <!-- Action buttons when status is PENDING -->
-          <div v-if="isPending(verification?.status)" class="flex items-center gap-2.5">
+          <div v-if="canDecide && isPending(verification?.status)" class="flex items-center gap-2.5">
             <button
               type="button"
               class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-danger-200 bg-danger-50 px-3.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 hover:border-danger-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 disabled:opacity-50 cursor-pointer"
