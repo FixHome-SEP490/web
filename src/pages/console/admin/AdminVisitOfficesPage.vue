@@ -1,229 +1,700 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
-import { Plus, X } from 'lucide-vue-next';
-import { FhButton, FhStatusPill } from '../../../components';
-import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import {
+  Building2,
+  Calendar,
+  Check,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RotateCw,
+  Search,
+  Users,
+  X,
+  AlertCircle,
+} from 'lucide-vue-next';
+import VisitOfficeModal from '../../../components/console/VisitOfficeModal.vue';
+import VisitOfficeDrawer from '../../../components/console/VisitOfficeDrawer.vue';
+import FhConfirmDialog from '../../../components/FhConfirmDialog.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
-import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
-import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel } from '../../../components/console/console-ui';
+import { CONSOLE_LOAD_ERROR } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
-import { adminOfficeVisitsApi, type VisitOffice } from '../../../api/admin-office-visits.api';
-
-// Trụ sở nơi thợ lên gặp trực tiếp sau khi được xác nhận danh tính. Thợ chọn trụ sở (mặc định gần nhất) và giờ hẹn.
-const columns: ConsoleColumn[] = [
-  { key: 'name', label: 'Trụ sở' },
-  { key: 'hours', label: 'Giờ nhận hồ sơ', hideBelow: 'lg' },
-  { key: 'capacity', label: 'Mỗi lượt', hideBelow: 'xl' },
-  { key: 'status', label: 'Trạng thái' },
-  { key: 'actions', label: '', align: 'right' },
-];
-
-const DAYS = [
-  { value: 1, label: 'T2' }, { value: 2, label: 'T3' }, { value: 3, label: 'T4' }, { value: 4, label: 'T5' },
-  { value: 5, label: 'T6' }, { value: 6, label: 'T7' }, { value: 7, label: 'CN' },
-];
+import {
+  adminOfficeVisitsApi,
+  type VisitOffice,
+  type VisitOfficeInput,
+} from '../../../api/admin-office-visits.api';
 
 const offices = ref<VisitOffice[]>([]);
 const loading = ref(true);
+const refreshing = ref(false);
 const loadError = ref('');
-const error = ref('');
+const actionError = ref('');
 const successMessage = ref('');
+
+// Visit statistics
+const visitsThisMonth = ref<number | null>(null);
+
+// Search & Filter state
+const searchQuery = ref('');
+const statusFilter = ref<'all' | 'active' | 'inactive'>('all');
+const dateFilter = ref('');
+
+// Modal & Drawer states
+const showAddModal = ref(false);
+const savingAdd = ref(false);
+const addError = ref('');
+
+const showEditDrawer = ref(false);
+const editingOffice = ref<VisitOffice | null>(null);
+const savingEdit = ref(false);
+const editError = ref('');
+
+// Pause confirmation dialog state
+const showPauseConfirm = ref(false);
+const pauseTargetOffice = ref<VisitOffice | null>(null);
+const pausing = ref(false);
+
+const hhmm = (value: string | null | undefined) => (value ? value.slice(0, 5) : '');
+
+const DAYS_SHORT_LABEL: Record<number, string> = {
+  1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 7: 'CN',
+};
+
+const formatDays = (days: number[]) => {
+  if (!Array.isArray(days) || days.length === 0) return '—';
+  return days.map((d) => DAYS_SHORT_LABEL[d] || `T${d}`).join(', ');
+};
+
+const formatHours = (row: VisitOffice) => {
+  const open = hhmm(row.openTime) || '08:00';
+  const close = hhmm(row.closeTime) || '17:00';
+  const ls = hhmm(row.lunchStart);
+  const le = hhmm(row.lunchEnd);
+  if (ls && le) {
+    return `${open} – ${close}, nghỉ ${ls} – ${le}`;
+  }
+  return `${open} – ${close}`;
+};
+
+// Load data
+const loadOffices = async () => {
+  try {
+    offices.value = await adminOfficeVisitsApi.listOffices();
+  } catch (reason) {
+    loadError.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
+  }
+};
+
+const loadMonthlyVisits = async () => {
+  try {
+    const visits = await adminOfficeVisitsApi.listVisits();
+    if (Array.isArray(visits)) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const inMonth = visits.filter((v) => {
+        if (!v.scheduledAt) return false;
+        const d = new Date(v.scheduledAt);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      });
+      visitsThisMonth.value = inMonth.length;
+    } else {
+      visitsThisMonth.value = 0;
+    }
+  } catch {
+    // If visits cannot be fetched (e.g. role restriction or empty), fallback to 0
+    visitsThisMonth.value = 0;
+  }
+};
 
 const load = async () => {
   loading.value = true;
   loadError.value = '';
   try {
-    offices.value = await adminOfficeVisitsApi.listOffices();
-  } catch (reason) {
-    loadError.value = userFacingError(reason, CONSOLE_LOAD_ERROR);
+    await Promise.all([loadOffices(), loadMonthlyVisits()]);
   } finally {
     loading.value = false;
   }
 };
+
+const refreshData = async () => {
+  refreshing.value = true;
+  actionError.value = '';
+  successMessage.value = '';
+  try {
+    await Promise.all([loadOffices(), loadMonthlyVisits()]);
+  } finally {
+    refreshing.value = false;
+  }
+};
+
 onMounted(() => void load());
 
-const hhmm = (value: string | null) => (value ? value.slice(0, 5) : '');
-const daysLabel = (days: number[]) => DAYS.filter((d) => days.includes(d.value)).map((d) => d.label).join(', ');
-
-const blank = () => ({
-  name: '', address: '', phone: '', latitude: '', longitude: '', isActive: true,
-  visitDays: [1, 2, 3, 4, 5] as number[], openTime: '08:00', closeTime: '17:00', lunchStart: '11:30', lunchEnd: '13:30',
-  slotMinutes: 30, slotCapacity: 2,
-});
-const form = reactive(blank());
-const editing = ref<VisitOffice | null>(null);
-const showForm = ref(false);
-const saving = ref(false);
-const formError = ref('');
-
-const openCreate = () => {
-  Object.assign(form, blank());
-  editing.value = null;
-  formError.value = '';
-  showForm.value = true;
-};
-const openEdit = (office: VisitOffice) => {
-  Object.assign(form, {
-    name: office.name, address: office.address, phone: office.phone ?? '',
-    latitude: office.latitude == null ? '' : String(office.latitude), longitude: office.longitude == null ? '' : String(office.longitude),
-    isActive: office.isActive, visitDays: [...office.visitDays], openTime: hhmm(office.openTime), closeTime: hhmm(office.closeTime),
-    lunchStart: hhmm(office.lunchStart), lunchEnd: hhmm(office.lunchEnd), slotMinutes: office.slotMinutes, slotCapacity: office.slotCapacity,
-  });
-  editing.value = office;
-  formError.value = '';
-  showForm.value = true;
-};
-const toggleDay = (day: number) => {
-  form.visitDays = form.visitDays.includes(day) ? form.visitDays.filter((d) => d !== day) : [...form.visitDays, day].sort();
-};
-
-const save = async () => {
-  if (saving.value) return;
-  if (!form.name.trim() || !form.address.trim()) return void (formError.value = 'Nhập tên và địa chỉ trụ sở.');
-  if (form.visitDays.length === 0) return void (formError.value = 'Chọn ít nhất một ngày làm việc.');
-  const lat = form.latitude.trim() === '' ? null : Number(form.latitude);
-  const lng = form.longitude.trim() === '' ? null : Number(form.longitude);
-  if ((lat === null) !== (lng === null) || [lat, lng].some((v) => v !== null && !Number.isFinite(v))) {
-    return void (formError.value = 'Vị trí cần cả vĩ độ và kinh độ hợp lệ (để gợi ý trụ sở gần nhất cho thợ).');
-  }
-  const hasLunch = form.lunchStart.trim() !== '' && form.lunchEnd.trim() !== '';
-  const payload = {
-    name: form.name.trim(), address: form.address.trim(), phone: form.phone.trim() || null, latitude: lat, longitude: lng,
-    isActive: form.isActive, visitDays: form.visitDays, openTime: form.openTime, closeTime: form.closeTime,
-    lunchStart: hasLunch ? form.lunchStart : null, lunchEnd: hasLunch ? form.lunchEnd : null,
-    slotMinutes: Number(form.slotMinutes), slotCapacity: Number(form.slotCapacity),
+// Statistics
+const stats = computed(() => {
+  const total = offices.value.length;
+  const active = offices.value.filter((o) => o.isActive).length;
+  const inactive = total - active;
+  return {
+    total,
+    active,
+    inactive,
+    monthlyVisits: visitsThisMonth.value,
   };
-  saving.value = true;
-  formError.value = '';
+});
+
+// Filtered list
+const filteredOffices = computed(() => {
+  let list = offices.value;
+
+  // Search filter
+  const query = searchQuery.value.trim().toLowerCase();
+  if (query) {
+    list = list.filter(
+      (o) =>
+        (o.name && o.name.toLowerCase().includes(query)) ||
+        (o.address && o.address.toLowerCase().includes(query)) ||
+        (o.phone && o.phone.includes(query)),
+    );
+  }
+
+  // Status filter
+  if (statusFilter.value === 'active') {
+    list = list.filter((o) => o.isActive);
+  } else if (statusFilter.value === 'inactive') {
+    list = list.filter((o) => !o.isActive);
+  }
+
+  // Date filter (which offices accept visits on that weekday)
+  if (dateFilter.value) {
+    try {
+      const d = new Date(dateFilter.value);
+      if (!Number.isNaN(d.getTime())) {
+        const jsDay = d.getDay(); // 0 = Sunday, 1 = Monday, ...
+        const systemDay = jsDay === 0 ? 7 : jsDay;
+        list = list.filter((o) => Array.isArray(o.visitDays) && o.visitDays.includes(systemDay));
+      }
+    } catch {
+      // ignore date parse issues
+    }
+  }
+
+  return list;
+});
+
+// Actions: Create
+const openCreateModal = () => {
+  addError.value = '';
+  showAddModal.value = true;
+};
+
+const handleSaveCreate = async (payload: VisitOfficeInput) => {
+  savingAdd.value = true;
+  addError.value = '';
   try {
-    if (editing.value) await adminOfficeVisitsApi.updateOffice(editing.value.id, payload);
-    else await adminOfficeVisitsApi.createOffice(payload);
-    successMessage.value = editing.value ? 'Đã lưu trụ sở.' : 'Đã thêm trụ sở.';
-    showForm.value = false;
-    await load();
+    await adminOfficeVisitsApi.createOffice(payload);
+    successMessage.value = 'Đã thêm trụ sở thành công.';
+    showAddModal.value = false;
+    await loadOffices();
   } catch (reason) {
-    formError.value = userFacingError(reason, 'Chưa lưu được trụ sở, vui lòng thử lại.');
+    addError.value = userFacingError(reason, 'Chưa lưu được trụ sở, vui lòng thử lại.');
   } finally {
-    saving.value = false;
+    savingAdd.value = false;
   }
 };
 
-const setActive = async (office: VisitOffice, isActive: boolean) => {
-  error.value = '';
+// Actions: Edit
+const openEditDrawer = (office: VisitOffice) => {
+  editingOffice.value = office;
+  editError.value = '';
+  showEditDrawer.value = true;
+};
+
+const handleSaveEdit = async (payload: VisitOfficeInput) => {
+  if (!editingOffice.value) return;
+  savingEdit.value = true;
+  editError.value = '';
+  try {
+    await adminOfficeVisitsApi.updateOffice(editingOffice.value.id, payload);
+    successMessage.value = 'Đã cập nhật thông tin trụ sở thành công.';
+    showEditDrawer.value = false;
+    editingOffice.value = null;
+    await loadOffices();
+  } catch (reason) {
+    editError.value = userFacingError(reason, 'Chưa lưu được thông tin trụ sở, vui lòng thử lại.');
+  } finally {
+    savingEdit.value = false;
+  }
+};
+
+// Actions: Toggle Active / Pause with confirmation
+const handleToggleClick = (office: VisitOffice) => {
+  actionError.value = '';
+  if (office.isActive) {
+    // Confirmation required before pausing
+    pauseTargetOffice.value = office;
+    showPauseConfirm.value = true;
+  } else {
+    // Resuming reception directly
+    void executeSetActive(office, true);
+  }
+};
+
+const confirmPauseOffice = async () => {
+  if (!pauseTargetOffice.value) return;
+  pausing.value = true;
+  try {
+    await executeSetActive(pauseTargetOffice.value, false);
+    showPauseConfirm.value = false;
+    pauseTargetOffice.value = null;
+  } finally {
+    pausing.value = false;
+  }
+};
+
+const executeSetActive = async (office: VisitOffice, isActive: boolean) => {
+  actionError.value = '';
   try {
     await adminOfficeVisitsApi.updateOffice(office.id, { isActive });
-    await load();
+    successMessage.value = isActive
+      ? `Đã kích hoạt nhận hồ sơ cho "${office.name}".`
+      : `Đã tạm ngưng nhận hồ sơ tại "${office.name}".`;
+    await loadOffices();
   } catch (reason) {
-    error.value = userFacingError(reason, 'Chưa đổi được trạng thái trụ sở.');
+    actionError.value = userFacingError(reason, 'Chưa thay đổi được trạng thái trụ sở.');
   }
 };
+
+// Reset notification banner after 5 seconds
+watch(successMessage, (msg) => {
+  if (msg) {
+    setTimeout(() => {
+      if (successMessage.value === msg) successMessage.value = '';
+    }, 5000);
+  }
+});
 </script>
 
 <template>
-  <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Trụ sở nhận hồ sơ" :count="loading || loadError ? null : offices.length">
-      <template #actions>
-        <FhButton variant="primary" size="sm" @click="openCreate">
-          <Plus :size="16" aria-hidden="true" /> Thêm trụ sở
-        </FhButton>
-      </template>
-    </ConsolePageHeader>
-    <p class="animate-slide-up-delay-1 text-sm text-ink-600 text-pretty">
-      Sau khi bạn xác nhận danh tính, thợ chọn một trụ sở (mặc định là nơi gần địa chỉ của thợ nhất) và giờ hẹn để gặp trực tiếp. Số điện thoại hỗ trợ khi thợ vắng nhiều lần đặt ở trang Cấu hình (khóa <span class="font-num">office.support_phone</span>).
-    </p>
-
-    <Transition name="fh-fade-slide">
-      <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
-    </Transition>
-    <Transition name="fh-fade-slide">
-      <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
-    </Transition>
-
-    <div class="animate-slide-up-delay-2">
-      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
-      <ConsoleTable v-else :columns="columns" :rows="offices" :loading="loading" empty-text="Chưa có trụ sở nào. Thợ chưa thể đặt lịch cho tới khi bạn thêm trụ sở.">
-        <template #cell-name="{ row }">
-          <div class="font-medium text-ink-900">{{ row.name }}</div>
-          <div class="truncate text-xs text-ink-500">{{ row.address }}</div>
-        </template>
-        <template #cell-hours="{ row }">
-          <div class="font-num text-ink-800">{{ hhmm(row.openTime) }}–{{ hhmm(row.closeTime) }}<span v-if="row.lunchStart">, nghỉ {{ hhmm(row.lunchStart) }}–{{ hhmm(row.lunchEnd) }}</span></div>
-          <div class="text-xs text-ink-500">{{ daysLabel(row.visitDays) }}</div>
-        </template>
-        <template #cell-capacity="{ row }"><span class="font-num text-ink-700">{{ row.slotMinutes }} phút, {{ row.slotCapacity }} thợ</span></template>
-        <template #cell-status="{ row }"><FhStatusPill :status="row.isActive ? 'ACTIVE' : 'SUSPENDED'" :label="row.isActive ? 'Đang nhận' : 'Tạm ngưng'" /></template>
-        <template #cell-actions="{ row }">
-          <div class="flex justify-end gap-2">
-            <FhButton variant="secondary" size="sm" @click="openEdit(row)">Sửa</FhButton>
-            <FhButton variant="secondary" size="sm" @click="setActive(row, !row.isActive)">{{ row.isActive ? 'Tạm ngưng' : 'Bật lại' }}</FhButton>
+  <div class="space-y-6">
+    <!-- Header section matching Image 3 -->
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-start gap-3.5">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-xs">
+          <Building2 :size="24" :stroke-width="2" />
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
+              Trụ sở nhận hồ sơ
+            </h1>
+            <span
+              v-if="!loading && !loadError"
+              class="inline-flex items-center rounded-full bg-ink-100 px-2.5 py-0.5 font-num text-xs font-semibold text-ink-700"
+            >
+              {{ offices.length }}
+            </span>
           </div>
-        </template>
-      </ConsoleTable>
+          <p class="mt-1 text-xs text-ink-500 sm:text-sm">
+            Theo dõi và quản lý các trụ sở tiếp nhận hồ sơ định danh của kỹ thuật viên, bao gồm thời gian tiếp nhận, giới hạn mỗi lượt và trạng thái hoạt động.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5 shrink-0">
+        <button
+          type="button"
+          class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-4.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
+          @click="openCreateModal"
+        >
+          <Plus :size="16" :stroke-width="2.5" />
+          <span>Thêm trụ sở</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 4 Stats Cards matching Image 3 -->
+    <section class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <!-- 1. Tổng trụ sở -->
+      <button
+        type="button"
+        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-brand-200 hover:shadow-sm cursor-pointer"
+        :class="statusFilter === 'all' && !dateFilter && !searchQuery ? 'ring-2 ring-brand-500/20' : ''"
+        @click="statusFilter = 'all'; dateFilter = ''; searchQuery = '';"
+      >
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <Building2 :size="22" :stroke-width="2" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-ink-500">Tổng trụ sở</div>
+          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
+            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
+            <span v-else>{{ stats.total }}</span>
+          </div>
+        </div>
+      </button>
+
+      <!-- 2. Đang hoạt động -->
+      <button
+        type="button"
+        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-emerald-200 hover:shadow-sm cursor-pointer"
+        :class="statusFilter === 'active' ? 'ring-2 ring-emerald-500/20' : ''"
+        @click="statusFilter = statusFilter === 'active' ? 'all' : 'active'"
+      >
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+          <Check :size="22" :stroke-width="2.5" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-ink-500">Đang hoạt động</div>
+          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
+            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
+            <span v-else>{{ stats.active }}</span>
+          </div>
+        </div>
+      </button>
+
+      <!-- 3. Tạm ngưng -->
+      <button
+        type="button"
+        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-amber-200 hover:shadow-sm cursor-pointer"
+        :class="statusFilter === 'inactive' ? 'ring-2 ring-amber-500/20' : ''"
+        @click="statusFilter = statusFilter === 'inactive' ? 'all' : 'inactive'"
+      >
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+          <Clock :size="22" :stroke-width="2" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-ink-500">Tạm ngưng</div>
+          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
+            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
+            <span v-else>{{ stats.inactive }}</span>
+          </div>
+        </div>
+      </button>
+
+      <!-- 4. Tổng lượt tiếp nhận (tháng) -->
+      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-purple-200 hover:shadow-sm">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+          <Users :size="22" :stroke-width="2" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-ink-500">Tổng lượt tiếp nhận (tháng)</div>
+          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
+            <span v-if="loading || stats.monthlyVisits === null" class="inline-block h-7 w-12 animate-pulse rounded bg-ink-100"></span>
+            <span v-else>{{ stats.monthlyVisits }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Notification banners -->
+    <Transition name="fh-fade-slide">
+      <div
+        v-if="actionError"
+        class="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-xs text-rose-800"
+        role="alert"
+      >
+        <div class="flex items-center gap-2">
+          <AlertCircle :size="16" class="shrink-0 text-rose-600" />
+          <span class="font-medium">{{ actionError }}</span>
+        </div>
+        <button type="button" class="text-rose-500 hover:text-rose-700" @click="actionError = ''">
+          <X :size="14" />
+        </button>
+      </div>
+    </Transition>
+
+    <Transition name="fh-fade-slide">
+      <div
+        v-if="successMessage"
+        class="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-xs text-emerald-800"
+        role="status"
+      >
+        <div class="flex items-center gap-2">
+          <CheckCircle2 :size="16" class="shrink-0 text-emerald-600" />
+          <span class="font-medium">{{ successMessage }}</span>
+        </div>
+        <button type="button" class="text-emerald-500 hover:text-emerald-700" @click="successMessage = ''">
+          <X :size="14" />
+        </button>
+      </div>
+    </Transition>
+
+    <!-- Search & Filter bar matching Image 3 -->
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <!-- Search input -->
+      <div class="relative flex-1">
+        <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Tìm theo tên trụ sở, địa chỉ..."
+          class="h-10.5 w-full rounded-xl border border-ink-200 bg-white pl-10 pr-9 text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20"
+        />
+        <button
+          v-if="searchQuery"
+          type="button"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600 cursor-pointer"
+          title="Xóa tìm kiếm"
+          @click="searchQuery = ''"
+        >
+          <X :size="14" />
+        </button>
+      </div>
+
+      <!-- Status dropdown filter -->
+      <div class="w-full sm:w-48">
+        <select
+          v-model="statusFilter"
+          class="h-10.5 w-full rounded-xl border border-ink-200 bg-white px-3.5 text-xs sm:text-sm text-ink-800 transition-colors focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20 cursor-pointer"
+        >
+          <option value="all">Trạng thái: Tất cả</option>
+          <option value="active">Đang nhận</option>
+          <option value="inactive">Tạm ngưng</option>
+        </select>
+      </div>
+
+      <!-- Date filter -->
+      <div class="relative w-full sm:w-48">
+        <Calendar :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+        <input
+          v-model="dateFilter"
+          type="date"
+          aria-label="Chọn ngày nhận hồ sơ"
+          class="h-10.5 w-full rounded-xl border border-ink-200 bg-white pl-9.5 pr-8 font-num text-xs sm:text-sm text-ink-800 transition-colors focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/20"
+        />
+        <button
+          v-if="dateFilter"
+          type="button"
+          class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-400 hover:text-ink-600 cursor-pointer"
+          title="Xóa ngày"
+          @click="dateFilter = ''"
+        >
+          <X :size="14" />
+        </button>
+      </div>
+
+      <!-- Refresh button -->
+      <button
+        type="button"
+        class="inline-flex h-10.5 w-10.5 shrink-0 items-center justify-center rounded-xl border border-ink-200 bg-white text-ink-600 shadow-xs transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 cursor-pointer"
+        title="Làm mới dữ liệu"
+        :disabled="refreshing || loading"
+        @click="refreshData"
+      >
+        <RotateCw :size="16" :class="{ 'animate-spin': refreshing }" />
+      </button>
     </div>
 
-    <Teleport to="body">
-      <Transition name="fh-modal">
-        <div
-          v-if="showForm"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="office-form-title"
-          @click.self="showForm = false"
-          @keydown.esc="showForm = false"
-        >
-          <form class="fh-modal-panel flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-lg)] border border-ink-200 bg-white shadow-(--shadow-e3)" @submit.prevent="save">
-            <div class="flex items-center justify-between border-b border-ink-200 bg-ink-25/60 px-6 py-4">
-              <h3 id="office-form-title" class="text-base font-semibold text-ink-900">{{ editing ? 'Sửa trụ sở' : 'Thêm trụ sở' }}</h3>
-              <button type="button" class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900" aria-label="Đóng" @click="showForm = false">
-                <X :size="18" aria-hidden="true" />
-              </button>
-            </div>
-            <div class="flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
-              <label :class="consoleLabel">Tên trụ sở<input v-model="form.name" :class="consoleField" class="w-full" maxlength="120" /></label>
-              <label :class="consoleLabel">Địa chỉ<input v-model="form.address" :class="consoleField" class="w-full" maxlength="500" /></label>
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <label :class="consoleLabel">Điện thoại<input v-model="form.phone" :class="consoleField" class="w-full font-num" maxlength="32" /></label>
-                <label :class="consoleLabel">Vĩ độ<input v-model="form.latitude" :class="consoleField" class="w-full font-num" inputmode="decimal" placeholder="10.7769" /></label>
-                <label :class="consoleLabel">Kinh độ<input v-model="form.longitude" :class="consoleField" class="w-full font-num" inputmode="decimal" placeholder="106.7009" /></label>
-              </div>
-              <fieldset>
-                <legend class="text-sm font-medium text-ink-700">Ngày nhận hồ sơ</legend>
-                <div class="mt-1.5 flex flex-wrap gap-2">
-                  <label
-                    v-for="day in DAYS"
-                    :key="day.value"
-                    class="flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border px-2.5 py-1 text-sm transition-colors"
-                    :class="form.visitDays.includes(day.value) ? 'border-brand-500 bg-brand-50 text-brand-800 font-medium' : 'border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+    <!-- Main List Section -->
+    <div>
+      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
+
+      <div v-else class="overflow-hidden rounded-2xl border border-ink-200/90 bg-white shadow-xs">
+        <table class="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col class="w-[34%]" />
+            <col class="w-[25%]" />
+            <col class="w-[13%]" />
+            <col class="w-[12%]" />
+            <col class="w-[16%]" />
+          </colgroup>
+          <thead>
+            <tr class="border-b border-ink-200/70 bg-ink-25/70">
+              <th scope="col" class="pl-4 pr-2 sm:pl-5 sm:pr-3 py-3.5 text-xs font-semibold text-ink-600">Trụ sở</th>
+              <th scope="col" class="px-2 sm:px-3 py-3.5 text-xs font-semibold text-ink-600">Giờ nhận hồ sơ</th>
+              <th scope="col" class="px-2 sm:px-3 py-3.5 text-xs font-semibold text-ink-600">Mỗi lượt</th>
+              <th scope="col" class="px-2 sm:px-3 py-3.5 text-xs font-semibold text-ink-600">Trạng thái</th>
+              <th scope="col" class="pl-2 pr-4 sm:pl-3 sm:pr-5 py-3.5 text-right text-xs font-semibold text-ink-600">Hành động</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-ink-100">
+            <!-- Loading Skeleton -->
+            <template v-if="loading">
+              <tr v-for="i in 4" :key="`skeleton-${i}`" class="animate-pulse">
+                <td class="pl-4 pr-2 sm:pl-5 sm:pr-3 py-4">
+                  <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-xl bg-ink-100 shrink-0"></div>
+                    <div class="space-y-1.5 min-w-0 flex-1">
+                      <div class="h-4 w-32 rounded bg-ink-100"></div>
+                      <div class="h-3 w-48 rounded bg-ink-50"></div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-2 sm:px-3 py-4">
+                  <div class="space-y-1.5">
+                    <div class="h-4 w-28 rounded bg-ink-100"></div>
+                    <div class="h-3 w-20 rounded bg-ink-50"></div>
+                  </div>
+                </td>
+                <td class="px-2 sm:px-3 py-4">
+                  <div class="h-4 w-16 rounded bg-ink-100"></div>
+                </td>
+                <td class="px-2 sm:px-3 py-4">
+                  <div class="h-6 w-20 rounded-full bg-ink-100"></div>
+                </td>
+                <td class="pl-2 pr-4 sm:pl-3 sm:pr-5 py-4 text-right">
+                  <div class="flex justify-end gap-1.5">
+                    <div class="h-8 w-14 rounded-lg bg-ink-100"></div>
+                    <div class="h-8 w-20 rounded-lg bg-ink-100"></div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+
+            <!-- Empty state -->
+            <tr v-else-if="filteredOffices.length === 0">
+              <td colspan="5" class="px-5 py-14 text-center">
+                <div class="mx-auto flex max-w-sm flex-col items-center justify-center text-center">
+                  <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-100 text-ink-400">
+                    <Building2 :size="24" />
+                  </div>
+                  <h3 class="mt-3 text-sm font-semibold text-ink-900">Không tìm thấy trụ sở nào</h3>
+                  <p class="mt-1 text-xs text-ink-500">
+                    {{ searchQuery || statusFilter !== 'all' || dateFilter ? 'Thử thay đổi từ khóa hoặc bộ lọc để xem kết quả khác.' : 'Chưa có trụ sở nào trong hệ thống. Hãy bấm nút bên dưới để tạo trụ sở mới.' }}
+                  </p>
+                  <button
+                    v-if="!searchQuery && statusFilter === 'all' && !dateFilter"
+                    type="button"
+                    class="mt-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-4 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-brand-700 cursor-pointer"
+                    @click="openCreateModal"
                   >
-                    <input type="checkbox" class="h-3.5 w-3.5 accent-brand-600" :checked="form.visitDays.includes(day.value)" @change="toggleDay(day.value)" /> {{ day.label }}
-                  </label>
+                    <Plus :size="15" />
+                    <span>Thêm trụ sở đầu tiên</span>
+                  </button>
                 </div>
-              </fieldset>
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <label :class="consoleLabel">Mở cửa<input v-model="form.openTime" type="time" :class="consoleField" class="w-full font-num" /></label>
-                <label :class="consoleLabel">Đóng cửa<input v-model="form.closeTime" type="time" :class="consoleField" class="w-full font-num" /></label>
-                <label :class="consoleLabel">Nghỉ trưa từ<input v-model="form.lunchStart" type="time" :class="consoleField" class="w-full font-num" /></label>
-                <label :class="consoleLabel">đến<input v-model="form.lunchEnd" type="time" :class="consoleField" class="w-full font-num" /></label>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <label :class="consoleLabel">Độ dài mỗi lượt (phút)<input v-model.number="form.slotMinutes" type="number" min="10" max="240" :class="consoleField" class="w-full font-num" /></label>
-                <label :class="consoleLabel">Số thợ tối đa mỗi lượt<input v-model.number="form.slotCapacity" type="number" min="1" max="50" :class="consoleField" class="w-full font-num" /></label>
-              </div>
-              <label class="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
-                <input v-model="form.isActive" type="checkbox" class="h-4 w-4 accent-brand-600" /> Đang nhận hồ sơ
-              </label>
-              <Transition name="fh-fade-slide">
-                <p v-if="formError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ formError }}</p>
-              </Transition>
-            </div>
-            <div class="flex items-center justify-end gap-2 border-t border-ink-200 bg-ink-25/60 px-6 py-4">
-              <FhButton variant="secondary" size="sm" type="button" @click="showForm = false">Huỷ</FhButton>
-              <FhButton variant="primary" size="sm" type="submit" :loading="saving">Lưu</FhButton>
-            </div>
-          </form>
-        </div>
-      </Transition>
-    </Teleport>
+              </td>
+            </tr>
+
+            <!-- List rows -->
+            <tr
+              v-for="row in filteredOffices"
+              v-else
+              :key="row.id"
+              class="transition-[background-color] duration-150 hover:bg-brand-50/30"
+            >
+              <!-- Trụ sở: Icon đại diện, tên và địa chỉ -->
+              <td class="pl-4 pr-2 sm:pl-5 sm:pr-3 py-3.5">
+                <div class="flex items-start gap-2.5 sm:gap-3 min-w-0">
+                  <div class="mt-0.5 flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                    <Building2 :size="18" :stroke-width="2" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="font-bold text-ink-900 text-xs sm:text-sm truncate" :title="row.name">
+                      {{ row.name }}
+                    </div>
+                    <div class="mt-0.5 flex items-center gap-1 text-2xs sm:text-xs text-ink-500 min-w-0" :title="row.address">
+                      <MapPin :size="12" class="shrink-0 text-ink-400" />
+                      <span class="truncate">{{ row.address }}</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Giờ nhận hồ sơ -->
+              <td class="px-2 sm:px-3 py-3.5 min-w-0">
+                <div class="font-semibold text-ink-800 text-xs sm:text-sm font-num truncate" :title="formatHours(row)">
+                  {{ formatHours(row) }}
+                </div>
+                <div class="mt-0.5 text-2xs sm:text-xs text-ink-500 truncate" :title="formatDays(row.visitDays)">
+                  {{ formatDays(row.visitDays) }}
+                </div>
+              </td>
+
+              <!-- Mỗi lượt -->
+              <td class="px-2 sm:px-3 py-3.5 min-w-0">
+                <span class="font-medium text-xs sm:text-sm text-ink-700 font-num truncate block">
+                  {{ row.slotMinutes }} phút, {{ row.slotCapacity }} thợ
+                </span>
+              </td>
+
+              <!-- Trạng thái -->
+              <td class="px-2 sm:px-3 py-3.5 min-w-0">
+                <span
+                  v-if="row.isActive"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2 sm:px-2.5 py-0.5 sm:py-1 text-2xs sm:text-xs font-semibold text-emerald-700 whitespace-nowrap"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  <span>Đang nhận</span>
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1.5 rounded-full border border-amber-200/80 bg-amber-50 px-2 sm:px-2.5 py-0.5 sm:py-1 text-2xs sm:text-xs font-semibold text-amber-700 whitespace-nowrap"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                  <span>Tạm ngưng</span>
+                </span>
+              </td>
+
+              <!-- Hành động: Sửa, Tạm ngưng hoặc Tiếp tục -->
+              <td class="pl-2 pr-4 sm:pl-3 sm:pr-5 py-3.5 text-right min-w-0">
+                <div class="flex items-center justify-end gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    class="inline-flex h-8 items-center justify-center gap-1 sm:gap-1.5 rounded-lg border border-ink-200 bg-white px-2.5 sm:px-3 text-xs font-semibold text-ink-700 shadow-xs transition-colors hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 shrink-0 cursor-pointer"
+                    @click="openEditDrawer(row)"
+                  >
+                    <Pencil :size="13" />
+                    <span>Sửa</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="inline-flex h-8 items-center justify-center gap-1 sm:gap-1.5 rounded-lg border px-2.5 sm:px-3 text-xs font-semibold shadow-xs transition-colors focus:outline-none focus-visible:ring-2 shrink-0 cursor-pointer"
+                    :class="
+                      row.isActive
+                        ? 'border-ink-200 bg-white text-ink-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 focus-visible:ring-amber-500'
+                        : 'border-ink-200 bg-white text-ink-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-emerald-500'
+                    "
+                    @click="handleToggleClick(row)"
+                  >
+                    <Pause v-if="row.isActive" :size="13" />
+                    <Play v-else :size="13" />
+                    <span>{{ row.isActive ? 'Tạm ngưng' : 'Tiếp tục' }}</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal Thêm trụ sở (Image 1) -->
+    <VisitOfficeModal
+      :open="showAddModal"
+      :saving="savingAdd"
+      :error="addError"
+      @close="showAddModal = false"
+      @save="handleSaveCreate"
+    />
+
+    <!-- Drawer Chỉnh sửa trụ sở (Image 2) -->
+    <VisitOfficeDrawer
+      :open="showEditDrawer"
+      :office="editingOffice"
+      :saving="savingEdit"
+      :error="editError"
+      @close="showEditDrawer = false"
+      @save="handleSaveEdit"
+    />
+
+    <!-- Confirmation before pausing branch -->
+    <FhConfirmDialog
+      :open="showPauseConfirm"
+      title="Tạm ngưng nhận hồ sơ?"
+      :consequence="`Trụ sở '${pauseTargetOffice?.name}' sẽ tạm ngừng tiếp nhận các lịch hẹn mới từ kỹ thuật viên. Các lịch hẹn đã được đặt trước đó vẫn được giữ nguyên.`"
+      confirm-text="Tạm ngưng"
+      cancel-text="Quay lại"
+      :danger="false"
+      :loading="pausing"
+      @confirm="confirmPauseOffice"
+      @cancel="showPauseConfirm = false"
+    />
   </div>
 </template>

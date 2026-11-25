@@ -18,14 +18,21 @@ const props = withDefaults(defineProps<{
   rowKey?: (row: TRow, index: number) => string | number;
   /** Optional `data-testid` per row, for scripts that check one record. */
   rowTestId?: (row: TRow) => string;
+  /** Optional custom class for a row (e.g. for selection or highlight). */
+  rowClass?: (row: TRow, index: number) => string | string[] | Record<string, boolean> | undefined;
   loading?: boolean;
   emptyText?: string;
 }>(), {
   rowKey: undefined,
   rowTestId: undefined,
+  rowClass: undefined,
   loading: false,
   emptyText: 'Không có dữ liệu.',
 });
+
+const emit = defineEmits<{
+  (e: 'rowClick', row: TRow, index: number): void;
+}>();
 
 defineSlots<{
   [name: string]: (props: { row: TRow; index: number }) => unknown;
@@ -80,7 +87,9 @@ const valueOf = (row: TRow, key: string) => (row as Record<string, unknown>)[key
             v-else
             :key="keyOf(row, index)"
             class="align-top transition-[background-color] duration-150 motion-reduce:transition-none hover:bg-brand-50/35"
+            :class="props.rowClass ? props.rowClass(row, index) : undefined"
             :data-testid="rowTestId ? rowTestId(row) : undefined"
+            @click="emit('rowClick', row, index)"
           >
             <td
               v-for="col in columns"
