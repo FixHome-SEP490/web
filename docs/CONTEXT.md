@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-25 21:37 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-26 14:30 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: feat/warranty-same-technician
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -627,6 +627,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-26 14:30 (UTC+7) | Hgnv11 | dev | PO 26/11: console bảo hành bỏ Phân công/Phân công lại và bộ lọc Chưa có kỹ thuật viên; thợ không còn nút Không nhận được; modal đóng chỉ cho Không được bảo hành khi kết luận not_covered; nút Đóng ẩn với SM đã duyệt claim đang khiếu nại; route chi tiết bảo hành thêm quyền support:read_all
 - 2026-11-25 21:37 (UTC+7) | Hgnv11 | dev | Thêm chọn kênh OTP Email/SMS khi đăng ký và thẻ xác thực email/SĐT trong hồ sơ; CHƯA KIỂM CHỨNG với backend thật
 
 - 2026-11-25 20:48 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: ô lý do cho kỹ năng không xác nhận (từng dịch vụ và chung cả nhóm), bắt buộc; CHƯA KIỂM CHỨNG trên trình duyệt
@@ -667,4 +668,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-17 18:44 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 1–2 (19 file): chuẩn hóa console-ui.ts, drawers/modals/panels và các trang điểm nóng (khử raw colors, đồng bộ bảng/toolbar).
 - 2026-11-17 17:21 (UTC+7) | Lạc Vỹ | LacVy | Thêm animation cuộn lên cho 5 trang Admin Console (`AdminUsersPage.vue`, `AdminReviewsPage.vue`, `AdminConfigPage.vue`, `AdminAuditLogsPage.vue`, `AdminW3DeliveryPolicyPage.vue`) bằng stagger `.animate-slide-up*` + `.animate-slide-up-delay-3` và fallback fade-only khi `prefers-reduced-motion: reduce` (`theme.css`), đồng thời gỡ action sắp xếp cột trên bảng theo yêu cầu; focused 6 file (105/105) + `vue-tsc -b` + `eslint --max-warnings=0` PASS, trình duyệt CHƯA KIỂM CHỨNG.
 - 2026-11-17 16:49 (UTC+7) | Lạc Vỹ | LacVy | Redesign UI/UX & khử tông vàng bảng/banner Console Admin: mở rộng cool-slate `.fh-console` (`theme.css`, `app-surface.ts`, `App.vue`) + animation `.fh-drawer`; nâng cấp `ConsoleTable.vue`/`ConsoleTableSkeleton.vue`; redesign 5 trang (`AdminUsersPage.vue`, `AdminReviewsPage.vue`, `AdminConfigPage.vue`, `AdminAuditLogsPage.vue`, `AdminW3DeliveryPolicyPage.vue`) với pill token thống nhất, card KPI/bảng hiện đại, modal/drawer chuyển động mượt, gộp card chính sách W3 bỏ 3 dải `bg-warning-50`; bổ sung test `isConsoleSurface` trong `console-ui-shell.spec.ts`; focused 6 file (105/105) + `vue-tsc -b` + `eslint --max-warnings=0` PASS, trình duyệt CHƯA KIỂM CHỨNG.
-- 2026-11-17 15:51 (UTC+7) | Lạc Vỹ | LacVy | Fix 2 bug UI Khách hàng: (1) ở `CustomerOrdersPage.vue`, đưa bộ chọn loại danh sách (`listChoices`) lên Cấp 1 trước bộ lọc trạng thái Cấp 2, tách bộ đếm `Tất cả (N)` riêng cho `Đơn sửa chữa` vs `Yêu cầu đặt lịch`, khóa `chosenList` khi lọc/tìm kiếm chống tự nhảy sang `requests`, và bỏ `pending-requests-callout` khỏi `orders-section`; (2) khử lag mở modal & chuyển tab ở `TechnicianProfileModal.vue` / `BookingCandidatesPage.vue` (bỏ inner `<Transition>` trùng lặp, thay tab pill đo DOM JS/`ResizeObserver`/`setTimeout` sang pure CSS `grid-cols-2` + `translate-x`, bỏ `backdrop-blur-xs` trên fixed body & `transition-all`, bỏ `mode="out-in"`, thêm cache reviews & `overscroll-contain`); focused 7 file (72/72) + `vue-tsc -b` + `eslint --max-warnings=0` PASS, trình duyệt CHƯA KIỂM CHỨNG.

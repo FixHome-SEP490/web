@@ -302,7 +302,8 @@ describe('TechnicianWarrantyPage', () => {
     expect(count('todo')).toContain('4');
     expect(count('waiting')).toContain('1');
     expect(count('closed')).toContain('1');
-    for (const label of ['Nhận yêu cầu', 'Không nhận được', 'Đã đến nơi', 'Gửi kết luận kiểm tra', 'Báo đã bảo hành xong']) {
+    expect(text).not.toContain('Không nhận được');
+    for (const label of ['Nhận yêu cầu', 'Đã đến nơi', 'Gửi kết luận kiểm tra', 'Báo đã bảo hành xong']) {
       expect(text).toContain(label);
     }
     // The list stays short: the long parts only show in the detail panel.
@@ -425,7 +426,7 @@ describe('TechnicianWarrantyPage', () => {
     expect(failed.text()).toContain('Không có quyền.');
   });
 
-  it('checks in and removes a claim the technician handed back', async () => {
+  it('checks in and offers no way to hand the claim back', async () => {
     Object.defineProperty(navigator, 'geolocation', {
       configurable: true,
       value: { getCurrentPosition: (_ok: unknown, fail: () => void) => fail() },
@@ -443,12 +444,7 @@ describe('TechnicianWarrantyPage', () => {
     expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/b/check-in', {});
     expect(wrapper.text()).toContain('Gửi kết luận kiểm tra');
 
-    await wrapper.findAll('button').find((b) => b.text() === 'Không nhận được')!.trigger('click');
-    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ id: 'a', technician: null }) } });
-    await wrapper.findAll('button').find((b) => b.text() === 'Gửi lý do')!.trigger('click');
-    await flushPromises();
-    expect(wrapper.get('[data-testid="warranty-tab-todo"]').text()).toContain('1');
-    expect(wrapper.text()).toContain('Đã trả yêu cầu về cho quản lý dịch vụ');
+    expect(wrapper.findAll('button').some((b) => b.text() === 'Không nhận được')).toBe(false);
   });
   it('asks the server for 20 claims a page and moves to the next page', async () => {
     const first = Array.from({ length: 20 }, (_, i) => claim({ id: `p1-${i}`, status: 'submitted' }));

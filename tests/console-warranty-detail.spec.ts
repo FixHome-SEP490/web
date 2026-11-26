@@ -145,11 +145,13 @@ describe('service manager warranty claim page', () => {
     const close = await mountPage(claim({ status: 'in_progress' }));
     expect(button(close, 'Đóng yêu cầu')).toBeTruthy();
 
+    // The technician who did the order handles its warranty: a manager cannot hand it to someone else.
     const assign = await mountPage(claim({ status: 'submitted', technician: null }));
-    expect(button(assign, 'Phân công kỹ thuật viên')).toBeTruthy();
+    expect(button(assign, 'Phân công kỹ thuật viên')).toBeUndefined();
+    expect(button(assign, 'Phân công lại')).toBeUndefined();
 
     const done = await mountPage(claim({ status: 'rejected' }));
-    expect(done.findAll('button').filter((b) => ['Duyệt kết luận', 'Đóng yêu cầu', 'Phân công kỹ thuật viên'].includes(b.text()))).toHaveLength(0);
+    expect(done.findAll('button').filter((b) => ['Duyệt kết luận', 'Đóng yêu cầu'].includes(b.text()))).toHaveLength(0);
 
     const admin = await mountPage(claim({ status: 'inspected' }), 'admin');
     expect(button(admin, 'Duyệt kết luận')).toBeUndefined();

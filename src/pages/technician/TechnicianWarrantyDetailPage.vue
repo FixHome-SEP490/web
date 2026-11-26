@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, CalendarClock, Check, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User, X } from 'lucide-vue-next';
+import { ArrowLeft, CalendarClock, Check, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
@@ -356,9 +356,7 @@ onBeforeUnmount(() => {
             >
               <h2 class="text-xs font-semibold uppercase tracking-wider text-ink-400">Thao tác tiếp theo</h2>
               <div v-if="claim.status === 'submitted'" class="flex flex-col gap-2">
-                <FhButton variant="primary" size="md" block @click="modalMode = 'accept'"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>
-                <FhButton variant="secondary" size="md" block @click="modalMode = 'decline'"><X :size="16" aria-hidden="true" /> Không nhận được</FhButton>
-              </div>
+                <FhButton variant="primary" size="md" block @click="modalMode = 'accept'"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>              </div>
               <div v-else-if="claim.status === 'accepted'" class="flex flex-col gap-2">
                 <FhButton v-if="!checkedIn" variant="primary" size="md" block :loading="busy" :disabled="busy" @click="checkIn"><MapPinCheck :size="16" aria-hidden="true" /> Đã đến nơi</FhButton>
                 <FhButton v-if="!checkedIn" variant="secondary" size="md" block :disabled="busy" @click="modalMode = 'reschedule'"><CalendarClock :size="16" aria-hidden="true" /> Đổi lịch kiểm tra</FhButton>

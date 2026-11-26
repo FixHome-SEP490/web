@@ -398,7 +398,7 @@ const routes: RouteRecordRaw[] = [
         path: 'warranty/:id',
         name: 'console-warranty-detail',
         component: () => import('../pages/console/ConsoleWarrantyDetailPage.vue'),
-        meta: { title: 'Chi tiết bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'] },
+        meta: { title: 'Chi tiết bảo hành', roles: ['SERVICE_MANAGER', 'ADMIN'], permission: 'support:read_all' },
       },
       {
         path: 'support/cash/:id',

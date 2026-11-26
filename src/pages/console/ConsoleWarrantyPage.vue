@@ -63,7 +63,6 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 const statusFilter = ref<WarrantyClaimStatus | ''>('');
 const timeFilter = ref<'all' | 'today' | '7d' | '30d' | 'this_month'>('all');
 const searchQuery = ref('');
-const unassignedOnly = ref(false);
 const reviewOnly = ref(false);
 const technicians = ref<{ id: string; fullName: string }[]>([]);
 const artworkErrors = ref<Record<string, boolean>>({});
@@ -219,7 +218,6 @@ async function loadQueue(quiet = false) {
       page: page.value,
       limit,
       status: statusFilter.value || undefined,
-      unassigned: unassignedOnly.value || undefined,
       declineReview: reviewOnly.value ? 'pending' : undefined,
     });
     if (requestId !== latestRequest) return;
@@ -277,12 +275,11 @@ const closed = (claim: StaffWarrantyClaim) => ['resolved', 'rejected'].includes(
 
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
-const hasQueueFilters = computed(() => Boolean(statusFilter.value || timeFilter.value !== 'all' || searchQuery.value || unassignedOnly.value || reviewOnly.value));
+const hasQueueFilters = computed(() => Boolean(statusFilter.value || timeFilter.value !== 'all' || searchQuery.value || reviewOnly.value));
 const resetQueueFilters = () => {
   statusFilter.value = '';
   timeFilter.value = 'all';
   searchQuery.value = '';
-  unassignedOnly.value = false;
   reviewOnly.value = false;
 };
 
@@ -347,7 +344,7 @@ function statusBadgeIcon(claim: StaffWarrantyClaim): Component {
   return Clock;
 }
 
-watch([statusFilter, unassignedOnly, reviewOnly], () => {
+watch([statusFilter, reviewOnly], () => {
   if (page.value !== 1) page.value = 1;
   else void loadQueue();
 });
@@ -508,10 +505,6 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
         <!-- Special Manager Filter Checkboxes & Reset -->
         <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100/70 pt-2 text-xs text-ink-600">
           <div class="flex flex-wrap items-center gap-4">
-            <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-ink-700 hover:text-ink-900 select-none">
-              <input v-model="unassignedOnly" type="checkbox" class="h-4 w-4 rounded accent-brand-600" />
-              <span>Chưa có kỹ thuật viên</span>
-            </label>
             <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-ink-700 hover:text-ink-900 select-none">
               <input v-model="reviewOnly" type="checkbox" class="h-4 w-4 rounded accent-brand-600" />
               <span>Chờ xét từ chối hoặc không đến</span>
@@ -696,16 +689,6 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                           @click="openModal(row, 'approve')"
                         >
                           <span>Duyệt kết luận</span>
-                        </FhButton>
-                        <FhButton
-                          v-else-if="['submitted', 'accepted'].includes(row.status)"
-                          variant="secondary"
-                          size="sm"
-                          class="!px-2 !py-1 text-xs shrink-0"
-                          @click="openModal(row, 'assign')"
-                        >
-                          <span class="hidden 2xl:inline">{{ row.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' }}</span>
-                          <span class="2xl:hidden">{{ row.technician ? 'Đổi thợ' : 'Phân công' }}</span>
                         </FhButton>
                         <FhButton
                           v-else-if="['in_progress', 'awaiting_customer', 'disputed'].includes(row.status)"
