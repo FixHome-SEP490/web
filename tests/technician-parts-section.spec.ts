@@ -15,6 +15,7 @@ const { partRequestsApi, partsCatalogApi } = vi.hoisted(() => ({
     getByOrderId: vi.fn(),
     getWarehouseAllocation: vi.fn(),
     createPreRepair: vi.fn(),
+    cancel: vi.fn(),
     receiveByQr: vi.fn(),
     updateItemUsage: vi.fn(),
     declareReturn: vi.fn(),
@@ -731,6 +732,161 @@ describe('TechnicianPartsSection inside the job page', () => {
     await flushPromises();
     await wrapper.findAll('button').find((button) => button.text().includes('Nhập mã bàn giao'))!.trigger('click');
     expect(wrapper.get('[data-testid="handover-code-input"]').attributes('maxlength')).toBe('128');
+    wrapper.unmount();
+  });
+
+  it('lets technician cancel a requested pre-repair request and pre-fills previous parts to add more while ACCEPTED', async () => {
+    const initial = {
+      ...request('requested'),
+      reason: 'Mang trước van xả',
+      items: [{
+        id: 'i-1',
+        partRequestId: 'pr-1',
+        partCatalogId: 'p-1',
+        partSource: 'fixhome',
+        partNameSnapshot: 'Van xả',
+        quantity: 2,
+        unitPriceSnapshot: 50000,
+        usageStatus: 'pending',
+        note: 'Loại chuẩn',
+        createdAt: '',
+        updatedAt: '',
+      }],
+    };
+    let cancelled = false;
+    partRequestsApi.getByOrderId.mockImplementation(async () => (cancelled ? [{ ...initial, status: 'cancelled' }] : [initial]));
+    partRequestsApi.getWarehouseAllocation.mockResolvedValue({ partRequestId: 'pr-1', mode: 'warehouse', status: 'reserved' });
+    partRequestsApi.cancel.mockImplementation(async () => {
+      cancelled = true;
+      return { ...initial, status: 'cancelled' };
+    });
+    partsCatalogApi.getCatalog.mockResolvedValue({
+      data: [{ id: 'p-1', name: 'Van xả', sku: 'VX-01', sellingPrice: 50000 }],
+      meta: { total: 1 },
+    });
+
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="pre-repair-active-notice"]').text()).toContain('chỉ giữ tối đa 1 phiếu linh kiện');
+    await wrapper.get('[data-testid="modify-pre-repair-parts"]').trigger('click');
+    expect(wrapper.get('[data-testid="confirm-modify-pre-repair-box"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="confirm-modify-pre-repair"]').trigger('click');
+    await flushPromises();
+
+    expect(partRequestsApi.cancel).toHaveBeenCalledWith('pr-1', expect.stringContaining('bổ sung linh kiện'));
+    expect(wrapper.text()).toContain('Van xả');
+    expect(wrapper.text()).toContain('Đã chọn 1 loại · 2 cái');
+    expect(wrapper.get('input[placeholder="VD: Nghi hỏng bo mạch chính hoặc cảm biến nhiệt độ"]').element).toHaveProperty('value', 'Mang trước van xả');
+    wrapper.unmount();
+  });
+
+  it('explains why a new pre-repair request cannot be added once parts are ready or received in ACCEPTED status', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([request('received')]);
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="modify-pre-repair-parts"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="pre-repair-active-notice"]').text()).toContain('không thể tạo thêm phiếu mới trước khi xuất phát');
+    expect(wrapper.get('[data-testid="pre-repair-active-notice"]').text()).toContain('Chi phí phát sinh');
+    wrapper.unmount();
+  });
+
+  it('lists catalog items immediately on open and supports 1-tap add and inline quantity adjustment without input focus', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([]);
+    partsCatalogApi.getCatalog.mockResolvedValue({
+      data: [
+        { id: 'p-1', name: 'Băng keo nhôm', sku: 'ACV035', sellingPrice: 25000, warrantyDays: 30 },
+        { id: 'p-2', name: 'Tụ quạt dàn lạnh', sku: 'CAP-15', sellingPrice: 45000, warrantyDays: 90 },
+      ],
+      meta: { total: 2 },
+    });
+    partRequestsApi.createPreRepair.mockResolvedValue({ ...request('requested') });
+
+    const wrapper = mount(TechnicianPartsSection, { props: { orderId: 'so-1', orderStatus: 'ACCEPTED' }, global: { stubs } });
+    await flushPromises();
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Tạo yêu cầu linh kiện'))!.trigger('click');
+    // Catalog items are visible immediately without focusing the search input.
+    expect(wrapper.findAll('[data-testid="catalog-result"]')).toHaveLength(2);
+    expect(wrapper.text()).toContain('Băng keo nhôm');
+    expect(wrapper.text()).toContain('Tụ quạt dàn lạnh');
+
+    // 1-tap quick add updates the selected list while keeping the catalog open for picking the next part.
+    const quickAdds = wrapper.findAll('[data-testid="catalog-quick-add"]');
+    await quickAdds[0]!.trigger('click');
+    await quickAdds[1]!.trigger('click');
+    expect(wrapper.findAll('[data-testid="catalog-result"]')).toHaveLength(2);
+    expect(wrapper.get('[data-testid="selected-parts-summary"]').text()).toContain('Đã chọn 2 loại · 2 cái');
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Gửi yêu cầu tới Quản lý'))!.trigger('click');
+    await flushPromises();
+    expect(partRequestsApi.createPreRepair).toHaveBeenCalledWith('so-1', expect.objectContaining({
+      items: [
+        expect.objectContaining({ partCatalogId: 'p-1', quantity: 1 }),
+        expect.objectContaining({ partCatalogId: 'p-2', quantity: 1 }),
+      ],
+    }));
+    wrapper.unmount();
+  });
+
+  it('renders DeliveryTermsPanel for technician when an additional delivery request has shippingFee > 0', async () => {
+    const reqId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    partRequestsApi.getByOrderId.mockResolvedValue([{
+      ...request('requested'),
+      id: reqId,
+      requestType: 'additional',
+      fulfillmentMethod: 'delivery',
+      shippingFee: 35000,
+    }]);
+
+    const wrapper = mount(TechnicianPartsSection, {
+      props: { orderId: 'so-1', orderStatus: 'UNDER_REPAIR' },
+      global: {
+        stubs: {
+          ...stubs,
+          DeliveryPhysicalPreview: true,
+          DeliveryOperationsPanel: true,
+          DeliveryTermsPanel: {
+            props: ['requestId', 'shippingFee', 'audience', 'technicianId'],
+            template: '<div data-testid="tech-delivery-terms-mounted" :data-req="requestId" :data-fee="shippingFee" :data-aud="audience" :data-tech="technicianId" />',
+          },
+        },
+      },
+    });
+    await flushPromises();
+
+    const terms = wrapper.get('[data-testid="tech-delivery-terms-mounted"]');
+    expect(terms.attributes('data-req')).toBe(reqId);
+    expect(terms.attributes('data-fee')).toBe('35000');
+    expect(terms.attributes('data-aud')).toBe('technician');
+    expect(terms.attributes('data-tech')).toBe('t-1');
+    expect(wrapper.get('[data-testid="tech-delivery-flow-hint"]').text()).toContain('Quy trình giao qua ĐVVC');
+    wrapper.unmount();
+  });
+
+  it('shows non-additional delivery hint on technician pre-repair delivery requests', async () => {
+    partRequestsApi.getByOrderId.mockResolvedValue([{
+      ...request('requested'),
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      requestType: 'pre_repair',
+      fulfillmentMethod: 'delivery',
+      shippingFee: 0,
+    }]);
+
+    const wrapper = mount(TechnicianPartsSection, {
+      props: { orderId: 'so-1', orderStatus: 'ACCEPTED' },
+      global: {
+        stubs: {
+          ...stubs,
+          DeliveryPhysicalPreview: true,
+          DeliveryOperationsPanel: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="tech-delivery-non-additional-hint"]').text()).toContain('chưa có thao tác xác nhận giao nhận trực tuyến');
     wrapper.unmount();
   });
 });

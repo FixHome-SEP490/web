@@ -177,6 +177,7 @@ export interface SupportCaseQuery {
   page?: number;
   limit?: number;
   caseType?: SupportCaseType;
+  stopOrReplace?: boolean;
   status?: SupportCaseStatus;
   bookingId?: string;
   serviceOrderId?: string;
@@ -647,6 +648,9 @@ function normalizeQuery(query: SupportCaseQuery): Record<string, unknown> {
   ] as const) {
     const value = query[key];
     if (value !== undefined && value !== null && value !== '') params[key] = value;
+  }
+  if (query.stopOrReplace === true) {
+    params.stopOrReplace = true;
   }
   return params;
 }

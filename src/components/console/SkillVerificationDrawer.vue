@@ -17,7 +17,11 @@ import type {
   SkillVerificationDocument,
 } from '../../api/admin-skill-verifications.api';
 import { adminSkillVerificationsApi } from '../../api/admin-skill-verifications.api';
+import { evidenceRows } from './skill-evidence-rows';
 import { vnDateString } from '../../utils/vn-time';
+import { useCanDecideReview } from '../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 const props = defineProps<{
   open: boolean;
@@ -277,6 +281,12 @@ const handlePreview = (title: string, documentId: string) => {
                     <Maximize2 class="text-white drop-shadow-sm" :size="20" />
                   </div>
                 </button>
+                <dl v-if="evidenceRows(doc).length" class="divide-y divide-ink-100 rounded-xl border border-ink-100 bg-white px-3 text-xs">
+                  <div v-for="[label, value] in evidenceRows(doc)" :key="label" class="flex justify-between gap-3 py-1.5">
+                    <dt class="shrink-0 text-ink-500">{{ label }}</dt>
+                    <dd class="text-right font-medium text-ink-800 break-words">{{ value }}</dd>
+                  </div>
+                </dl>
               </div>
             </div>
           </section>
@@ -314,7 +324,7 @@ const handlePreview = (title: string, documentId: string) => {
           >
             Đóng
           </button>
-          <div class="flex items-center gap-2.5">
+          <div v-if="canDecide" class="flex items-center gap-2.5">
             <button
               type="button"
               class="inline-flex h-9.5 items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-4 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-50 cursor-pointer"

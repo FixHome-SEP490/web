@@ -3,6 +3,8 @@
 // checks first, searches on the server, opens a drawer with both CCCD photos
 // and approves or rejects with a reason of at least 5 characters.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useAuthStore } from '../src/stores/auth';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 
 const api = vi.hoisted(() => ({
@@ -64,6 +66,8 @@ async function openCustomerTab(): Promise<VueWrapper> {
 const button = (w: VueWrapper, text: string) => w.findAll('button').find((b) => b.text().trim() === text)!;
 
 beforeEach(() => {
+  setActivePinia(createPinia());
+  useAuthStore().setAuth('token', { id: 'sm1', fullName: 'Quản lý', email: 'sm@example.test', role: 'service_manager', status: 'ACTIVE' } as never);
   vi.clearAllMocks();
   api.getVerifications.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 1 } });
   api.list.mockResolvedValue({ items: [pending], total: 1, page: 1, pageSize: 10 });
@@ -73,9 +77,9 @@ beforeEach(() => {
 });
 
 describe('Admin identity review page', () => {
-  it('is admin only, named for both kinds of review, with two tabs', async () => {
+  it('is open to the service manager and the admin, named for both kinds of review, with two tabs', async () => {
     const route = router.resolve('/console/technicians').matched.at(-1);
-    expect(route?.meta.roles).toEqual(['ADMIN']);
+    expect(route?.meta.roles).toEqual(['SERVICE_MANAGER', 'ADMIN']);
     expect(route?.meta.title).toBe('Duyệt xác minh danh tính');
     const w = mount(ConsoleTechniciansPage, { global: { stubs } });
     await flushPromises();

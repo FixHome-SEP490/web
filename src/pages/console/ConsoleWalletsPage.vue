@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '../../stores/auth';
-import { CheckCircle2, AlertCircle, X } from 'lucide-vue-next';
+import {
+  Wallet,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Clock,
+  Coins,
+  History,
+  RotateCcw,
+  Search,
+} from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import {
   walletApi,
@@ -11,21 +21,18 @@ import {
   type WalletConfig,
   type PayoutOverview,
 } from '../../api/wallet.api';
-import { FhButton, FhStatusPill, FhSkeleton } from '../../components';
-import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
+import { FhButton, FhSkeleton } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
-import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
 import ConsolePagination from '../../components/console/ConsolePagination.vue';
-import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
 import CustomerWithdrawalsTab from '../../components/console/CustomerWithdrawalsTab.vue';
-import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
+import TechnicianWalletHistoryModal from '../../components/console/wallets/TechnicianWalletHistoryModal.vue';
+import { consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
 import {
   formatCurrencyVND,
   formatDateTimeVN,
-  formatWalletTxType,
   formatWithdrawalStatus,
 } from '../../utils/formatters';
 import { extractApiErrorMessage } from '../../utils/input-validation';
@@ -55,14 +62,6 @@ const walletsPage = ref(1);
 const walletsTotalPages = ref(1);
 const walletsTotal = ref(0);
 
-const walletsColumns: ConsoleColumn[] = [
-  { key: 'technician', label: 'Kỹ thuật viên' },
-  { key: 'balance', label: 'Số dư', align: 'right' },
-  { key: 'eligibleForJobs', label: 'Nhận việc', hideBelow: 'lg' },
-  { key: 'updatedAt', label: 'Cập nhật', hideBelow: 'xl' },
-  { key: 'actions', label: '', align: 'right' },
-];
-
 // Tab 2: Withdrawals State
 const withdrawals = ref<WithdrawalRequest[]>([]);
 const wdLoading = ref(false);
@@ -71,15 +70,6 @@ const wdStatusFilter = ref<string>('ALL');
 const wdPage = ref(1);
 const wdTotalPages = ref(1);
 const wdTotal = ref(0);
-
-const wdColumns: ConsoleColumn[] = [
-  { key: 'requestedAt', label: 'Thời gian', hideBelow: 'xl' },
-  { key: 'technician', label: 'Kỹ thuật viên' },
-  { key: 'amount', label: 'Số tiền', align: 'right' },
-  { key: 'bankInfo', label: 'Tài khoản nhận', hideBelow: 'xl' },
-  { key: 'status', label: 'Trạng thái' },
-  { key: 'actions', label: '', align: 'right' },
-];
 
 // Tab 3: Config State (Admin)
 const config = ref<WalletConfig | null>(null);
@@ -135,7 +125,7 @@ const adjustError = ref<string | null>(null);
 
 // View Tech Transactions Drawer / Modal
 const showTxModal = ref(false);
-const selectedTech = ref<{ id: string; name: string; balance: number } | null>(null);
+const selectedTech = ref<{ id: string; name: string; balance: number; accountNumber?: string | null } | null>(null);
 const techTransactions = ref<WalletTransaction[]>([]);
 const techTxLoading = ref(false);
 const techTxError = ref(false);
@@ -201,7 +191,6 @@ const loadPayoutOverview = async () => {
   try {
     payoutOverview.value = await walletApi.getPayoutOverview();
   } catch {
-    // The overview is extra context; the withdrawal list still loads on its own.
     payoutOverview.value = null;
   }
 };
@@ -330,6 +319,39 @@ const viewTransactions = async (item: WalletListItem) => {
   }
 };
 
+const viewTransactionsFromWd = (wd: WithdrawalRequest) => {
+  if (!wd.technician) return;
+  selectedTech.value = {
+    id: wd.technicianId,
+    name: wd.technician.fullName,
+    balance: wd.amount,
+    accountNumber: wd.bankAccountNumber,
+  };
+  showTxModal.value = true;
+  techTxLoading.value = true;
+  techTxError.value = false;
+  techTransactions.value = [];
+  walletApi.getWalletTransactions(wd.technicianId, { limit: 50 })
+    .then((res) => {
+      techTransactions.value = res.data;
+    })
+    .catch(() => {
+      techTxError.value = true;
+    })
+    .finally(() => {
+      techTxLoading.value = false;
+    });
+};
+
+function getInitials(name: string): string {
+  if (!name) return 'KT';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
 watch(walletEligibilityFilter, () => {
   walletsPage.value = 1;
   loadWallets();
@@ -368,26 +390,61 @@ onMounted(() => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Chi hộ và rút tiền">
-      <template #actions>
-        <ConsoleMoreMenu>
-          <ConsoleMenuItem @click="refreshActiveTab">Làm mới</ConsoleMenuItem>
-        </ConsoleMoreMenu>
-      </template>
-    </ConsolePageHeader>
+    <!-- Header: Modern, Clean with Wallet Icon and Action Menu -->
+    <header class="animate-slide-up flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3.5">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100/80 text-brand-600 shadow-2xs">
+          <Wallet :size="24" :stroke-width="2" aria-hidden="true" />
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-ink-900">Chi hộ và rút tiền</h1>
+          <p class="text-xs text-ink-500 sm:text-sm">
+            Quản lý các yêu cầu chi hộ và rút tiền của kỹ thuật viên trên nền tảng.
+          </p>
+        </div>
+      </div>
 
+      <div class="flex shrink-0 items-center gap-2">
+        <ConsoleMoreMenu>
+          <ConsoleMenuItem @click="refreshActiveTab">
+            <span class="flex items-center gap-1.5">
+              <RotateCcw :size="14" />
+              Làm mới dữ liệu
+            </span>
+          </ConsoleMenuItem>
+        </ConsoleMoreMenu>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs: 3 Main Tabs -->
     <ConsoleTabs v-model="activeTab" class="animate-slide-up-delay-1" :tabs="tabs" />
 
-    <!-- Wallets -->
+    <!-- TAB 1: Wallets (Ví kỹ thuật viên) -->
     <div v-if="activeTab === 'wallets'" class="animate-slide-up-delay-2 space-y-4">
-      <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
-        <ConsoleSearch
-          v-model="walletSearch"
-          placeholder="Tìm tên, số điện thoại, email"
-          label="Tìm ví kỹ thuật viên"
-          @update:model-value="walletsPage = 1; loadWallets()"
-        />
-        <select v-model="walletEligibilityFilter" :class="consoleField" aria-label="Điều kiện nhận việc">
+      <!-- Search & Eligibility Filter Bar -->
+      <div class="flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
+        <div class="relative w-full min-w-0 sm:w-72">
+          <Search
+            :size="15"
+            class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"
+            aria-hidden="true"
+          />
+          <input
+            v-model="walletSearch"
+            type="search"
+            maxlength="100"
+            placeholder="Tìm theo tên, email, số điện thoại..."
+            aria-label="Tìm kiếm ví kỹ thuật viên"
+            class="h-9 w-full rounded-xl border border-ink-200 bg-white pl-9 pr-3 text-xs text-ink-800 transition-colors focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            @input="walletsPage = 1; loadWallets()"
+          />
+        </div>
+
+        <select
+          v-model="walletEligibilityFilter"
+          aria-label="Điều kiện nhận việc"
+          class="h-9 cursor-pointer rounded-xl border border-ink-200 bg-white px-3 text-xs font-medium text-ink-700 transition-colors hover:border-ink-300 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        >
           <option value="ALL">Mọi điều kiện</option>
           <option value="ELIGIBLE">Đủ điều kiện nhận việc</option>
           <option value="INELIGIBLE">Dưới mức tối thiểu</option>
@@ -395,70 +452,255 @@ onMounted(() => {
       </div>
 
       <ConsoleLoadError v-if="walletsError" @retry="loadWallets" />
-      <ConsoleTable
-        v-else
-        :columns="walletsColumns"
-        :rows="wallets"
-        :loading="walletsLoading"
-        empty-text="Không có ví kỹ thuật viên nào phù hợp."
-      >
-        <template #cell-technician="{ row }">
-          <div class="font-medium text-ink-900">{{ row.technician.fullName }}</div>
-          <div class="truncate text-xs text-ink-500" :title="row.technician.email">
-            <span class="whitespace-nowrap font-num">{{ row.technician.phoneNumber }}</span> · {{ row.technician.email }}
+
+      <!-- Wallets Data Table -->
+      <div v-else class="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+        <div class="overflow-x-auto overscroll-x-contain">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 bg-ink-50/70">
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Kỹ thuật viên</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-500">Số dư ví</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Điều kiện nhận việc</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Thời gian cập nhật</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-500">Thao tác</th>
+              </tr>
+            </thead>
+
+            <tbody class="divide-y divide-ink-100/70">
+              <tr v-if="walletsLoading">
+                <td colspan="5" class="px-4 py-12 text-center text-sm text-ink-400">
+                  <div class="inline-flex items-center gap-2">
+                    <div class="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                    <span>Đang tải danh sách ví kỹ thuật viên...</span>
+                  </div>
+                </td>
+              </tr>
+
+              <tr v-else-if="wallets.length === 0">
+                <td colspan="5" class="px-4 py-16 text-center text-sm text-ink-500">
+                  <div class="mx-auto flex max-w-xs flex-col items-center justify-center gap-2">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-100 text-ink-400">
+                      <Wallet :size="24" />
+                    </div>
+                    <p class="font-medium text-ink-800">Không có ví kỹ thuật viên nào phù hợp.</p>
+                  </div>
+                </td>
+              </tr>
+
+              <tr
+                v-for="row in wallets"
+                v-else
+                :key="row.id"
+                class="transition-colors hover:bg-brand-50/30"
+              >
+                <!-- 1. Kỹ thuật viên (Avatar + Info) -->
+                <td class="px-4 py-3.5 align-middle">
+                  <div class="flex items-center gap-3">
+                    <!-- Avatar circle or initials -->
+                    <img
+                      v-if="row.technician.avatarUrl"
+                      :src="row.technician.avatarUrl"
+                      :alt="row.technician.fullName"
+                      class="h-9 w-9 rounded-full object-cover border border-ink-100"
+                    />
+                    <div
+                      v-else
+                      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100/80 text-xs font-bold text-brand-700"
+                    >
+                      {{ getInitials(row.technician.fullName) }}
+                    </div>
+
+                    <div class="min-w-0">
+                      <div class="font-semibold text-ink-900 text-xs sm:text-sm">
+                        {{ row.technician.fullName }}
+                      </div>
+                      <div class="truncate text-[11px] text-ink-500" :title="row.technician.email">
+                        <span class="whitespace-nowrap font-num text-ink-600">{{ row.technician.phoneNumber }}</span>
+                        <span class="text-ink-300"> · </span>
+                        <span>{{ row.technician.email }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- 2. Số dư -->
+                <td class="px-4 py-3.5 text-right align-middle">
+                  <span
+                    class="whitespace-nowrap font-num text-xs font-bold sm:text-sm"
+                    :class="row.balance < 0 ? 'text-danger-600' : 'text-ink-900'"
+                  >
+                    {{ formatCurrencyVND(row.balance) }}
+                  </span>
+                </td>
+
+                <!-- 3. Điều kiện nhận việc -->
+                <td class="px-4 py-3.5 align-middle">
+                  <span
+                    v-if="row.eligibleForJobs"
+                    class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
+                  >
+                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Đủ điều kiện
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700"
+                  >
+                    <span class="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    Dưới mức ký quỹ
+                  </span>
+                </td>
+
+                <!-- 4. Thời gian cập nhật -->
+                <td class="px-4 py-3.5 align-middle">
+                  <span class="whitespace-nowrap font-num text-xs text-ink-500">
+                    {{ formatDateTimeVN(row.updatedAt) }}
+                  </span>
+                </td>
+
+                <!-- 5. Thao tác -->
+                <td class="px-4 py-3.5 text-right align-middle">
+                  <div class="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-ink-200 bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 shadow-2xs transition-colors hover:bg-ink-50 active:bg-ink-100"
+                      @click="viewTransactions(row)"
+                    >
+                      <History :size="13" class="text-ink-500" />
+                      <span>Lịch sử</span>
+                    </button>
+
+                    <ConsoleMoreMenu v-if="isAdmin" label="Thao tác khác với ví">
+                      <ConsoleMenuItem @click="openAdjustModal(row)">
+                        Điều chỉnh số dư
+                      </ConsoleMenuItem>
+                    </ConsoleMoreMenu>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer Pagination -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 bg-white px-5 py-3">
+          <div class="text-xs text-ink-500">
+            Hiển thị {{ wallets.length }} trong {{ walletsTotal }} ví
           </div>
-        </template>
-        <template #cell-balance="{ row }">
-          <span class="whitespace-nowrap font-num font-semibold" :class="row.balance < 0 ? 'text-danger-600' : 'text-ink-900'">
-            {{ formatCurrencyVND(row.balance) }}
-          </span>
-        </template>
-        <template #cell-eligibleForJobs="{ row }">
-          <span
-            v-if="row.eligibleForJobs"
-            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-success-200/80 bg-success-50 px-2.5 py-0.5 text-xs font-medium text-success-700"
-          >Đủ điều kiện</span>
-          <span
-            v-else
-            class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-danger-200/80 bg-danger-50 px-2.5 py-0.5 text-xs font-medium text-danger-700"
-          >Dưới mức ký quỹ</span>
-        </template>
-        <template #cell-updatedAt="{ row }">
-          <span class="whitespace-nowrap font-num text-ink-500">{{ formatDateTimeVN(row.updatedAt) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end gap-2">
-            <FhButton variant="secondary" size="sm" @click="viewTransactions(row)">Lịch sử</FhButton>
-            <ConsoleMoreMenu v-if="isAdmin" label="Thao tác khác với ví">
-              <ConsoleMenuItem @click="openAdjustModal(row)">Điều chỉnh số dư</ConsoleMenuItem>
-            </ConsoleMoreMenu>
-          </div>
-        </template>
-      </ConsoleTable>
-      <ConsolePagination :page="walletsPage" :total-pages="walletsTotalPages" :disabled="walletsLoading" @update:page="(p) => { walletsPage = p; loadWallets(); }" />
+          <ConsolePagination
+            :page="walletsPage"
+            :total-pages="walletsTotalPages"
+            :disabled="walletsLoading"
+            @update:page="(p) => { walletsPage = p; loadWallets(); }"
+          />
+        </div>
+      </div>
     </div>
 
-    <!-- Withdrawals: technicians and customers apart, one shared payout source -->
+    <!-- TAB 2: Withdrawals (Yêu cầu rút tiền) -->
     <div v-else-if="activeTab === 'withdrawals'" class="animate-slide-up-delay-2 space-y-4">
+      <!-- Top 4 KPI Summary Cards (When in Technician Withdrawals tab) -->
+      <div
+        v-if="payoutOverview && payoutTab === 'technicians'"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        aria-label="Tổng quan chi tiền"
+      >
+        <!-- 1. Tổng số yêu cầu -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-brand-600">
+            <Coins :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-medium text-ink-500">Tổng số yêu cầu</div>
+            <div class="font-num text-2xl font-bold tracking-tight text-ink-900">
+              {{ wdTotal.toLocaleString('vi-VN') }}
+            </div>
+            <div class="text-[11px] font-medium text-ink-400">
+              Yêu cầu trên hệ thống
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Đã chi trả (Đã chuyển cho kỹ thuật viên) -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
+            <CheckCircle2 :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-medium text-ink-500">Đã chi trả</div>
+            <div class="font-num text-xl font-bold tracking-tight text-emerald-600">
+              {{ formatCurrencyVND(payoutOverview.paidOut.amount) }}
+            </div>
+            <div class="text-[11px] font-medium text-emerald-700">
+              <span class="sr-only">Đã chuyển cho kỹ thuật viên </span>
+              <span class="font-num font-semibold">{{ payoutOverview.paidOut.count }}</span> lệnh thành công
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Đang xử lý (Đang chuyển) -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-500">
+            <Clock :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-medium text-ink-500">Đang xử lý</div>
+            <div class="font-num text-xl font-bold tracking-tight text-amber-500">
+              {{ formatCurrencyVND(payoutOverview.processing.amount) }}
+            </div>
+            <div class="text-[11px] font-medium text-amber-700">
+              <span class="sr-only">Đang chuyển </span>
+              <span class="font-num font-semibold">{{ payoutOverview.processing.count }}</span> lệnh chờ payOS xác nhận
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Chuyển thất bại (Từ chối) -->
+        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-100 bg-rose-50 text-rose-500">
+            <X :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-medium text-ink-500">Chuyển thất bại</div>
+            <div class="font-num text-xl font-bold tracking-tight text-rose-500">
+              {{ formatCurrencyVND(payoutOverview.failed.amount) }}
+            </div>
+            <div class="text-[11px] font-medium text-rose-600">
+              <span class="font-num font-semibold">{{ payoutOverview.failed.count }}</span> lệnh, tiền đã hoàn về ví kỹ thuật viên
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shared Payout Source (Ví nguồn chi hộ payOS) -->
       <template v-if="sourceOverview">
         <Transition name="fh-fade-slide">
           <p
             v-if="sourceOverview.provider === 'disabled'"
-            class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700"
+            class="flex items-center gap-2 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700 shadow-2xs"
             role="alert"
           >
-            <AlertCircle :size="16" class="shrink-0" aria-hidden="true" />
+            <AlertCircle :size="18" class="shrink-0" aria-hidden="true" />
             Chưa cấu hình payOS nên chưa thể chi tiền rút cho {{ payoutTab === 'customers' ? 'khách hàng' : 'kỹ thuật viên' }}.
           </p>
         </Transition>
+
         <section
-          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)"
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
           aria-label="Ví nguồn chi hộ"
           data-testid="payout-source"
         >
-          <div class="min-w-0">
-            <div class="whitespace-nowrap text-sm font-medium text-ink-700">Ví nguồn chi hộ</div>
-            <div class="mt-0.5 text-xs text-ink-500">{{ sourceOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ, chung cho kỹ thuật viên và khách hàng' }}</div>
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Wallet :size="20" />
+            </div>
+            <div class="min-w-0">
+              <div class="whitespace-nowrap text-sm font-bold text-ink-900">Ví nguồn chi hộ</div>
+              <div class="mt-0.5 text-xs text-ink-500">
+                {{ sourceOverview.provider === 'disabled' ? 'Chưa cấu hình payOS' : 'Ví payOS dùng để chi hộ, chung cho kỹ thuật viên và khách hàng' }}
+              </div>
+            </div>
           </div>
           <div class="whitespace-nowrap font-num text-xl font-bold text-ink-900">
             {{ sourceOverview.sourceBalance === null ? 'Không đọc được' : formatCurrencyVND(sourceOverview.sourceBalance) }}
@@ -466,35 +708,26 @@ onMounted(() => {
         </section>
       </template>
 
+      <!-- Sub Tabs: Kỹ thuật viên & Khách hàng -->
       <ConsoleTabs v-model="payoutTab" :tabs="payoutTabs" />
 
+      <!-- Customer Withdrawals Tab Component -->
       <CustomerWithdrawalsTab
         v-if="payoutTab === 'customers'"
         :overview="customerOverview"
         :overview-loading="customerOverviewLoading"
         @total="customerWdTotal = $event"
       />
-      <template v-else>
-        <section v-if="payoutOverview" class="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Tổng quan chi tiền">
-          <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
-            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Đã chuyển cho kỹ thuật viên</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-success-600">{{ formatCurrencyVND(payoutOverview.paidOut.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.paidOut.count }}</span> lệnh thành công</div>
-          </div>
-          <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)">
-            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Đang chuyển</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-info-600">{{ formatCurrencyVND(payoutOverview.processing.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.processing.count }}</span> lệnh chờ payOS xác nhận</div>
-          </div>
-          <div class="col-span-2 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) sm:col-span-1">
-            <div class="whitespace-nowrap text-xs font-medium text-ink-500">Chuyển thất bại</div>
-            <div class="mt-1 whitespace-nowrap font-num text-xl font-bold text-danger-600">{{ formatCurrencyVND(payoutOverview.failed.amount) }}</div>
-            <div class="mt-0.5 text-xs text-ink-500"><span class="font-num font-semibold text-ink-700">{{ payoutOverview.failed.count }}</span> lệnh, tiền đã hoàn về ví kỹ thuật viên</div>
-          </div>
-        </section>
 
-        <div class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5">
-          <select v-model="wdStatusFilter" :class="consoleField" aria-label="Trạng thái rút tiền">
+      <!-- Technician Withdrawals Section -->
+      <template v-else>
+        <!-- Filter Status Bar -->
+        <div class="flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
+          <select
+            v-model="wdStatusFilter"
+            aria-label="Trạng thái rút tiền"
+            class="h-9 cursor-pointer rounded-xl border border-ink-200 bg-white px-3 text-xs font-medium text-ink-700 transition-colors hover:border-ink-300 focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
             <option value="ALL">Tất cả trạng thái</option>
             <option value="PENDING">Chờ duyệt</option>
             <option value="PROCESSING">Đang chuyển tiền</option>
@@ -505,108 +738,303 @@ onMounted(() => {
         </div>
 
         <ConsoleLoadError v-if="wdError" @retry="loadWithdrawals" />
-        <ConsoleTable
-          v-else
-          :columns="wdColumns"
-          :rows="withdrawals"
-          :loading="wdLoading"
-          empty-text="Chưa có yêu cầu rút tiền nào."
-        >
-          <template #cell-requestedAt="{ row }">
-            <span class="whitespace-nowrap font-num text-ink-600">{{ formatDateTimeVN(row.requestedAt) }}</span>
-          </template>
-          <template #cell-technician="{ row }">
-            <div class="whitespace-nowrap font-medium text-ink-900">{{ row.technician?.fullName || 'Kỹ thuật viên' }}</div>
-            <div class="whitespace-nowrap font-num text-xs text-ink-500">{{ row.technician?.phoneNumber || '—' }}</div>
-          </template>
-          <template #cell-amount="{ row }">
-            <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(row.amount) }}</span>
-          </template>
-          <template #cell-bankInfo="{ row }">
-            <div class="whitespace-nowrap text-ink-900">{{ row.bankName }}</div>
-            <div class="whitespace-nowrap text-xs text-ink-500"><span class="font-num">{{ row.bankAccountNumber }}</span> · {{ row.bankAccountName }}</div>
-          </template>
-          <template #cell-status="{ row }">
-            <FhStatusPill :status="row.status" :label="formatWithdrawalStatus(row.status).label" />
-            <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-xs text-danger-600">Lý do: {{ row.rejectReason }}</div>
-            <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-xs text-danger-600">{{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví</div>
-            <div v-if="row.status === 'PROCESSING' && row.failureReason" class="mt-1 max-w-56 text-xs text-info-600">{{ row.failureReason }}</div>
-            <div v-if="row.status === 'SUCCESS'" class="mt-1 whitespace-nowrap text-xs text-ink-500">
-              <template v-if="row.payoutBankReference">Mã giao dịch <span class="font-num font-medium text-ink-700">{{ row.payoutBankReference }}</span></template>
-              <template v-else-if="row.processedAt"><span class="font-num">{{ formatDateTimeVN(row.processedAt) }}</span></template>
+
+        <!-- Withdrawals Table -->
+        <div v-else class="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <div class="overflow-x-auto overscroll-x-contain">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="border-b border-ink-100 bg-ink-50/70">
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-500">Số tiền</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Tài khoản nhận</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Trạng thái</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Thời gian yêu cầu</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-500">Thời gian hoàn tất</th>
+                  <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-500">Thao tác</th>
+                </tr>
+              </thead>
+
+              <tbody class="divide-y divide-ink-100/70">
+                <tr v-if="wdLoading">
+                  <td colspan="7" class="px-4 py-12 text-center text-sm text-ink-400">
+                    <div class="inline-flex items-center gap-2">
+                      <div class="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                      <span>Đang tải danh sách yêu cầu rút tiền...</span>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr v-else-if="withdrawals.length === 0">
+                  <td colspan="7" class="px-4 py-16 text-center text-sm text-ink-500">
+                    <div class="mx-auto flex max-w-xs flex-col items-center justify-center gap-2">
+                      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-100 text-ink-400">
+                        <Coins :size="24" />
+                      </div>
+                      <p class="font-medium text-ink-800">Chưa có yêu cầu rút tiền nào.</p>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr
+                  v-for="row in withdrawals"
+                  v-else
+                  :key="row.id"
+                  class="transition-colors hover:bg-brand-50/30"
+                >
+                  <!-- 1. Kỹ thuật viên (Avatar + Info) -->
+                  <td class="px-4 py-3.5 align-middle">
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100/80 text-xs font-bold text-brand-700">
+                        {{ getInitials(row.technician?.fullName || 'KT') }}
+                      </div>
+                      <div class="min-w-0">
+                        <div class="font-semibold text-ink-900 text-xs sm:text-sm">
+                          {{ row.technician?.fullName || 'Kỹ thuật viên' }}
+                        </div>
+                        <div class="whitespace-nowrap font-num text-[11px] text-ink-500">
+                          {{ row.technician?.phoneNumber || '—' }}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 2. Số tiền -->
+                  <td class="px-4 py-3.5 text-right align-middle">
+                    <span class="whitespace-nowrap font-num text-xs font-bold text-ink-900 sm:text-sm">
+                      {{ formatCurrencyVND(row.amount) }}
+                    </span>
+                  </td>
+
+                  <!-- 3. Tài khoản nhận -->
+                  <td class="px-4 py-3.5 align-middle">
+                    <div class="whitespace-nowrap text-xs font-medium text-ink-900">{{ row.bankName }}</div>
+                    <div class="whitespace-nowrap text-[11px] text-ink-500">
+                      <span class="font-num text-ink-700 font-medium">{{ row.bankAccountNumber }}</span> · {{ row.bankAccountName }}
+                    </div>
+                  </td>
+
+                  <!-- 4. Trạng thái -->
+                  <td class="px-4 py-3.5 align-middle">
+                    <span
+                      v-if="row.status === 'SUCCESS'"
+                      class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Đã chi tiền
+                    </span>
+                    <span
+                      v-else-if="row.status === 'PROCESSING'"
+                      class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      Đang chuyển tiền
+                    </span>
+                    <span
+                      v-else-if="row.status === 'PENDING'"
+                      class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      Chờ duyệt
+                    </span>
+                    <span
+                      v-else-if="row.status === 'FAILED'"
+                      class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      Chuyển thất bại
+                    </span>
+                    <span
+                      v-else
+                      class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ink-200 bg-ink-100 px-2.5 py-0.5 text-xs font-medium text-ink-700"
+                    >
+                      {{ formatWithdrawalStatus(row.status).label }}
+                    </span>
+
+                    <div v-if="row.status === 'REJECTED' && row.rejectReason" class="mt-1 max-w-56 text-[11px] text-danger-600">
+                      Lý do: {{ row.rejectReason }}
+                    </div>
+                    <div v-if="row.status === 'FAILED'" class="mt-1 max-w-56 text-[11px] text-danger-600">
+                      {{ row.failureReason || 'Không chuyển được' }} · đã hoàn tiền vào ví
+                    </div>
+                    <div v-if="row.status === 'PROCESSING' && row.failureReason" class="mt-1 max-w-56 text-[11px] text-info-600">
+                      {{ row.failureReason }}
+                    </div>
+                  </td>
+
+                  <!-- 5. Thời gian yêu cầu -->
+                  <td class="px-4 py-3.5 align-middle">
+                    <span class="whitespace-nowrap font-num text-xs text-ink-600">
+                      {{ formatDateTimeVN(row.requestedAt) }}
+                    </span>
+                  </td>
+
+                  <!-- 6. Thời gian hoàn tất -->
+                  <td class="px-4 py-3.5 align-middle">
+                    <div v-if="row.status === 'SUCCESS'" class="whitespace-nowrap text-xs text-ink-600">
+                      <span v-if="row.payoutBankReference" class="font-num font-medium text-ink-700">Mã giao dịch {{ row.payoutBankReference }}</span>
+                      <span v-else-if="row.processedAt" class="font-num">{{ formatDateTimeVN(row.processedAt) }}</span>
+                    </div>
+                    <span v-else class="text-ink-400">—</span>
+                  </td>
+
+                  <!-- 7. Thao tác -->
+                  <td class="px-4 py-3.5 text-right align-middle">
+                    <div class="flex items-center justify-end gap-2">
+                      <button
+                        v-if="row.status === 'PROCESSING'"
+                        type="button"
+                        class="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-ink-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-700 hover:bg-ink-50 shadow-2xs"
+                        :disabled="reconcilingId === row.id"
+                        @click="handleReconcile(row)"
+                      >
+                        <RotateCcw v-if="reconcilingId === row.id" :size="12" class="animate-spin" />
+                        <span>Kiểm tra lại</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        class="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-ink-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-700 hover:bg-ink-50 shadow-2xs"
+                        @click="viewTransactionsFromWd(row)"
+                      >
+                        <History :size="12" class="text-ink-500" />
+                        <span>Lịch sử</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Footer Pagination -->
+          <div class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 bg-white px-5 py-3">
+            <div class="text-xs text-ink-500">
+              Hiển thị {{ withdrawals.length }} trong {{ wdTotal }} yêu cầu
             </div>
-          </template>
-          <template #cell-actions="{ row }">
-            <FhButton
-              v-if="row.status === 'PROCESSING'"
-              variant="secondary"
-              size="sm"
-              :loading="reconcilingId === row.id"
-              @click="handleReconcile(row)"
-            >Kiểm tra lại</FhButton>
-          </template>
-        </ConsoleTable>
-        <ConsolePagination :page="wdPage" :total-pages="wdTotalPages" :disabled="wdLoading" @update:page="(p) => { wdPage = p; loadWithdrawals(); }" />
+            <ConsolePagination
+              :page="wdPage"
+              :total-pages="wdTotalPages"
+              :disabled="wdLoading"
+              @update:page="(p) => { wdPage = p; loadWithdrawals(); }"
+            />
+          </div>
+        </div>
       </template>
     </div>
 
-    <!-- Wallet settings (admin) -->
-    <section v-else-if="activeTab === 'config' && isAdmin" class="animate-slide-up-delay-2 max-w-2xl rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-6 shadow-(--shadow-e1)">
-      <h2 class="text-base font-semibold text-ink-900">Thông số ví kỹ thuật viên</h2>
-      <p class="mt-1 text-sm text-ink-500">Áp dụng ngay cho lời mời nhận việc và phí trừ khi hoàn thành đơn.</p>
+    <!-- TAB 3: Config (Cấu hình ví kỹ thuật viên - Admin) -->
+    <section
+      v-else-if="activeTab === 'config' && isAdmin"
+      class="animate-slide-up-delay-2 max-w-2xl rounded-2xl border border-ink-100 bg-white p-6 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
+    >
+      <div class="border-b border-ink-100 pb-4">
+        <h2 class="text-base font-bold text-ink-900">Thông số ví kỹ thuật viên</h2>
+        <p class="mt-1 text-xs text-ink-500 sm:text-sm">Áp dụng ngay cho lời mời nhận việc và phí trừ khi hoàn thành đơn.</p>
+      </div>
 
-      <div v-if="configLoading" class="mt-5 space-y-3"><FhSkeleton height="40px" :count="2" /></div>
+      <div v-if="configLoading" class="mt-5 space-y-3">
+        <FhSkeleton height="40px" :count="2" />
+      </div>
       <ConsoleLoadError v-else-if="configError" class="mt-5" @retry="loadConfig" />
       <form v-else class="mt-5 space-y-5" @submit.prevent="saveConfig">
         <Transition name="fh-fade-slide">
-          <p v-if="configSuccessMsg" class="flex items-center gap-2 rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-800" role="status">
-            <CheckCircle2 :size="16" aria-hidden="true" /> {{ configSuccessMsg }}
+          <p
+            v-if="configSuccessMsg"
+            class="flex items-center gap-2 rounded-xl border border-success-200 bg-success-50 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-success-800"
+            role="status"
+          >
+            <CheckCircle2 :size="16" aria-hidden="true" />
+            {{ configSuccessMsg }}
           </p>
         </Transition>
+
         <label :class="consoleLabel">
-          Ký quỹ tối thiểu (₫)
-          <input v-model.number="editMinBalance" type="number" min="0" max="100000000" step="1" inputmode="numeric" :class="consoleField" class="h-10 max-w-xs font-num" />
+          <span>Ký quỹ tối thiểu (₫)</span>
+          <input
+            v-model.number="editMinBalance"
+            type="number"
+            min="0"
+            max="100000000"
+            step="1"
+            inputmode="numeric"
+            :class="consoleField"
+            class="h-10 max-w-xs font-num !rounded-xl"
+          />
           <span class="text-xs font-normal text-ink-500">Số dư thấp hơn mức này thì kỹ thuật viên không nhận lời mời mới.</span>
         </label>
+
         <label :class="consoleLabel">
-          Phí nền tảng (phần vạn)
+          <span>Phí nền tảng (phần vạn)</span>
           <span class="flex max-w-xs items-center gap-3">
-            <input v-model.number="editFeeRateBps" type="number" min="0" max="5000" step="1" inputmode="numeric" :class="consoleField" class="h-10 w-full font-num" />
+            <input
+              v-model.number="editFeeRateBps"
+              type="number"
+              min="0"
+              max="5000"
+              step="1"
+              inputmode="numeric"
+              :class="consoleField"
+              class="h-10 w-full font-num !rounded-xl"
+            />
             <span class="whitespace-nowrap font-num font-semibold text-brand-700">= {{ (editFeeRateBps / 100).toFixed(1) }}%</span>
           </span>
           <span class="text-xs font-normal text-ink-500">1500 = 15%, trừ khi đơn hoàn thành.</span>
         </label>
+
         <Transition name="fh-fade-slide">
-          <p v-if="configSaveError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ configSaveError }}</p>
+          <p
+            v-if="configSaveError"
+            class="rounded-xl border border-danger-200 bg-danger-50 px-3.5 py-2 text-xs sm:text-sm text-danger-700"
+            role="alert"
+          >
+            {{ configSaveError }}
+          </p>
         </Transition>
-        <div class="flex justify-end">
-          <FhButton type="submit" variant="primary" size="sm" :loading="configSaving">Lưu thay đổi</FhButton>
+
+        <div class="flex justify-end pt-2">
+          <FhButton type="submit" variant="primary" size="sm" :loading="configSaving" class="!rounded-xl">
+            Lưu thay đổi
+          </FhButton>
         </div>
       </form>
     </section>
 
-    <!-- Adjust balance (admin) -->
+    <!-- Adjust balance modal (Admin) -->
     <Transition name="fh-modal">
       <div
         v-if="showAdjustModal && selectedWalletForAdjust"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/50"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/50 backdrop-blur-xs"
         role="dialog"
         aria-modal="true"
         aria-labelledby="adjust-title"
         @click.self="showAdjustModal = false"
         @keydown.esc="showAdjustModal = false"
       >
-        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-md w-full p-6 shadow-(--shadow-e3) space-y-5">
+        <div class="fh-modal-panel bg-white rounded-2xl border border-ink-100 max-w-md w-full p-6 shadow-2xl space-y-5">
           <div class="flex items-center justify-between border-b border-ink-100 pb-3">
-            <h3 id="adjust-title" class="text-base font-semibold text-ink-900">Điều chỉnh số dư</h3>
-            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showAdjustModal = false">
+            <h3 id="adjust-title" class="text-base font-bold text-ink-900">Điều chỉnh số dư</h3>
+            <button
+              type="button"
+              class="rounded-xl p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 cursor-pointer"
+              aria-label="Đóng"
+              @click="showAdjustModal = false"
+            >
               <X :size="18" aria-hidden="true" />
             </button>
           </div>
 
-          <dl class="space-y-1.5 rounded-[var(--radius-sm)] border border-ink-100 bg-ink-50/70 p-3 text-sm">
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Kỹ thuật viên</dt><dd class="font-medium text-ink-900">{{ selectedWalletForAdjust.technician.fullName }}</dd></div>
-            <div class="flex justify-between gap-3"><dt class="text-ink-500">Số dư hiện tại</dt><dd class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedWalletForAdjust.balance) }}</dd></div>
+          <dl class="space-y-1.5 rounded-xl border border-ink-100 bg-ink-50/70 p-3.5 text-xs sm:text-sm">
+            <div class="flex justify-between gap-3">
+              <dt class="text-ink-500">Kỹ thuật viên</dt>
+              <dd class="font-medium text-ink-900">{{ selectedWalletForAdjust.technician.fullName }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-ink-500">Số dư hiện tại</dt>
+              <dd class="whitespace-nowrap font-num font-bold text-ink-900">
+                {{ formatCurrencyVND(selectedWalletForAdjust.balance) }}
+              </dd>
+            </div>
           </dl>
 
           <div class="space-y-4">
@@ -615,88 +1043,90 @@ onMounted(() => {
                 type="button"
                 role="radio"
                 :aria-checked="adjustType === 'CREDIT'"
-                class="whitespace-nowrap rounded-[var(--radius-sm)] border px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
-                :class="adjustType === 'CREDIT' ? 'border-success-600 bg-success-50 text-success-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
+                class="whitespace-nowrap rounded-xl border px-3 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                :class="adjustType === 'CREDIT' ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
                 @click="adjustType = 'CREDIT'"
-              >Cộng tiền</button>
+              >
+                + Cộng tiền
+              </button>
               <button
                 type="button"
                 role="radio"
                 :aria-checked="adjustType === 'DEBIT'"
-                class="whitespace-nowrap rounded-[var(--radius-sm)] border px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
-                :class="adjustType === 'DEBIT' ? 'border-danger-600 bg-danger-50 text-danger-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
+                class="whitespace-nowrap rounded-xl border px-3 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                :class="adjustType === 'DEBIT' ? 'border-rose-600 bg-rose-50 text-rose-700' : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'"
                 @click="adjustType = 'DEBIT'"
-              >Trừ tiền</button>
-            </div>
-            <label :class="consoleLabel">
-              Số tiền (₫)
-              <input v-model.number="adjustAmount" type="number" min="1" max="100000000" step="1" inputmode="numeric" :class="consoleField" class="h-10 font-num" />
-            </label>
-            <label :class="consoleLabel">
-              Lý do
-              <textarea v-model="adjustReason" rows="3" placeholder="Nhập lý do điều chỉnh" :class="consoleTextarea" />
-            </label>
-            <Transition name="fh-fade-slide">
-              <p v-if="adjustError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ adjustError }}</p>
-            </Transition>
-            <div class="flex items-center justify-end gap-2">
-              <FhButton variant="secondary" size="sm" @click="showAdjustModal = false">Huỷ</FhButton>
-              <FhButton variant="primary" size="sm" :loading="adjustSubmitting" @click="handleAdjust">Điều chỉnh</FhButton>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Wallet history -->
-    <Transition name="fh-modal">
-      <div
-        v-if="showTxModal && selectedTech"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/50"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tx-title"
-        @click.self="showTxModal = false"
-        @keydown.esc="showTxModal = false"
-      >
-        <div class="fh-modal-panel bg-white rounded-[var(--radius-lg)] border border-ink-200/90 max-w-2xl w-full p-6 shadow-(--shadow-e3) space-y-4 max-h-[85dvh] flex flex-col">
-          <div class="flex items-start justify-between gap-3 border-b border-ink-100 pb-3">
-            <div>
-              <h3 id="tx-title" class="text-base font-semibold text-ink-900">Lịch sử ví: {{ selectedTech.name }}</h3>
-              <p class="text-sm text-ink-500">Số dư <span class="whitespace-nowrap font-num font-semibold text-ink-900">{{ formatCurrencyVND(selectedTech.balance) }}</span></p>
-            </div>
-            <button type="button" class="rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 cursor-pointer" aria-label="Đóng" @click="showTxModal = false">
-              <X :size="18" aria-hidden="true" />
-            </button>
-          </div>
-
-          <FhSkeleton v-if="techTxLoading" height="44px" :count="5" />
-          <p v-else-if="techTxError" class="py-8 text-center text-sm text-ink-700">{{ CONSOLE_LOAD_ERROR }}</p>
-          <p v-else-if="techTransactions.length === 0" class="py-8 text-center text-sm text-ink-500">Chưa có giao dịch nào.</p>
-          <ul v-else class="flex-1 overflow-y-auto overscroll-contain divide-y divide-ink-100 pr-1">
-            <li v-for="tx in techTransactions" :key="tx.id" class="flex items-center justify-between gap-4 py-3 text-sm">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-x-2">
-                  <span class="font-medium text-ink-900">{{ formatWalletTxType(tx.type, tx).label }}</span>
-                  <span class="whitespace-nowrap font-num text-xs text-ink-500">{{ formatDateTimeVN(tx.createdAt) }}</span>
-                </div>
-                <p class="text-xs text-ink-500">{{ tx.description || 'Giao dịch ví' }}</p>
-                <div class="text-xs text-ink-500">Số dư sau <span class="whitespace-nowrap font-num font-medium">{{ formatCurrencyVND(tx.balanceAfter) }}</span></div>
-              </div>
-              <div
-                class="shrink-0 whitespace-nowrap text-right font-num font-semibold"
-                :class="formatWalletTxType(tx.type, tx).isCredit ? 'text-success-600' : 'text-danger-600'"
               >
-                {{ formatWalletTxType(tx.type, tx).isCredit ? '+' : '-' }}{{ formatCurrencyVND(tx.amount) }}
-              </div>
-            </li>
-          </ul>
+                - Trừ tiền
+              </button>
+            </div>
 
-          <div class="flex justify-end border-t border-ink-100 pt-3">
-            <FhButton variant="secondary" size="sm" @click="showTxModal = false">Đóng</FhButton>
+            <label :class="consoleLabel">
+              <span>Số tiền (₫)</span>
+              <input
+                v-model.number="adjustAmount"
+                type="number"
+                min="1"
+                max="100000000"
+                step="1"
+                inputmode="numeric"
+                :class="consoleField"
+                class="h-10 font-num !rounded-xl"
+              />
+            </label>
+
+            <label :class="consoleLabel">
+              <span>Lý do điều chỉnh</span>
+              <textarea
+                v-model="adjustReason"
+                rows="3"
+                placeholder="Nhập lý do điều chỉnh số dư"
+                :class="consoleTextarea"
+                class="!rounded-xl"
+              />
+            </label>
+
+            <Transition name="fh-fade-slide">
+              <p
+                v-if="adjustError"
+                class="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700"
+                role="alert"
+              >
+                {{ adjustError }}
+              </p>
+            </Transition>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                class="cursor-pointer rounded-xl border border-ink-200 bg-white px-4 py-2 text-xs font-semibold text-ink-700 hover:bg-ink-50"
+                @click="showAdjustModal = false"
+              >
+                Huỷ
+              </button>
+              <FhButton
+                variant="primary"
+                size="sm"
+                :loading="adjustSubmitting"
+                class="!rounded-xl"
+                @click="handleAdjust"
+              >
+                Điều chỉnh
+              </FhButton>
+            </div>
           </div>
         </div>
       </div>
     </Transition>
+
+    <!-- Popup Lịch sử ví kỹ thuật viên (Matching Reference Design 1) -->
+    <TechnicianWalletHistoryModal
+      :open="showTxModal"
+      :technician="selectedTech"
+      :transactions="techTransactions"
+      :loading="techTxLoading"
+      :error="techTxError"
+      @close="showTxModal = false"
+    />
   </div>
 </template>

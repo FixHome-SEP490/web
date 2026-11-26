@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Eye, EyeOff, CheckCircle2, Circle, User, Wrench, ShieldCheck } from 'lucide-vue-next';
+import { Eye, EyeOff, CheckCircle2, Circle, User, Wrench, ShieldCheck, Mail, Smartphone } from 'lucide-vue-next';
+import type { OtpChannel } from '../../types';
 import { toast } from 'vue-sonner';
 import { userFacingError } from '../../utils/user-facing-error';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton.vue';
@@ -17,6 +18,8 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 const selectedRole = ref<'customer' | 'technician'>('customer');
+// Kênh nhận mã OTP xác thực tài khoản. SMS cần số điện thoại.
+const verifyChannel = ref<OtpChannel>('EMAIL');
 
 /**
  * Đăng ký bằng Google bỏ qua luôn bước nhập OTP, vì Google đã xác minh email.
@@ -87,6 +90,11 @@ const handleRegister = async () => {
   touchedPhone.value = true;
   touchedPassword.value = true;
 
+  if (verifyChannel.value === 'SMS' && !phoneNumber.value.trim()) {
+    errorMessage.value = 'Nhập số điện thoại để nhận mã xác thực qua SMS.';
+    return toast.error(errorMessage.value);
+  }
+
   if (emailError.value || fullNameError.value || phoneError.value) {
     errorMessage.value = 'Vui lòng kiểm tra lại thông tin.';
     return toast.error('Vui lòng kiểm tra lại thông tin.');
@@ -111,12 +119,14 @@ const handleRegister = async () => {
       phoneNumber: phoneNumber.value || undefined,
       password: password.value,
       role: selectedRole.value,
+      verifyChannel: verifyChannel.value,
     });
     router.push({
       path: '/verify-otp',
       query: {
         email: (res?.email || email.value).trim().toLowerCase(),
         role: selectedRole.value,
+        channel: verifyChannel.value,
       },
     });
   } catch (err: unknown) {
@@ -191,7 +201,7 @@ const handleRegister = async () => {
 
       <!-- Phone -->
       <div class="space-y-1">
-        <label class="block text-[12px] font-bold text-slate-700">Số điện thoại</label>
+        <label class="block text-[12px] font-bold text-slate-700">Số điện thoại <span v-if="verifyChannel === 'SMS'" class="text-red-500">*</span></label>
         <input
           v-model="phoneNumber"
           @blur="touchedPhone = true"
@@ -294,6 +304,31 @@ const handleRegister = async () => {
         <p v-if="confirmPassword.length > 0 && confirmPassword !== password" class="text-[10px] leading-tight text-red-500 font-medium">
           Mật khẩu xác nhận không khớp
         </p>
+      </div>
+
+      <!-- Verify channel -->
+      <div class="space-y-1">
+        <label class="block text-[12px] font-bold text-slate-700">Nhận mã xác thực qua</label>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            @click="verifyChannel = 'EMAIL'"
+            class="flex-1 flex items-center justify-center gap-2 py-2 border rounded-xl text-[13px] font-bold transition-all duration-200"
+            :class="verifyChannel === 'EMAIL' ? 'bg-brand-50 border-brand-200 text-brand-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'"
+          >
+            <Mail :size="16" :class="verifyChannel === 'EMAIL' ? 'text-brand-600' : 'text-slate-400'" />
+            Email
+          </button>
+          <button
+            type="button"
+            @click="verifyChannel = 'SMS'"
+            class="flex-1 flex items-center justify-center gap-2 py-2 border rounded-xl text-[13px] font-bold transition-all duration-200"
+            :class="verifyChannel === 'SMS' ? 'bg-brand-50 border-brand-200 text-brand-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'"
+          >
+            <Smartphone :size="16" :class="verifyChannel === 'SMS' ? 'text-brand-600' : 'text-slate-400'" />
+            SMS
+          </button>
+        </div>
       </div>
 
       <button

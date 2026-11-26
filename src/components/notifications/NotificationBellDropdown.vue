@@ -157,6 +157,10 @@ const handleItemClick = async (item: NotificationItem) => {
       router.push('/console/office-visits');
       return;
     }
+    if (itemType === 'TECHNICIAN_PROFILE_SUBMITTED') {
+      router.push('/console/technicians');
+      return;
+    }
     if (itemType.startsWith('CHECKIN_FACE_')) {
       router.push('/console/checkin-faces');
       return;

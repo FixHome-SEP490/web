@@ -8,6 +8,8 @@ export interface OperationalDashboard {
   pendingCancellations: number;
   /** "Cần thay đổi thợ" reports still waiting for a manager (PO 09/10/2026). */
   openReplacementCases?: number;
+  /** All open / in-review support cases (complaints, stop/replace, incidents). */
+  openSupportCases?: number;
   /** Orders the system cancelled in the last 7 days because the technician never set out. */
   noDepartureCancellations7d?: number;
 }

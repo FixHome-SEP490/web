@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { SkillEvidenceDetails } from './admin-skill-verifications.api';
 
 // Duyệt danh tính → hẹn lên trụ sở → duyệt hồ sơ (PO 09/11/2026). Hợp đồng bám theo backend `technician-office-visits`.
 
@@ -61,9 +62,20 @@ export interface ProfileReviewRow {
 export interface ProfileReviewSkill {
   id: string;
   serviceName: string;
+  categoryId: string;
+  categoryName: string;
   declaredLevel: string | null;
   level: string;
   verificationStatus: string;
+}
+
+/** One paper the technician sent, once per stored file, with the skills it covers. */
+export interface ProfileReviewEvidence extends SkillEvidenceDetails {
+  verificationId: string;
+  documentId: string;
+  fileName: string;
+  mimeType: string;
+  skillIds: string[];
 }
 
 export interface ProfileReviewDetail {
@@ -79,6 +91,7 @@ export interface ProfileReviewDetail {
     rejectionReason: string | null;
   };
   skills: ProfileReviewSkill[];
+  evidence: ProfileReviewEvidence[];
   verificationId: string | null;
   faceMatchScore: number | null;
   documents: { id: string; documentType: string; fileName: string }[];
@@ -89,6 +102,8 @@ export interface SkillDecision {
   skillId: string;
   level: string;
   approved: boolean;
+  /** Why the skill is not confirmed (needed when `approved` is false); the technician reads it. */
+  reason?: string;
 }
 
 type Wrapped<T> = { data: T } | T;

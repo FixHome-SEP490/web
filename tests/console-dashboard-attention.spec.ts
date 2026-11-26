@@ -33,13 +33,16 @@ describe('Manager overview: what needs the manager', () => {
   });
 
   it('shows both counts and links to the filtered lists', async () => {
-    getOperational.mockResolvedValue(ops({ openReplacementCases: 3, noDepartureCancellations7d: 2 }));
+    getOperational.mockResolvedValue(ops({ openReplacementCases: 3, openSupportCases: 5, noDepartureCancellations7d: 2 }));
     const w = await mountPage();
     const replacements = w.get('[data-testid="ops-replacements"]');
     expect(replacements.text()).toContain('Yêu cầu dừng sửa cần xử lý');
     expect(replacements.text()).toContain('3');
+    const support = w.get('[data-testid="ops-support-cases"]');
+    expect(support.text()).toContain('Khiếu nại & báo cáo đang mở');
+    expect(support.text()).toContain('5');
     expect(w.findAllComponents(RouterLinkStub).map((l) => l.props('to'))).toEqual(
-      expect.arrayContaining(['/console/support?caseType=technician_replacement&status=open', '/console/cancellations']),
+      expect.arrayContaining(['/console/support?stopOrReplace=1&status=open', '/console/support?status=open', '/console/cancellations']),
     );
     expect(w.get('[data-testid="ops-no-departure"]').text()).toContain('2');
   });
@@ -62,15 +65,18 @@ describe('Manager overview: what needs the manager', () => {
     expect(w.text()).not.toContain('Kanban');
   });
 
-  it('gives the admin the counts without links to manager-only pages', async () => {
+  it('gives the admin support links without links to manager-only cancellation pages', async () => {
     setActivePinia(createPinia());
     asRole('admin');
-    getOperational.mockResolvedValue(ops({ openReplacementCases: 1, noDepartureCancellations7d: 1 }));
+    getOperational.mockResolvedValue(ops({ openReplacementCases: 1, openSupportCases: 4, noDepartureCancellations7d: 1 }));
     const w = await mountPage();
     const links = w.findAllComponents(RouterLinkStub).map((l) => l.props('to'));
     expect(links).not.toContain('/console/cancellations');
-    expect(links.some((to) => String(to).startsWith('/console/support'))).toBe(false);
+    expect(links).toEqual(
+      expect.arrayContaining(['/console/support?stopOrReplace=1&status=open', '/console/support?status=open']),
+    );
     expect(w.get('[data-testid="ops-replacements"]').text()).toContain('1');
+    expect(w.get('[data-testid="ops-support-cases"]').text()).toContain('4');
   });
 
   it('says only that it did not load, with a retry, when the server fails', async () => {

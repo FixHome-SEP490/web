@@ -4,6 +4,7 @@ import { addressFieldError, normalizeAddressText } from '../../utils/address-inp
 import { containsUnsafeText, validateFullName, validatePhoneNumber } from '../../utils/input-validation';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
+import ContactVerificationCard from '../../components/account/ContactVerificationCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
 import TechnicianWeekCalendar from '../../components/technician/TechnicianWeekCalendar.vue';
@@ -1165,6 +1166,7 @@ const openAvatarModal = () => {
             </ul>
           </section>
           <ReputationCard role="technician" />
+          <ContactVerificationCard class="xl:col-span-2" />
           <ChangePasswordCard class="xl:col-span-2" />
         </div>
       </div>

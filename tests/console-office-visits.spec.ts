@@ -1,4 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { useAuthStore } from '../src/stores/auth';
 import { flushPromises, mount } from '@vue/test-utils';
 import type { OfficeVisitRow } from '../src/api/admin-office-visits.api';
 
@@ -80,6 +82,9 @@ const mockVisits: OfficeVisitRow[] = [
 
 describe('ConsoleOfficeVisitsPage', () => {
   beforeEach(() => {
+  setActivePinia(createPinia());
+  useAuthStore().setAuth('token', { id: 'sm1', fullName: 'Quản lý', email: 'sm@example.test', role: 'service_manager', status: 'ACTIVE' } as never);
+
     vi.clearAllMocks();
     listOffices.mockResolvedValue(mockOffices);
     listVisits.mockResolvedValue(mockVisits);
@@ -94,10 +99,10 @@ describe('ConsoleOfficeVisitsPage', () => {
     expect(wrapper.text()).toContain('Lịch hẹn trụ sở');
     expect(wrapper.text()).toContain('Theo dõi và quản lý lịch hẹn của kỹ thuật viên');
 
-    // Stats cards: Tổng lịch = 4, Đã gặp = 1, Vắng = 1, Cần hỗ trợ lại = 1 (tech-2)
+    // Stats cards: Tổng lịch = 4, Đã có mặt = 1, Vắng = 1, Cần hỗ trợ lại = 1 (tech-2)
     expect(wrapper.text()).toContain('Tổng lịch');
     expect(wrapper.text()).toContain('4');
-    expect(wrapper.text()).toContain('Đã gặp');
+    expect(wrapper.text()).toContain('Đã có mặt');
     expect(wrapper.text()).toContain('1');
     expect(wrapper.text()).toContain('Vắng');
     expect(wrapper.text()).toContain('Cần hỗ trợ lại');
@@ -135,7 +140,7 @@ describe('ConsoleOfficeVisitsPage', () => {
     });
     await flushPromises();
 
-    // Select "Đã gặp" in dropdown
+    // Select "Đã có mặt" in dropdown
     const select = wrapper.find('#filter-status');
     await select.setValue('attended');
     await flushPromises();
@@ -189,7 +194,7 @@ describe('ConsoleOfficeVisitsPage', () => {
 
     const drawer = wrapper.find('[role="dialog"]');
     expect(drawer.exists()).toBe(true);
-    expect(drawer.text()).toContain('Đã gặp');
+    expect(drawer.text()).toContain('Đã có mặt');
 
     // Strict rule: MUST NOT display "Cho phép đặt lại" for attended visits!
     const buttons = drawer.findAll('button').map((b) => b.text());
@@ -232,7 +237,7 @@ describe('ConsoleOfficeVisitsPage', () => {
     expect(resetMissed).toHaveBeenCalledWith('tech-2');
   });
 
-  it('displays "Xác nhận đã gặp" and "Ghi nhận vắng mặt" for scheduled visits', async () => {
+  it('displays "Xác nhận có mặt" and "Ghi nhận vắng mặt" for scheduled visits', async () => {
     const wrapper = mount(ConsoleOfficeVisitsPage, {
       global: { stubs: { teleport: true } },
     });
@@ -245,11 +250,11 @@ describe('ConsoleOfficeVisitsPage', () => {
 
     const drawer = wrapper.find('[role="dialog"]');
     expect(drawer.text()).toContain('Chờ xác nhận');
-    expect(drawer.text()).toContain('Xác nhận đã gặp');
+    expect(drawer.text()).toContain('Xác nhận có mặt');
     expect(drawer.text()).toContain('Ghi nhận vắng mặt');
 
     // Test mark attended
-    const attendedBtn = drawer.findAll('button').find((b) => b.text().includes('Xác nhận đã gặp'))!;
+    const attendedBtn = drawer.findAll('button').find((b) => b.text().includes('Xác nhận có mặt'))!;
     await attendedBtn.trigger('click');
     await flushPromises();
 
@@ -261,7 +266,7 @@ describe('ConsoleOfficeVisitsPage', () => {
     const noteInput = confirmModal.find('input[type="text"]');
     await noteInput.setValue('Đã đối chiếu CCCD và bằng cấp');
 
-    const confirmBtn = confirmModal.findAll('button').find((b) => b.text() === 'Xác nhận đã gặp')!;
+    const confirmBtn = confirmModal.findAll('button').find((b) => b.text() === 'Xác nhận có mặt')!;
     await confirmBtn.trigger('click');
     await flushPromises();
 

@@ -33,6 +33,9 @@ import { adminCustomerVerificationsApi } from '../../api/admin-customer-verifica
 import TechnicianVerificationDrawer from '../../components/console/TechnicianVerificationDrawer.vue';
 import CustomerVerificationsTab from '../../components/console/CustomerVerificationsTab.vue';
 import { useQueryChoice } from '../../composables/useQueryState';
+import { useCanDecideReview } from '../../composables/useCanDecideReview';
+
+const canDecide = useCanDecideReview();
 
 // Admin reviews identity checks of technicians and customers before withdrawal:
 // Two tabs: 'technicians' | 'customers' (?tab=customers)
@@ -331,6 +334,7 @@ const approveVerification = async (verification: TechnicianVerification) => {
   try {
     await adminVerificationsApi.approveVerification(verification.id);
     successMessage.value = `Đã xác nhận danh tính của ${verification.technician?.fullName ?? 'kỹ thuật viên'}. Thợ sẽ nhận thông báo đặt lịch lên trụ sở; hồ sơ được duyệt ở mục "Duyệt hồ sơ" sau buổi gặp.`;
+    showDrawer.value = false; // The drawer still holds the PENDING record; close it like the reject does.
     await Promise.all([loadVerifications(), loadTechStats()]);
   } catch (reason) {
     error.value = getErrorMessage(reason, 'Chưa xác nhận được danh tính, vui lòng thử lại.');
@@ -758,7 +762,7 @@ function getInitials(name?: string | null): string {
                   <!-- 6. Thao tác -->
                   <td class="py-3.5 pl-4 pr-6 text-right whitespace-nowrap">
                     <div class="flex items-center justify-end gap-2">
-                      <template v-if="isPending(row.status)">
+                      <template v-if="canDecide && isPending(row.status)">
                         <button
                           type="button"
                           class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs transition-colors hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 cursor-pointer"
