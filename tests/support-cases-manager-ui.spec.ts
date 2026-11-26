@@ -559,6 +559,80 @@ describe('SupportDetailPage for a complaint', () => {
       wrapper.unmount();
     }
   });
+
+  it('uses only resolve-interruption for customer stop_or_replace cases instead of showing the conflicting /resolve form', async () => {
+    const stopCase = baseCase({
+      caseType: 'mid_job_interruption',
+      requestIntent: 'stop_or_replace',
+      holdCompletion: true,
+      workflowVersion: 0,
+    });
+    const resolvedCase = baseCase({
+      ...stopCase,
+      status: 'resolved',
+      resolutionCode: 'interrupted_for_rebook',
+      resolutionReason: 'Đã đóng đơn để khách đặt lịch mới.',
+      holdCompletion: false,
+      workflowVersion: 1,
+    });
+    apiClientMock.get.mockImplementation(async (path: string) => {
+      if (path === '/support/cases/case-1/replacement-options') {
+        return envelope({
+          caseId: 'case-1',
+          caseStatus: 'open',
+          caseVersion: 0,
+          serviceOrderId: 'order-1',
+          visitGroupId: null,
+          requestIntent: 'stop_or_replace',
+          flags: { approvedQuote: true, invoice: false, payment: false, voucher: false, parts: false, incompleteSiblings: false },
+          actions: {
+            DIRECT_REASSIGN_SOLO: { allowed: false, reasons: ['APPROVED_QUOTE'] },
+            CLOSE_FOR_REBOOK: { allowed: true, reasons: [] },
+            REJECT_REQUEST: { allowed: true, reasons: [] },
+          },
+        });
+      }
+      return envelope(resolvedCase);
+    });
+
+    const wrapper = await mountPage(stopCase);
+    const replacement = wrapper.get('[data-testid="replacement-panel"]');
+    expect(wrapper.text()).not.toContain('Kiểm tra và xác nhận');
+    expect(wrapper.text()).not.toContain('Ghi nhận kết quả');
+
+    await replacement.get('[data-testid="replacement-reason"]').setValue('Đã đóng đơn để khách đặt lịch mới.');
+    await replacement.get('[data-testid="replacement-action-CLOSE_FOR_REBOOK"]').trigger('click');
+    await flushPromises();
+
+    apiClientMock.post.mockResolvedValueOnce(envelope({
+      case: {
+        id: 'case-1',
+        status: 'resolved',
+        workflowVersion: 1,
+        requestIntent: 'stop_or_replace',
+        resolutionCode: 'interrupted_for_rebook',
+        resolutionReason: 'Đã đóng đơn để khách đặt lịch mới.',
+        serviceOrderId: 'order-1',
+        holdCompletion: false,
+      },
+      order: { id: 'order-1', status: 'CANCELLED' },
+      nextAction: 'interruption_rebook',
+    }));
+    await wrapper.get('[data-testid="replacement-confirm"]').trigger('click');
+    await flushPromises();
+
+    expect(apiClientMock.post).toHaveBeenCalledTimes(1);
+    expect(apiClientMock.post).toHaveBeenCalledWith(
+      '/support/cases/case-1/resolve-interruption',
+      expect.objectContaining({
+        action: 'CLOSE_FOR_REBOOK',
+        expectedCaseVersion: 0,
+        reason: 'Đã đóng đơn để khách đặt lịch mới.',
+      }),
+    );
+    expect(wrapper.text()).toContain('Kết thúc đơn để khách đặt lại');
+    wrapper.unmount();
+  });
 });
 
 describe('SupportQueuePage', () => {
@@ -671,6 +745,28 @@ describe('SupportQueuePage', () => {
       params: expect.objectContaining({ caseType: 'technician_replacement', status: 'open' }),
     });
     expect(wrapper.text()).toContain('Cần thay đổi thợ (ngoài kỹ năng)');
+  });
+
+  it('opens already filtered for stopOrReplace and labels customer stop/replace distinctly', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/console/support', component: SupportQueuePage },
+        { path: '/console/support/:id', component: SupportDetailPage },
+      ],
+    });
+    apiClientMock.get.mockResolvedValueOnce(envelope([
+      baseCase({ id: 'case-stop', caseType: 'mid_job_interruption', requestIntent: 'stop_or_replace', holdCompletion: true }),
+    ], { page: 1, limit: 10, total: 1, totalPages: 1 }));
+    await router.push('/console/support?stopOrReplace=1&status=open');
+    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [router] } });
+    await router.isReady();
+    await flushPromises();
+    expect(apiClientMock.get).toHaveBeenCalledWith('/support/cases', {
+      params: expect.objectContaining({ stopOrReplace: true, status: 'open' }),
+    });
+    expect(wrapper.text()).toContain('Khách yêu cầu dừng sửa / Đổi thợ');
+    wrapper.unmount();
   });
 
   it('ignores an unknown filter in the link', async () => {

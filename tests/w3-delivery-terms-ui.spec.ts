@@ -164,4 +164,20 @@ describe('W3 conditional delivery terms panel', () => {
     expect(wrapper.find('[data-testid="delivery-terms-actions"]').exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('suppresses expired-terms alarm when deliveryCompleted is true', async () => {
+    signIn(UserRole.CUSTOMER, 'customer-1');
+    vi.spyOn(w3DeliveryTermsApi, 'read').mockResolvedValue({
+      ...projection,
+      invalidated: true,
+      state: { ...terms, customerConsented: true, technicianConsented: true },
+    });
+    const wrapper = mount(DeliveryTermsPanel, {
+      props: { ...props, embedded: true, deliveryCompleted: true },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Đã hoàn tất giao nhận');
+    expect(wrapper.text()).not.toContain('Điều khoản đã mất hiệu lực');
+    wrapper.unmount();
+  });
 });

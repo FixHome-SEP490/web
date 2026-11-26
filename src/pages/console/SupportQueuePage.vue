@@ -57,13 +57,19 @@ const caseTypes: SupportCaseType[] = [
   'other',
   'technician_replacement',
 ];
+const STOP_OR_REPLACE_FILTER = '__stop_or_replace__';
 const statuses: SupportCaseStatus[] = ['open', 'in_review', 'resolved', 'rejected'];
 const cases = ref<SupportCaseSummary[]>([]);
 const searchQuery = ref('');
 // A link may open the queue already filtered, e.g. the overview's "Cần thay đổi thợ" count.
 const queryValue = <T extends string>(value: unknown, allowed: readonly T[]): T | '' =>
   typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : '';
-const caseTypeFilter = ref<SupportCaseType | ''>(queryValue(route?.query?.caseType, caseTypes));
+const isStopOrReplaceQuery = (value: unknown): boolean => value === '1' || value === 'true';
+const caseTypeFilter = ref<SupportCaseType | typeof STOP_OR_REPLACE_FILTER | ''>(
+  isStopOrReplaceQuery(route?.query?.stopOrReplace)
+    ? STOP_OR_REPLACE_FILTER
+    : queryValue(route?.query?.caseType, caseTypes),
+);
 const statusFilter = ref<SupportCaseStatus | ''>(queryValue(route?.query?.status, statuses));
 const serviceOrderIdFilter = computed(() => typeof route.query.serviceOrderId === 'string' ? route.query.serviceOrderId.trim() : '');
 const page = ref(1);
@@ -74,15 +80,26 @@ const loading = ref(true);
 const error = ref('');
 let latestRequest = 0;
 
+function displayCaseTypeLabel(row: SupportCaseSummary): string {
+  if (row.requestIntent === 'stop_or_replace') {
+    return 'Khách yêu cầu dừng sửa / Đổi thợ';
+  }
+  return supportCaseTypeLabels[row.caseType];
+}
+
 async function loadCases() {
   const requestId = ++latestRequest;
   loading.value = true;
   error.value = '';
   try {
+    const selectedType = caseTypeFilter.value;
+    const isStopOrReplace = selectedType === STOP_OR_REPLACE_FILTER;
+    const caseType = selectedType === STOP_OR_REPLACE_FILTER || selectedType === '' ? undefined : selectedType;
     const response = await supportCasesApi.listCases({
       page: page.value,
       limit: pageSize,
-      caseType: caseTypeFilter.value || undefined,
+      caseType,
+      stopOrReplace: isStopOrReplace ? true : undefined,
       status: statusFilter.value || undefined,
       serviceOrderId: serviceOrderIdFilter.value || undefined,
       search: searchQuery.value.trim() || undefined,
@@ -163,6 +180,7 @@ watch(page, (nextPage, previousPage) => {
       <ConsoleSearch v-model="searchQuery" placeholder="Tìm theo lý do, mã yêu cầu" label="Tìm yêu cầu hỗ trợ" />
       <select v-model="caseTypeFilter" :class="consoleField" aria-label="Loại yêu cầu">
         <option value="">Tất cả loại</option>
+        <option :value="STOP_OR_REPLACE_FILTER">Dừng sửa / Đổi thợ (Khách &amp; Thợ)</option>
         <option v-for="caseType in caseTypes" :key="caseType" :value="caseType">
           {{ supportCaseTypeLabels[caseType] }}
         </option>
@@ -199,10 +217,10 @@ watch(page, (nextPage, previousPage) => {
           <button
             type="button"
             class="cursor-pointer text-left font-medium text-brand-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            :aria-label="`Mở chi tiết ${supportCaseTypeLabels[row.caseType]}`"
+            :aria-label="`Mở chi tiết ${displayCaseTypeLabel(row)}`"
             @click="openCase(row)"
           >
-            {{ supportCaseTypeLabels[row.caseType] }}
+            {{ displayCaseTypeLabel(row) }}
           </button>
         </template>
         <template #cell-status="{ row }">

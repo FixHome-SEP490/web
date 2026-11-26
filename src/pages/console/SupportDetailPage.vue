@@ -134,11 +134,21 @@ const canDecideResponsibility = computed(() => canManage.value && isTypedTechnic
   && (supportCase.value.workflowVersion ?? -1) >= 0);
 
 const usesStandardCodes = computed(() => !!supportCase.value && !isCashCase(supportCase.value.caseType));
+const requiresInterruptionCommand = computed(
+  () => supportCase.value?.requestIntent === 'stop_or_replace' || supportCase.value?.caseType === 'technician_replacement',
+);
 // Settling cash only makes sense when the case is resolved, not rejected.
 const codeLabels = computed<Record<string, string>>(() => {
   if (usesStandardCodes.value) {
-    if (REFUND_CASE_TYPES.includes(supportCase.value!.caseType)) return resolutionCodeLabels;
-    return Object.fromEntries(Object.entries(resolutionCodeLabels).filter(([code]) => code !== 'refund_to_wallet'));
+    return Object.fromEntries(
+      Object.entries(resolutionCodeLabels).filter(([code]) => {
+        if (code === 'refund_to_wallet' && !REFUND_CASE_TYPES.includes(supportCase.value!.caseType)) return false;
+        if (requiresInterruptionCommand.value && (code === 'worker_reassigned' || code === 'order_cancelled_no_fee')) {
+          return false;
+        }
+        return true;
+      }),
+    );
   }
   if (finalStatus.value === 'rejected') return { no_action: cashResolutionCodeLabels.no_action };
   return cashResolutionCodeLabels;
@@ -484,6 +494,7 @@ const confirmConsequence = computed(() => {
 
 function resolutionLabel(code: string | null | undefined): string {
   if (!code) return '—';
+  if (code === 'interrupted_for_rebook') return 'Kết thúc đơn để khách đặt lại';
   return resolutionCodeLabels[code] ?? cashResolutionCodeLabels[code] ?? 'Kết quả khác';
 }
 
@@ -572,7 +583,7 @@ watch(caseId, (id) => {
             <div class="min-w-0 flex-1">
               <div class="mb-1.5 flex flex-wrap items-center gap-2">
                 <h1 class="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                  {{ supportCaseTypeLabels[supportCase.caseType] || 'Yêu cầu hỗ trợ' }}
+                  {{ supportCase.requestIntent === 'stop_or_replace' ? 'Khách yêu cầu dừng sửa / Đổi thợ' : (supportCaseTypeLabels[supportCase.caseType] || 'Yêu cầu hỗ trợ') }}
                 </h1>
 
                 <!-- Status Badge -->
@@ -1101,9 +1112,9 @@ watch(caseId, (id) => {
         <p v-if="supportCase.resolutionReason" class="mt-4 border-t border-slate-100 pt-4 text-pretty text-sm text-slate-800">{{ supportCase.resolutionReason }}</p>
       </div>
 
-      <!-- Section G: Ghi nhận kết quả (Form cho Service Manager khi chưa hoàn tất) -->
+      <!-- Section G: Ghi nhận kết quả (Form cho Service Manager khi chưa hoàn tất; không dùng cho case đổi thợ/dừng sửa) -->
       <div
-        v-if="canManage && !isTerminal && !isTypedTechnicianReport"
+        v-if="canManage && !isTerminal && !isTypedTechnicianReport && !isReplacementCase"
         class="rounded-2xl border border-slate-100 bg-white p-6 shadow-xs"
       >
         <div class="mb-4 flex items-center gap-3">

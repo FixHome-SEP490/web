@@ -39,6 +39,10 @@ const reasonMessages: Record<string, string> = {
   PARTS_CUSTODY_REVIEW: 'Linh kiện còn nghĩa vụ cần được xử lý.',
   VISIT_GROUP_CHILD: 'Không thể chuyển riêng thợ cho một thiết bị trong lượt.',
   APPROVED_QUOTE: 'Báo giá đã được khách duyệt; không thể chuyển sang thợ mới.',
+  OPEN_QUOTE: 'Còn báo giá đang soạn hoặc chờ khách duyệt.',
+  VERIFIED_ONSITE_INTERRUPTION: 'Đã có biên nhận gián đoạn tại nhà khách; nghĩa vụ cũ cần đối soát riêng.',
+  ASSIGNMENT_CHANGED: 'Kỹ thuật viên đang phụ trách đã thay đổi.',
+  CONFLICTING_CASE: 'Còn yêu cầu dừng sửa hoặc đổi thợ khác đang mở.',
 };
 const explainReasons = (reasons: string[]) => reasons.map(code => reasonMessages[code] ?? 'Cần tải lại điều kiện xử lý từ máy chủ.');
 
@@ -154,6 +158,11 @@ watch(() => props.supportCase.id, () => {
   needsPreflight.value = false;
   void load();
 });
+watch(() => props.supportCase.workflowVersion, (next, prev) => {
+  if (next !== prev && !pendingCommand.value && !busy.value) {
+    void load();
+  }
+});
 onMounted(load);
 </script>
 
@@ -178,15 +187,15 @@ onMounted(load);
         <ul class="list-inside list-disc"><li v-for="message in explainReasons(closeForRebook?.reasons ?? [])" :key="message">{{ message }}</li></ul>
       </div>
 
+      <label class="mt-4 flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do xử lý (10–2.000 ký tự)
+        <textarea v-model="reason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="replacement-reason" placeholder="Nhập lý do xử lý trước khi chọn hành động bên dưới" />
+      </label>
+
       <div class="mt-4 flex flex-wrap gap-2">
         <FhButton v-if="closeForRebook?.allowed" variant="secondary" size="md" :disabled="busy || !!pendingCommand" data-testid="replacement-action-CLOSE_FOR_REBOOK" @click="confirm('CLOSE_FOR_REBOOK')">Kết thúc đơn để khách đặt lại</FhButton>
         <FhButton v-if="reject?.allowed" variant="secondary" size="md" :disabled="busy || !!pendingCommand" data-testid="replacement-action-REJECT_REQUEST" @click="confirm('REJECT_REQUEST')">Từ chối yêu cầu</FhButton>
         <FhButton variant="ghost" size="md" :disabled="busy" data-testid="replacement-options-retry" @click="load">Tải lại điều kiện</FhButton>
       </div>
-
-      <label class="mt-4 flex flex-col gap-1.5 text-sm font-medium text-ink-700">Lý do xử lý (10–2.000 ký tự)
-        <textarea v-model="reason" rows="3" maxlength="2000" :class="consoleTextarea" data-testid="replacement-reason" />
-      </label>
       <Transition name="fh-fade-slide">
         <p v-if="error" class="mt-2 rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" role="alert">{{ error }}</p>
       </Transition>

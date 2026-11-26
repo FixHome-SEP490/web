@@ -40,6 +40,7 @@ import DeliveryPhysicalPreview from '../../components/DeliveryPhysicalPreview.vu
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
+import { displayPartRequestStatus } from '../../utils/w3-delivery-stage';
 import { invoiceVoucherLines, orderBilling, paymentChannels } from '../../utils/order-billing';
 import { partRequestsApi, type PartRequest } from '../../api/part-requests.api';
 import { customerWalletApi } from '../../api/customer-wallet.api';
@@ -1786,35 +1787,56 @@ const parsedReview = computed(() => {
       </section>
       </div>
 
-      <div v-if="deliveryPhysicalRequests.length" class="order-3 lg:col-start-1 space-y-3" data-testid="customer-delivery-requests">
-        <DeliveryPhysicalPreview
+      <div v-if="deliveryPhysicalRequests.length" class="order-3 lg:col-start-1 space-y-4" data-testid="customer-delivery-requests">
+        <article
           v-for="request in deliveryPhysicalRequests"
           :key="request.id"
-          :request-id="request.id"
-          :fulfillment-method="request.fulfillmentMethod"
-          audience="customer"
-        />
-        <DeliveryOperationsPanel
-          v-for="request in deliveryPhysicalRequests"
-          :key="`operations-${request.id}`"
-          :request-id="request.id"
-          :fulfillment-method="request.fulfillmentMethod"
-          :request-type="request.requestType"
-          :shipping-fee="request.shippingFee"
-          audience="customer"
-          :source-owner-id="bookingDetails?.customerId"
-        />
-        <DeliveryTermsPanel
-          v-for="request in deliveryPhysicalRequests.filter(row => row.shippingFee > 0)"
-          :key="`terms-${request.id}`"
-          :request-id="request.id"
-          :request-type="request.requestType"
-          :fulfillment-method="request.fulfillmentMethod"
-          :shipping-fee="request.shippingFee"
-          audience="customer"
-          :source-owner-id="bookingDetails?.customerId"
-          :technician-id="request.technicianId"
-        />
+          class="rounded-[var(--radius-lg)] bg-white border border-ink-200/80 shadow-(--shadow-e1) overflow-hidden divide-y divide-ink-100"
+        >
+          <header class="flex flex-wrap items-center justify-between gap-2 bg-ink-25/70 px-4 py-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="text-sm font-semibold text-ink-900">
+                Giao linh kiện {{ request.requestType === 'additional' ? 'phát sinh' : request.requestType === 'pre_repair' ? 'trước sửa' : 'theo báo giá' }}
+              </span>
+              <span class="font-mono text-[11px] text-ink-400">#{{ request.id.slice(0, 8).toUpperCase() }}</span>
+            </div>
+            <span
+              class="rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap"
+              :class="displayPartRequestStatus(request) === 'received' || displayPartRequestStatus(request) === 'completed'
+                ? 'bg-success-50 text-success-700'
+                : 'bg-brand-50 text-brand-700'"
+            >
+              {{ request.shippingFee > 0 ? `Phí giao ${request.shippingFee.toLocaleString('vi-VN')} ₫` : 'Miễn phí giao' }}
+            </span>
+          </header>
+          <DeliveryPhysicalPreview
+            :request-id="request.id"
+            :fulfillment-method="request.fulfillmentMethod"
+            audience="customer"
+            embedded
+          />
+          <DeliveryOperationsPanel
+            :request-id="request.id"
+            :fulfillment-method="request.fulfillmentMethod"
+            :request-type="request.requestType"
+            :shipping-fee="request.shippingFee"
+            audience="customer"
+            :source-owner-id="bookingDetails?.customerId"
+            embedded
+          />
+          <DeliveryTermsPanel
+            v-if="request.shippingFee > 0"
+            :request-id="request.id"
+            :request-type="request.requestType"
+            :fulfillment-method="request.fulfillmentMethod"
+            :shipping-fee="request.shippingFee"
+            audience="customer"
+            :source-owner-id="bookingDetails?.customerId"
+            :technician-id="request.technicianId"
+            embedded
+            :delivery-completed="displayPartRequestStatus(request) === 'received' || request.status.toLowerCase() === 'completed'"
+          />
+        </article>
       </div>
 
       <!-- 6. Costs: sticky right column on desktop, clean grouped surfaces -->

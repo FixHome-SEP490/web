@@ -629,12 +629,16 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 ## 9. Nhật ký cập nhật context
 - 2026-11-25 21:37 (UTC+7) | Hgnv11 | dev | Thêm chọn kênh OTP Email/SMS khi đăng ký và thẻ xác thực email/SĐT trong hồ sơ; CHƯA KIỂM CHỨNG với backend thật
 
+- 2026-11-25 22:26 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (a0eedb4) vào LacVy: giữ nhật ký cả hai bên và giữ nhãn Hỗ trợ và khiếu nại trong console-navigation.ts
 - 2026-11-25 20:48 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: ô lý do cho kỹ năng không xác nhận (từng dịch vụ và chung cả nhóm), bắt buộc; CHƯA KIỂM CHỨNG trên trình duyệt
 - 2026-11-25 20:37 (UTC+7) | Hgnv11 | dev | Đổi nhãn buổi hẹn "Đã gặp" thành "Đã có mặt" ở Lịch hẹn trụ sở và Duyệt hồ sơ; enum attended giữ nguyên
 - 2026-11-25 20:01 (UTC+7) | Hgnv11 | dev | Chuông thông báo của SM: TECHNICIAN_PROFILE_SUBMITTED dẫn tới Duyệt danh tính; CHƯA KIỂM CHỨNG trên trình duyệt
 - 2026-11-25 16:58 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ duyệt kỹ năng theo nhóm kèm giấy tờ, Xác nhận tất cả; Duyệt kỹ năng chỉ còn kỹ năng thêm sau khi duyệt hồ sơ; CHƯA KIỂM CHỨNG trên trình duyệt
 - 2026-11-25 16:20 (UTC+7) | Hgnv11 | dev | Chuyển duyệt danh tính, hồ sơ, kỹ năng và lịch hẹn trụ sở sang quản lý dịch vụ, admin chỉ xem (khớp backend); menu SM có nhóm Kỹ thuật viên; CHƯA KIỂM CHỨNG trên trình duyệt
 - 2026-11-25 15:55 (UTC+7) | Hgnv11 | dev | Drawer duyệt kỹ năng của admin hiện chi tiết bằng chứng thợ khai (loại, độ tin cậy, cơ quan cấp, số hiệu, ngày cấp, hết hạn, số năm, kết quả xem xét); CHƯA KIỂM CHỨNG trên trình duyệt
+- 2026-11-25 11:13 (UTC+7) | Lạc Vỹ | LacVy | Hỗ trợ Admin/SM theo dõi khiếu nại và yêu cầu đổi thợ từ Dashboard/Đơn hàng, gắn nhãn dừng sửa/đổi thợ trên SupportQueuePage, SupportDetailPage và tự chuyển resolve-interruption khi hoàn tất kiểm tra
+- 2026-11-24 20:39 (UTC+7) | Lạc Vỹ | LacVy | Sửa stepper và lỗi 404/409 luồng giao linh kiện W3 có phí/0 ₫ (ConsolePartRequestsPage, DeliveryOperationsPanel, DeliveryTermsPanel), đồng thời mở thêm linh kiện trước sửa và thu gọn UI giao nhận/điều khoản 70/30 cho khách và thợ
+- 2026-11-23 17:00 (UTC+7) | Lạc Vỹ | LacVy | Đồng bộ giao diện và luồng tải lại giữa khách và thợ tại TechnicianJobDetailPage, CustomerOrderDetailPage, CustomerVisitPage, BookingCandidatesPage, TechnicianPartReturnsPage và ReviewTechnicianModal
 - 2026-11-22 16:14 (UTC+7) | Hgnv11 | dev | Trang Linh kiện cần trả của thợ hiện linh kiện hỏng cần nộp của bảo hành
 - 2026-11-22 15:17 (UTC+7) | Hgnv11 | dev | Bảo hành web: thợ nhận và khai dùng linh kiện thay thế, khoá báo xong khi chưa khai, realtime trang chi tiết, khách xem kết quả kiểm tra
 - 2026-11-22 13:12 (UTC+7) | ToanAltF4 | feat/sm-per-account-permissions | BUG 261: trang phân quyền SM chọn từng tài khoản, nút về mặc định theo vai trò; menu SM ẩn theo quyền thực

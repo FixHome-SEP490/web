@@ -114,7 +114,14 @@ const attention = computed<AttentionRow[]>(() => {
       testId: 'ops-replacements',
       label: 'Yêu cầu dừng sửa cần xử lý',
       count: ops.value.openReplacementCases ?? 0,
-      to: isServiceManager.value ? '/console/support?caseType=technician_replacement&status=open' : null,
+      to: '/console/support?stopOrReplace=1&status=open',
+    },
+    {
+      key: 'support',
+      testId: 'ops-support-cases',
+      label: 'Khiếu nại & báo cáo đang mở',
+      count: ops.value.openSupportCases ?? 0,
+      to: '/console/support?status=open',
     },
     {
       key: 'cancellations',
