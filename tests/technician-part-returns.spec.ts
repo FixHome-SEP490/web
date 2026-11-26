@@ -134,6 +134,26 @@ const mockRecord4: PartCustodyReturnRecord = {
   version: 1,
 };
 
+// What the server answers for /part-returns/mine?status=... over the ledger r1..r4 (BUG DETECTOR 302).
+const ledger = [mockRecord1, mockRecord2, mockRecord3, mockRecord4];
+const groupOf = (r: PartCustodyReturnRecord) => (r.outstandingQty === 0 ? 'completed' : r.declaredQty > 0 ? 'awaiting_manager' : 'need_declare');
+const mineAnswer = (status: string) => ({
+  data: {
+    data: status === 'all' ? ledger : ledger.filter((r) => groupOf(r) === status),
+    meta: {
+      status, page: 1, pageSize: 100,
+      groups: {
+        need_declare: { qty: 1, rows: 1, orders: 1 },
+        awaiting_manager: { qty: 2, rows: 2, orders: 2 },
+        completed: { qty: 5, rows: 1, orders: 1 },
+        exception: { qty: 0, rows: 0, orders: 0 },
+        all: { qty: 8, rows: 4, orders: 2 },
+      },
+    },
+  },
+});
+const statusOf = (config?: { params?: { status?: string } }) => config?.params?.status ?? 'all';
+
 describe('Technician Part Returns Feature', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -153,9 +173,9 @@ describe('Technician Part Returns Feature', () => {
 
   describe('TechnicianPartReturnsPage component', () => {
     beforeEach(() => {
-      apiClientMock.get.mockImplementation((url: string) => {
+      apiClientMock.get.mockImplementation((url: string, config?: { params?: { status?: string } }) => {
         if (url === '/part-returns/mine') {
-          return Promise.resolve({ data: { data: [mockRecord1, mockRecord3, mockRecord4] } });
+          return Promise.resolve(mineAnswer(statusOf(config)));
         }
         if (url === '/service-orders/order-1/part-returns') {
           return Promise.resolve({ data: { data: [mockRecord1, mockRecord2, mockRecord3] } });
@@ -177,9 +197,10 @@ describe('Technician Part Returns Feature', () => {
       const wrapper = mount(TechnicianPartReturnsPage);
       await flushPromises();
 
-      expect(apiClientMock.get).toHaveBeenCalledWith('/part-returns/mine');
-      expect(apiClientMock.get).toHaveBeenCalledWith('/service-orders/order-1/part-returns');
-      expect(apiClientMock.get).toHaveBeenCalledWith('/service-orders/order-2/part-returns');
+      // One read of the open tab with every group's counters; no ledger read per order.
+      expect(apiClientMock.get).toHaveBeenCalledWith('/part-returns/mine', { params: { status: 'all', page: 1, pageSize: 100 } });
+      expect(apiClientMock.get).not.toHaveBeenCalledWith('/service-orders/order-1/part-returns');
+      expect(apiClientMock.get).not.toHaveBeenCalledWith('/service-orders/order-2/part-returns');
 
       // Check stat cards
       expect(wrapper.find('[data-testid="stat-card-need-declare"]').text()).toContain('1 linh kiện');
@@ -205,19 +226,59 @@ describe('Technician Part Returns Feature', () => {
 
     it('counts settled parts from the server, which the open list never carries', async () => {
       const base = apiClientMock.get.getMockImplementation()!;
-      apiClientMock.get.mockImplementation((url: string) => url === '/part-returns/mine'
-        ? Promise.resolve({ data: { data: [mockRecord1, mockRecord3, mockRecord4], meta: { completedQty: 12 } } })
-        : base(url));
+      apiClientMock.get.mockImplementation((url: string, config?: { params?: { status?: string } }) => {
+        if (url !== '/part-returns/mine') return base(url);
+        const answer = mineAnswer(statusOf(config));
+        answer.data.meta.groups.completed = { qty: 12, rows: 4, orders: 3 };
+        return Promise.resolve(answer);
+      });
       const wrapper = mount(TechnicianPartReturnsPage);
       await flushPromises();
       expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('12 linh kiện');
       wrapper.unmount();
     });
 
+    it('BUG DETECTOR 302: the "Đã hoàn tất" tab reads status=completed and lists the settled lines', async () => {
+      const wrapper = mount(TechnicianPartReturnsPage);
+      await flushPromises();
+      const tab = wrapper.findAll('button').find((b) => b.text().replace(/\s+/g, '') === 'Đãhoàntất1');
+      expect(tab!.text()).toContain('1');
+      await tab!.trigger('click');
+      await flushPromises();
+      expect(apiClientMock.get).toHaveBeenCalledWith('/part-returns/mine', { params: { status: 'completed', page: 1, pageSize: 100 } });
+      const cards = wrapper.findAll('[data-testid^="job-card-"]');
+      expect(cards).toHaveLength(1);
+      expect(cards[0].text()).toContain('FH-20261119-A37F7F98');
+      expect(wrapper.find('[data-testid="part-row-item-2"]').text()).toContain('Đã hoàn tất');
+      expect(wrapper.find('[data-testid="part-row-item-1"]').exists()).toBe(false);
+      // The counters stay the server's whatever tab is open.
+      expect(wrapper.find('[data-testid="stat-card-need-declare"]').text()).toContain('1 linh kiện');
+      expect(wrapper.find('[data-testid="stat-card-awaiting"]').text()).toContain('2 linh kiện');
+      wrapper.unmount();
+    });
+
+    it('groups lines by the server returnStatus and marks a line whose usage is not recorded yet', async () => {
+      const base = apiClientMock.get.getMockImplementation()!;
+      const partly = { ...mockRecord3, id: 'c-5', partRequestItemId: 'item-5', issuedQty: 3, declaredQty: 1, outstandingQty: 3, returnStatus: 'declared' };
+      const fresh = { ...mockRecord1, usedQty: 0, outstandingQty: 2, usageRecorded: false, returnStatus: 'outstanding' };
+      apiClientMock.get.mockImplementation((url: string, config?: { params?: { status?: string } }) => url === '/part-returns/mine'
+        ? Promise.resolve({ data: { data: [fresh, partly], meta: mineAnswer(statusOf(config)).data.meta } })
+        : base(url));
+      const wrapper = mount(TechnicianPartReturnsPage);
+      await flushPromises();
+      // Declared but not all of it: still the manager's group (PO), not "Cần khai trả".
+      expect(wrapper.find('[data-testid="part-row-item-5"]').text()).toContain('Chờ xác nhận');
+      expect(wrapper.find('[data-testid="part-row-item-1"]').text()).toContain('Cần khai trả');
+      expect(wrapper.find('[data-testid="usage-missing-item-1"]').text()).toBe('Chưa ghi dùng');
+      expect(wrapper.find('[data-testid="usage-missing-item-5"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
     it('shows settled guidance instead of filter-empty state when open list is empty and completedQty > 0', async () => {
       apiClientMock.get.mockImplementation((url: string) => {
         if (url === '/part-returns/mine') {
-          return Promise.resolve({ data: { data: [], meta: { completedQty: 9 } } });
+          const zero = { qty: 0, rows: 0, orders: 0 };
+          return Promise.resolve({ data: { data: [], meta: { groups: { need_declare: zero, awaiting_manager: zero, completed: { qty: 9, rows: 3, orders: 0 }, exception: zero, all: zero } } } });
         }
         return Promise.resolve({ data: { data: [] } });
       });
@@ -250,7 +311,7 @@ describe('Technician Part Returns Feature', () => {
       expect(wrapper.find('[data-testid="stat-card-completed"]').text()).toContain('5 linh kiện');
       expect(wrapper.findAll('[data-testid^="job-card-"]')).toHaveLength(2);
 
-      resolveMine({ data: { data: [mockRecord1, mockRecord3, mockRecord4] } });
+      resolveMine(mineAnswer('all'));
       await refreshPromise;
       await flushPromises();
 

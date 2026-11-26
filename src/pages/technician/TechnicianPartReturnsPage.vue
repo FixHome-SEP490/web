@@ -21,7 +21,9 @@ import FhStatusPill from '../../components/FhStatusPill.vue';
 import DeclarePartReturnModal from '../../components/technician/DeclarePartReturnModal.vue';
 import {
   partRequestsApi,
+  partReturnGroup,
   isPartReturnsUnavailableError,
+  type MyReturnsPage,
   type PartCustodyReturnRecord,
 } from '../../api/part-requests.api';
 import { ordersApi, isHistoricalOrder } from '../../api/orders.api';
@@ -45,6 +47,8 @@ interface OrderReturnGroup {
   needDeclareQty: number;
   awaitingManagerQty: number;
   completedQty: number;
+  /** Units still declarable (a declared line may have more left); drives the declare button. */
+  declarableQty: number;
   hasDiscrepancy: boolean;
 }
 
@@ -73,47 +77,34 @@ const selectedOrder = computed(() =>
   orderGroups.value.find((g) => g.id === selectedOrderId.value) || null,
 );
 
-// Global statistics derived from all loaded custody records
-const totalNeedDeclare = computed(() =>
-  orderGroups.value.reduce((sum, g) => sum + g.needDeclareQty, 0),
-);
-
-const totalAwaitingManager = computed(() =>
-  orderGroups.value.reduce((sum, g) => sum + g.awaitingManagerQty, 0),
-);
-
-// The open list never carries settled parts, so the server counts them (null: older server).
-const serverCompletedQty = ref<number | null>(null);
-const totalCompleted = computed(() =>
-  serverCompletedQty.value ?? orderGroups.value.reduce((sum, g) => sum + g.completedQty, 0),
-);
+// Counters of the three groups come from the server (BUG DETECTOR 302): the list only holds the
+// open tab's lines, so counting it would show 0 for the other tabs.
+const serverCounts = ref<MyReturnsPage['counts']>(null);
+const localSum = (key: 'needDeclareQty' | 'awaitingManagerQty' | 'completedQty') =>
+  orderGroups.value.reduce((sum, g) => sum + g[key], 0);
+const totalNeedDeclare = computed(() => serverCounts.value?.need_declare.qty ?? localSum('needDeclareQty'));
+const totalAwaitingManager = computed(() => serverCounts.value?.awaiting_manager.qty ?? localSum('awaitingManagerQty'));
+const totalCompleted = computed(() => serverCounts.value?.completed.qty ?? localSum('completedQty'));
 
 const countNeedDeclareOrders = computed(() =>
-  orderGroups.value.filter((g) => g.needDeclareQty > 0).length,
+  serverCounts.value?.need_declare.orders ?? orderGroups.value.filter((g) => g.needDeclareQty > 0).length,
 );
 
 const countAwaitingOrders = computed(() =>
-  orderGroups.value.filter((g) => g.awaitingManagerQty > 0 && g.needDeclareQty === 0).length,
+  serverCounts.value?.awaiting_manager.orders ?? orderGroups.value.filter((g) => g.awaitingManagerQty > 0 && g.needDeclareQty === 0).length,
 );
 
 const countCompletedOrders = computed(() =>
-  orderGroups.value.filter((g) => g.needDeclareQty === 0 && g.awaitingManagerQty === 0 && g.records.length > 0).length,
+  serverCounts.value?.completed.orders ?? orderGroups.value.filter((g) => g.needDeclareQty === 0 && g.awaitingManagerQty === 0 && g.records.length > 0).length,
 );
 
-const totalOrdersCount = computed(() => orderGroups.value.length);
+const totalOrdersCount = computed(() => serverCounts.value?.all.orders ?? orderGroups.value.length);
 
 // Filtering logic
 const filteredOrderGroups = computed(() => {
   let list = orderGroups.value;
 
-  // Tab filter
-  if (activeTab.value === 'need_declare') {
-    list = list.filter((g) => g.needDeclareQty > 0);
-  } else if (activeTab.value === 'awaiting_manager') {
-    list = list.filter((g) => g.awaitingManagerQty > 0 && g.needDeclareQty === 0);
-  } else if (activeTab.value === 'completed') {
-    list = list.filter((g) => g.needDeclareQty === 0 && g.awaitingManagerQty === 0 && g.records.length > 0);
-  }
+  // The tab is read from the server (status=...), so the loaded list already is that group.
 
   // Status dropdown filter
   if (statusFilter.value === 'need_declare') {
@@ -163,12 +154,14 @@ const loadData = async (preferredOrderId?: string, options: { silent?: boolean }
   }
 
   try {
-    // 1. Fetch technician's active returns
+    // 1. The lines of the open tab, with every group's counters (BUG DETECTOR 302)
     let mineRecords: PartCustodyReturnRecord[] = [];
+    const tab = activeTab.value;
     try {
-      const summary = await partRequestsApi.getMyReturnsSummary();
-      mineRecords = summary.records;
-      serverCompletedQty.value = summary.completedQty;
+      const page = await partRequestsApi.getMyReturnsPage(tab);
+      if (tab !== activeTab.value) return; // the tab changed meanwhile; its own load answers
+      mineRecords = page.records;
+      serverCounts.value = page.counts;
     } catch (err) {
       if (isPartReturnsUnavailableError(err)) {
         isUnavailable.value = true;
@@ -190,41 +183,43 @@ const loadData = async (preferredOrderId?: string, options: { silent?: boolean }
       targetOrderIds.add(routeOrderId);
     }
 
-    // 3. For each order, fetch full return ledger and order metadata
+    // 3. Order metadata per order; the lines are the tab's own. Only an order asked by the
+    //    route and absent from this tab reads its ledger separately.
     const orderIdList = Array.from(targetOrderIds);
     const groups: OrderReturnGroup[] = [];
 
-    // Pre-load orders metadata in parallel (safe with allSettled)
     const orderResults = await Promise.allSettled(
       orderIdList.map(async (orderId) => {
-        // Read full returns for this order to see both outstanding and completed
+        const listed = mineRecords.filter((r) => r.orderId === orderId);
         const [returns, orderData] = await Promise.all([
-          partRequestsApi.getReturnsByOrderId(orderId).catch(() => []),
+          listed.length ? Promise.resolve(listed) : partRequestsApi.getReturnsByOrderId(orderId).catch(() => []),
           ordersApi.getTechnicianOrder(orderId).catch(() => null),
         ]);
 
         return { orderId, returns, orderData };
       }),
     );
+    if (tab !== activeTab.value) return;
 
     for (const res of orderResults) {
       if (res.status === 'fulfilled') {
         const { orderId, returns, orderData } = res.value;
-        const records = returns.length > 0 ? returns : mineRecords.filter((r) => r.orderId === orderId);
+        const records = returns;
+        if (!records.length) continue;
 
         let needDeclareQty = 0;
         let awaitingManagerQty = 0;
         let completedQty = 0;
+        let declarableQty = 0;
         let hasDiscrepancy = false;
         let oldestHandover: string | null = null;
 
         for (const r of records) {
-          const q = partCustodyQuantities(r);
-          needDeclareQty += q.remainingToDeclare;
-          awaitingManagerQty += q.awaitingManager;
-          if (r.outstandingQty === 0) {
-            completedQty += r.issuedQty;
-          }
+          const group = partReturnGroup(r);
+          if (group === 'need_declare') needDeclareQty += r.outstandingQty;
+          else if (group === 'awaiting_manager') awaitingManagerQty += r.outstandingQty;
+          else if (group === 'completed') completedQty += r.issuedQty;
+          declarableQty += partCustodyQuantities(r).remainingToDeclare;
           if (r.discrepancies && r.discrepancies.length > 0) {
             hasDiscrepancy = true;
           }
@@ -252,6 +247,7 @@ const loadData = async (preferredOrderId?: string, options: { silent?: boolean }
           needDeclareQty,
           awaitingManagerQty,
           completedQty,
+          declarableQty,
           hasDiscrepancy,
         });
       }
@@ -315,6 +311,9 @@ onMounted(() => {
   void loadFaulty();
 });
 
+// Each tab is its own server group: switching reads that group.
+watch(activeTab, () => void loadData(selectedOrderId.value ?? undefined));
+
 // Auto-refresh on notifications or window focus without flashing loading skeletons
 usePartReturnsRefresh(() => loadData(selectedOrderId.value ?? undefined, { silent: true }));
 
@@ -350,21 +349,16 @@ const viewJobDetail = (orderId: string) => {
 };
 
 const getPartStatusBadge = (record: PartCustodyReturnRecord) => {
-  if (record.discrepancies && record.discrepancies.length > 0) {
-    return { label: 'Sai lệch', tone: 'danger' as const };
-  }
-  if (record.outstandingQty === 0) {
-    return { label: 'Đã hoàn tất', tone: 'success' as const };
-  }
-  const q = partCustodyQuantities(record);
-  if (q.remainingToDeclare > 0) {
-    return { label: 'Cần khai trả', tone: 'warning' as const };
-  }
-  if (q.awaitingManager > 0) {
-    return { label: 'Chờ xác nhận', tone: 'info' as const };
-  }
+  const group = partReturnGroup(record);
+  if (group === null) return { label: 'Sai lệch', tone: 'danger' as const };
+  if (group === 'need_declare') return { label: 'Cần khai trả', tone: 'warning' as const };
+  if (group === 'awaiting_manager') return { label: 'Chờ xác nhận', tone: 'info' as const };
   return { label: 'Đã hoàn tất', tone: 'success' as const };
 };
+
+/** Small hint on a line to declare: the job has not recorded how many were used yet. */
+const usageMissing = (record: PartCustodyReturnRecord) =>
+  record.usageRecorded === false && partReturnGroup(record) === 'need_declare';
 
 const getOrderStatusBadge = (order: OrderReturnGroup) => {
   if (order.hasDiscrepancy) {
@@ -895,6 +889,11 @@ const formatOrderTime = (order: OrderReturnGroup) => {
                             <span class="text-[11px] text-ink-500 font-num">
                               Mã: {{ record.partRequestItemId.substring(0, 8).toUpperCase() }}
                             </span>
+                            <span
+                              v-if="usageMissing(record)"
+                              class="ml-1.5 text-[11px] text-amber-700"
+                              :data-testid="`usage-missing-${record.partRequestItemId}`"
+                            >Chưa ghi dùng</span>
                           </div>
                         </div>
                       </td>
@@ -955,7 +954,7 @@ const formatOrderTime = (order: OrderReturnGroup) => {
               <FhButton
                 variant="primary"
                 size="md"
-                :disabled="selectedOrder.needDeclareQty === 0"
+                :disabled="selectedOrder.declarableQty === 0"
                 data-testid="open-declare-return-btn"
                 @click="openDeclareModal()"
               >
