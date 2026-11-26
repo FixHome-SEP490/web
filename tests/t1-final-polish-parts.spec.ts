@@ -72,7 +72,7 @@ describe('T1 parts declaration accessibility', () => {
     expect(quantities.text()).toContain('Khai trả');
     expect(quantities.text()).toContain('Đã nhận');
     expect(wrapper.get('[data-testid="part-return-pending-i1"]').text()).toContain('Chờ nhận 1');
-    expect(wrapper.get('input').attributes('max')).toBe('1');
+    expect(wrapper.get('input[type="number"]').attributes('max')).toBe('1');
     expect(api.acceptReturn).not.toHaveBeenCalled();
   });
 });
