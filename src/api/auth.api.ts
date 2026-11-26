@@ -74,6 +74,23 @@ export const authApi = {
     return 'data' in res.data ? (res.data as ApiResponse<UserInfo>).data : res.data;
   },
 
+  /** Xác thực email / SĐT trong hồ sơ (đã đăng nhập). */
+  sendVerification: async (kind: 'email' | 'phone'): Promise<{ resendAvailableAt?: string }> => {
+    const res = await apiClient.post<ApiResponse<{ resendAvailableAt?: string }> | { resendAvailableAt?: string }>(
+      `/auth/verify-${kind}/send`,
+    );
+    return 'data' in res.data ? (res.data as ApiResponse<{ resendAvailableAt?: string }>).data : res.data;
+  },
+
+  confirmVerification: async (
+    kind: 'email' | 'phone',
+    otp: string,
+  ): Promise<{ isEmailVerified: boolean; isPhoneVerified: boolean }> => {
+    type Flags = { isEmailVerified: boolean; isPhoneVerified: boolean };
+    const res = await apiClient.post<ApiResponse<Flags> | Flags>(`/auth/verify-${kind}/confirm`, { otp });
+    return 'data' in res.data ? (res.data as ApiResponse<Flags>).data : res.data;
+  },
+
   logout: async (): Promise<void> => {
     try {
       const refreshToken = localStorage.getItem('refresh_token');
