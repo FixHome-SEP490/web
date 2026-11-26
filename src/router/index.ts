@@ -221,6 +221,13 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['TECHNICIAN'], title: 'Đăng ký kỹ thuật viên' },
   },
 
+  {
+    path: '/tech/office-visit',
+    name: 'technician-office-visit',
+    component: () => import('../pages/technician/TechnicianOfficeVisitPage.vue'),
+    meta: { requiresAuth: true, roles: ['TECHNICIAN'], title: 'Lịch lên trụ sở' },
+  },
+
   // ---- 4. Technician Routes (TechnicianLayout) ----
   {
     path: '/tech',

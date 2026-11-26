@@ -172,6 +172,19 @@ const handlePreview = (title: string, documentId: string) => {
 
         <!-- Drawer Body -->
         <div v-if="verification" class="flex-1 overflow-y-auto overscroll-contain px-6 py-6 space-y-6 text-sm">
+          <!-- A skill sent back after a refusal: the reviewer sees what was wrong the last time -->
+          <div
+            v-if="verification.attemptNumber > 1"
+            class="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs sm:text-sm text-amber-900 flex items-start gap-2.5"
+            data-testid="skill-resubmitted"
+          >
+            <AlertCircle :size="18" class="text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong class="font-semibold">Gửi lại lần {{ verification.attemptNumber }}</strong>
+              <p v-if="verification.previousRejectionReason" class="mt-0.5 leading-relaxed">Lý do từ chối trước: {{ verification.previousRejectionReason }}</p>
+            </div>
+          </div>
+
           <!-- Rejection alert banner if rejected -->
           <Transition name="fh-fade-slide">
             <div

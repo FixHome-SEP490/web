@@ -635,6 +635,7 @@ const confirmReject = async () => {
                   <Wrench :size="12" class="shrink-0 text-brand-600" />
                   <span class="truncate">{{ row.serviceName || 'Dịch vụ' }}</span>
                 </span>
+                <span v-if="row.attemptNumber > 1" class="ml-1.5 inline-flex rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800" data-testid="skill-resubmitted-tag">Gửi lại lần {{ row.attemptNumber }}</span>
               </td>
 
               <!-- Ngày gửi -->

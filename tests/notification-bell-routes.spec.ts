@@ -106,4 +106,23 @@ describe('Notification bell role-safe references', () => {
   it('opens the identity review when a technician submits the profile', async () => {
     await clickNotice('SERVICE_MANAGER', notification({ type: 'TECHNICIAN_PROFILE_SUBMITTED', referenceType: 'technician_profile', referenceId: 'tech-1' }), '/console/technicians');
   });
+
+  it.each([
+    ['KYC_IDENTITY_APPROVED', '/tech/office-visit'],
+    ['OFFICE_VISIT_MISSED', '/tech/office-visit'],
+    ['OFFICE_VISIT_RESET', '/tech/office-visit'],
+    ['OFFICE_VISIT_REMINDER', '/tech/office-visit'],
+    ['OFFICE_VISIT_BLOCKED', '/tech/onboarding'],
+    ['OFFICE_VISIT_ATTENDED', '/tech/onboarding'],
+    ['PROFILE_REJECTED', '/tech/onboarding'],
+    ['SKILL_VERIFICATION_APPROVED', '/tech/profile'],
+    ['SKILL_VERIFICATION_REJECTED', '/tech/profile'],
+    ['SKILL_NOT_CONFIRMED', '/tech/profile'],
+  ])('sends the technician %s notice to %s, never to a job', async (type, expected) => {
+    await clickNotice('TECHNICIAN', notification({ type, referenceType: 'technician_profile', referenceId: 'ref-1' }), expected);
+  });
+
+  it('opens the skill review when a technician sends a refused skill back', async () => {
+    await clickNotice('SERVICE_MANAGER', notification({ type: 'SKILL_VERIFICATION_RESUBMITTED', referenceType: 'technician_skill_verification', referenceId: 'rq-1' }), '/console/admin/skill-verifications');
+  });
 });
