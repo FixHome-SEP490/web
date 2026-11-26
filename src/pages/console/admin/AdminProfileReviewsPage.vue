@@ -1,14 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { FileBadge, FileText, Image as ImageIcon, Loader2, RotateCcw, Video, X } from 'lucide-vue-next';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import {
+  AlertTriangle,
+  Award,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Droplets,
+  FileBadge,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Mail,
+  Phone,
+  Plug,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  Snowflake,
+  Tv,
+  Video,
+  Wrench,
+  X,
+  XCircle,
+} from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhSkeleton, FhStatusPill } from '../../../components';
-import ConsolePageHeader from '../../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
-import ConsoleSearch from '../../../components/console/ConsoleSearch.vue';
-import ConsoleTable, { type ConsoleColumn } from '../../../components/console/ConsoleTable.vue';
-import { CONSOLE_LOAD_ERROR, consoleField, consoleTextarea } from '../../../components/console/console-ui';
+import { CONSOLE_LOAD_ERROR, consoleTextarea } from '../../../components/console/console-ui';
 import { reviewStageLabel } from '../../../components/console/console-labels';
 import { userFacingError } from '../../../utils/user-facing-error';
 import { vnDateTimeString } from '../../../utils/vn-time';
@@ -24,38 +47,127 @@ import {
 import ProfileSkillGroups from '../../../components/console/ProfileSkillGroups.vue';
 import { useCanDecideReview } from '../../../composables/useCanDecideReview';
 
+const router = useRouter();
 const canDecide = useCanDecideReview();
 
 // Duyệt hồ sơ cuối: thợ đã được xác nhận danh tính và (sau khi gặp trực tiếp) admin kiểm bằng cấp, xác nhận cấp độ rồi duyệt.
-const columns: ConsoleColumn[] = [
-  { key: 'technician', label: 'Kỹ thuật viên' },
-  { key: 'stage', label: 'Giai đoạn' },
-  { key: 'visit', label: 'Lịch hẹn', hideBelow: 'lg' },
-  { key: 'actions', label: '', align: 'right' },
-];
-
 const rows = ref<ProfileReviewRow[]>([]);
 const loading = ref(true);
 const loadError = ref('');
 const error = ref('');
 const successMessage = ref('');
 const busy = ref(false);
+
+// Stats cards counters computed across all actual data rows
+const stats = computed(() => {
+  let waitingBooking = 0;
+  let booked = 0;
+  let waitingSkillApproval = 0;
+
+  for (const r of rows.value) {
+    if (r.stage === 'profile_review' || r.visit?.status === 'attended') {
+      waitingSkillApproval++;
+    } else if (r.stage === 'visit_scheduled' || r.visit?.status === 'scheduled') {
+      booked++;
+    } else {
+      waitingBooking++;
+    }
+  }
+
+  return {
+    waitingBooking,
+    booked,
+    waitingSkillApproval,
+  };
+});
+
+// Search and filters
 const searchQuery = ref('');
 const stageFilter = ref<'ALL' | ReviewStage>('ALL');
+const appointmentFilter = ref<'ALL' | 'HAS_VISIT' | 'NO_VISIT'>('ALL');
+const activeCardFilter = ref<'ALL' | 'WAITING_BOOKING' | 'BOOKED' | 'WAITING_SKILL'>('ALL');
 
-const hasFilters = computed(() => Boolean(searchQuery.value.trim()) || stageFilter.value !== 'ALL');
+const hasFilters = computed(
+  () =>
+    Boolean(searchQuery.value.trim()) ||
+    stageFilter.value !== 'ALL' ||
+    appointmentFilter.value !== 'ALL' ||
+    activeCardFilter.value !== 'ALL',
+);
+
 const resetFilters = () => {
   searchQuery.value = '';
   stageFilter.value = 'ALL';
+  appointmentFilter.value = 'ALL';
+  activeCardFilter.value = 'ALL';
+  page.value = 1;
+};
+
+const filterByCard = (type: 'WAITING_BOOKING' | 'BOOKED' | 'WAITING_SKILL') => {
+  if (activeCardFilter.value === type) {
+    activeCardFilter.value = 'ALL';
+    stageFilter.value = 'ALL';
+    appointmentFilter.value = 'ALL';
+  } else {
+    activeCardFilter.value = type;
+    if (type === 'WAITING_BOOKING') {
+      stageFilter.value = 'ALL';
+      appointmentFilter.value = 'NO_VISIT';
+    } else if (type === 'BOOKED') {
+      stageFilter.value = 'ALL';
+      appointmentFilter.value = 'HAS_VISIT';
+    } else if (type === 'WAITING_SKILL') {
+      stageFilter.value = 'profile_review';
+      appointmentFilter.value = 'ALL';
+    }
+  }
+  page.value = 1;
 };
 
 const filteredRows = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   return rows.value.filter((r) => {
+    // Card active filter
+    if (activeCardFilter.value === 'WAITING_BOOKING') {
+      const isWaiting = r.stage === 'visit_required' || (!r.visit && r.stage !== 'profile_review' && r.stage !== 'visit_scheduled');
+      if (!isWaiting) return false;
+    } else if (activeCardFilter.value === 'BOOKED') {
+      const isBooked = r.stage === 'visit_scheduled' || Boolean(r.visit && r.visit.status === 'scheduled');
+      if (!isBooked) return false;
+    } else if (activeCardFilter.value === 'WAITING_SKILL') {
+      const isWaitingSkill = r.stage === 'profile_review' || Boolean(r.visit && r.visit.status === 'attended');
+      if (!isWaitingSkill) return false;
+    }
+
+    // Dropdown Stage filter
     if (stageFilter.value !== 'ALL' && r.stage !== stageFilter.value) return false;
+
+    // Dropdown Appointment filter
+    if (appointmentFilter.value === 'HAS_VISIT' && !r.visit) return false;
+    if (appointmentFilter.value === 'NO_VISIT' && r.visit) return false;
+
+    // Search query
     if (!q) return true;
-    return [r.fullName, r.phoneNumber, r.email].some((v) => String(v ?? '').toLowerCase().includes(q));
+    return [r.fullName, r.phoneNumber, r.email, r.visit?.officeName].some((v) =>
+      String(v ?? '').toLowerCase().includes(q),
+    );
   });
+});
+
+// Pagination
+const page = ref(1);
+const pageSize = ref(10);
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize.value)));
+const paginatedRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filteredRows.value.slice(start, start + pageSize.value);
+});
+
+watch([searchQuery, stageFilter, appointmentFilter], () => {
+  if (activeCardFilter.value !== 'ALL') {
+    activeCardFilter.value = 'ALL';
+  }
+  page.value = 1;
 });
 
 const load = async () => {
@@ -74,11 +186,132 @@ onMounted(() => void load());
 
 const stageTone = (stage: ReviewStage | null) =>
   stage === 'profile_review' ? 'PENDING_APPROVAL' : stage === 'visit_blocked' || stage === 'profile_rejected' ? 'REJECTED' : 'PENDING';
+
 const formatTime = (value: string | null | undefined) => (value ? vnDateTimeString(new Date(value)) : '—');
 
-// ---- Chi tiết ----
+const formatAppointmentDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${hours}:${minutes}, ${day}/${month}/${year}`;
+};
+
+const getInitials = (name?: string | null): string => {
+  if (!name) return 'KT';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'KT';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  if (parts[0].toUpperCase() === 'QA') return 'QA';
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const getSkillIcon = (name: string) => {
+  const s = name.toLowerCase();
+  if (s.includes('lạnh') || s.includes('điều hòa') || s.includes('tủ lạnh')) return Snowflake;
+  if (s.includes('nước') || s.includes('ống') || s.includes('bồn')) return Droplets;
+  if (s.includes('thiết bị') || s.includes('gia dụng') || s.includes('bếp') || s.includes('lò')) return Tv;
+  if (s.includes('điện') || s.includes('dây')) return Plug;
+  return Wrench;
+};
+
+const getPrimarySkill = (row: ProfileReviewRow) => {
+  const explicit = (row as unknown as { primarySkill?: string }).primarySkill ||
+    (row as unknown as { skills?: Array<{ serviceName?: string }> }).skills?.[0]?.serviceName;
+  if (explicit) {
+    return { name: explicit, icon: getSkillIcon(explicit) };
+  }
+  return { name: 'Hồ sơ kỹ thuật', icon: Wrench };
+};
+
+const getStageDotTone = (stage: ReviewStage | null) => {
+  if (stage === 'visit_scheduled' || stage === 'approved') return 'bg-emerald-500';
+  if (stage === 'profile_review') return 'bg-blue-500';
+  if (stage === 'profile_rejected' || stage === 'visit_blocked' || stage === 'identity_rejected') return 'bg-rose-500';
+  return 'bg-amber-500';
+};
+
+const getProfileStatusBadge = (row: ProfileReviewRow) => {
+  if (row.stage === 'profile_review' || row.visit?.status === 'attended') {
+    return {
+      label: 'Chờ duyệt kỹ năng',
+      tone: 'blue' as const,
+      icon: Award,
+    };
+  }
+  if (row.stage === 'visit_scheduled' || row.visit?.status === 'scheduled') {
+    return {
+      label: 'Đã xác nhận lịch',
+      tone: 'emerald' as const,
+      icon: CheckCircle2,
+    };
+  }
+  if (row.stage === 'profile_rejected') {
+    return {
+      label: 'Hồ sơ bị từ chối',
+      tone: 'rose' as const,
+      icon: XCircle,
+    };
+  }
+  if (row.stage === 'visit_blocked') {
+    return {
+      label: 'Bị khóa đặt lịch',
+      tone: 'rose' as const,
+      icon: AlertTriangle,
+    };
+  }
+  if (row.stage === 'approved') {
+    return {
+      label: 'Đã duyệt',
+      tone: 'emerald' as const,
+      icon: CheckCircle2,
+    };
+  }
+  return {
+    label: 'Chờ đặt lịch',
+    tone: 'amber' as const,
+    icon: ShieldAlert,
+  };
+};
+
+const statusBadgeClasses = (tone: 'amber' | 'blue' | 'emerald' | 'rose') => {
+  switch (tone) {
+    case 'blue':
+      return 'border border-blue-200 bg-blue-50 text-blue-700';
+    case 'emerald':
+      return 'border border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'rose':
+      return 'border border-rose-200 bg-rose-50 text-rose-700';
+    case 'amber':
+    default:
+      return 'border border-amber-200 bg-amber-50 text-amber-700';
+  }
+};
+
+const goToOfficeVisits = () => {
+  void router?.push('/console/office-visits');
+};
+
+const copyToClipboard = async (text: string, label: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    successMessage.value = `Đã sao chép ${label}.`;
+    setTimeout(() => {
+      if (successMessage.value.includes(label)) successMessage.value = '';
+    }, 3000);
+  } catch {
+    error.value = `Không thể sao chép ${label}.`;
+  }
+};
+
+// ---- Chi tiết hồ sơ & Sửa lỗi Loading riêng theo từng dòng ----
 const detail = ref<ProfileReviewDetail | null>(null);
-const detailLoading = ref(false);
+const loadingProfileId = ref<string | null>(null);
+let latestDetailRequestId = 0;
+
 const decisions = reactive<Record<string, { level: string; approved: boolean; reason: string }>>({});
 const showReasonErrors = ref(false);
 const changeDecisions = (ids: string[], patch: Partial<{ level: string; approved: boolean; reason: string }>) => {
@@ -138,22 +371,35 @@ const closeDetail = () => {
   detail.value = null;
   documentUrls.value = {};
   isLoadingUrls.value = false;
+  loadingProfileId.value = null;
 };
 
 const openDetail = async (technicianId: string) => {
-  detailLoading.value = true;
+  // Ngăn chặn duplicate call khi click liên tục
+  if (loadingProfileId.value === technicianId) return;
+
+  const currentRequestId = ++latestDetailRequestId;
+  loadingProfileId.value = technicianId;
   error.value = '';
+
   try {
     const data = await adminOfficeVisitsApi.getReview(technicianId);
+    // Nếu người dùng đã chuyển sang hồ sơ khác thì không ghi đè dữ liệu cũ
+    if (currentRequestId !== latestDetailRequestId) return;
+
     for (const key of Object.keys(decisions)) delete decisions[key];
     showReasonErrors.value = false;
     for (const skill of data.skills) decisions[skill.id] = { level: skill.level, approved: true, reason: '' };
     detail.value = data;
     void loadDocumentUrls(data);
   } catch (reason) {
-    error.value = userFacingError(reason, 'Chưa mở được hồ sơ, vui lòng thử lại.');
+    if (currentRequestId === latestDetailRequestId) {
+      error.value = userFacingError(reason, 'Chưa mở được hồ sơ, vui lòng thử lại.');
+    }
   } finally {
-    detailLoading.value = false;
+    if (currentRequestId === latestDetailRequestId) {
+      loadingProfileId.value = null;
+    }
   }
 };
 
@@ -246,7 +492,6 @@ const openDocument = async (title: string, doc: { id: string; documentType?: str
   }
 };
 
-// A paper sent for a skill: shown in the same viewer as the identity papers.
 const previewEvidence = async (item: ProfileReviewEvidence) => {
   previewTitle.value = item.fileName;
   previewKind.value = item.mimeType.startsWith('image/') ? 'image' : 'file';
@@ -289,69 +534,394 @@ const confirmReject = async () => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Duyệt hồ sơ" :count="loading || loadError ? null : filteredRows.length">
-      <template #actions>
+    <!-- Header: Tiêu đề và mô tả nghiệp vụ chuẩn FixHome -->
+    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">Duyệt hồ sơ</h1>
+        <p class="mt-1 text-sm text-ink-600 text-pretty">
+          Xác nhận thông tin kỹ thuật viên, đặt lịch lên trụ sở để kiểm tra và duyệt cấp độ kỹ năng.
+        </p>
+      </div>
+      <div class="flex items-center gap-2 self-start sm:self-auto">
         <ConsoleMoreMenu>
-          <ConsoleMenuItem :disabled="loading" @click="load">Làm mới</ConsoleMenuItem>
+          <ConsoleMenuItem :disabled="loading" @click="load">Làm mới danh sách</ConsoleMenuItem>
+          <ConsoleMenuItem @click="goToOfficeVisits">Lịch hẹn trụ sở</ConsoleMenuItem>
         </ConsoleMoreMenu>
-      </template>
-    </ConsolePageHeader>
-    <p class="animate-slide-up-delay-1 text-sm text-ink-600 text-pretty">
-      Thợ đã được xác nhận danh tính sẽ đặt lịch lên trụ sở. Sau khi gặp trực tiếp và kiểm bản công chứng bằng cấp, bạn xác nhận cấp độ từng kỹ năng rồi duyệt hồ sơ.
-    </p>
+      </div>
+    </div>
 
-    <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
-      <ConsoleSearch v-model="searchQuery" placeholder="Tìm tên, SĐT, email thợ" label="Tìm hồ sơ kỹ thuật viên" />
-      <select v-model="stageFilter" :class="consoleField" aria-label="Giai đoạn">
-        <option value="ALL">Mọi giai đoạn</option>
-        <option value="visit_required">Chờ thợ đặt lịch</option>
-        <option value="visit_scheduled">Đã đặt lịch lên trụ sở</option>
-        <option value="profile_review">Đã có mặt, chờ duyệt hồ sơ</option>
-        <option value="profile_rejected">Hồ sơ bị từ chối</option>
-        <option value="visit_blocked">Bị khóa đặt lịch</option>
-      </select>
+    <!-- 3 Thẻ thống kê: nhỏ gọn, màu nhẹ nhàng, phản ánh số liệu thực tế -->
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <!-- Thẻ 1: Chờ đặt lịch -->
       <button
-        v-if="hasFilters"
         type="button"
-        class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
-        @click="resetFilters"
+        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-amber-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        :class="activeCardFilter === 'WAITING_BOOKING' ? 'border-amber-400 bg-amber-50/40 ring-2 ring-amber-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+        title="Nhấn để lọc hồ sơ chờ đặt lịch"
+        @click="filterByCard('WAITING_BOOKING')"
       >
-        <RotateCcw :size="14" aria-hidden="true" />
-        Đặt lại
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+            <Calendar :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Chờ đặt lịch</div>
+            <div class="text-xs text-ink-400">Chưa xếp lịch trụ sở</div>
+          </div>
+        </div>
+        <div class="font-num text-2xl font-bold text-amber-600">
+          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-amber-100/70"></span>
+          <span v-else>{{ stats.waitingBooking }}</span>
+        </div>
+      </button>
+
+      <!-- Thẻ 2: Đã đặt lịch -->
+      <button
+        type="button"
+        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-emerald-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        :class="activeCardFilter === 'BOOKED' ? 'border-emerald-400 bg-emerald-50/40 ring-2 ring-emerald-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+        title="Nhấn để lọc hồ sơ đã đặt lịch"
+        @click="filterByCard('BOOKED')"
+      >
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <Calendar :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Đã đặt lịch</div>
+            <div class="text-xs text-ink-400">Có lịch hẹn trụ sở</div>
+          </div>
+        </div>
+        <div class="font-num text-2xl font-bold text-emerald-600">
+          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-emerald-100/70"></span>
+          <span v-else>{{ stats.booked }}</span>
+        </div>
+      </button>
+
+      <!-- Thẻ 3: Chờ duyệt kỹ năng -->
+      <button
+        type="button"
+        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-blue-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        :class="activeCardFilter === 'WAITING_SKILL' ? 'border-blue-400 bg-blue-50/40 ring-2 ring-blue-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+        title="Nhấn để lọc hồ sơ chờ duyệt kỹ năng"
+        @click="filterByCard('WAITING_SKILL')"
+      >
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <Award :size="20" :stroke-width="2" aria-hidden="true" />
+          </div>
+          <div>
+            <div class="text-xs font-medium text-ink-500">Chờ duyệt kỹ năng</div>
+            <div class="text-xs text-ink-400">Đã có mặt tại trụ sở</div>
+          </div>
+        </div>
+        <div class="font-num text-2xl font-bold text-blue-600">
+          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-blue-100/70"></span>
+          <span v-else>{{ stats.waitingSkillApproval }}</span>
+        </div>
       </button>
     </div>
 
-    <Transition name="fh-fade-slide">
-      <p v-if="error" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800" role="alert">{{ error }}</p>
-    </Transition>
-    <Transition name="fh-fade-slide">
-      <p v-if="successMessage" class="rounded-[var(--radius-sm)] border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-800" role="status">{{ successMessage }}</p>
-    </Transition>
+    <!-- Thanh tìm kiếm và bộ lọc: cùng 1 hàng, cân đối, bố trí hiện đại -->
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
+      <div class="flex flex-1 flex-wrap items-center gap-2.5">
+        <!-- Ô tìm kiếm -->
+        <div class="relative min-w-[260px] flex-1 max-w-md">
+          <Search class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" :size="16" aria-hidden="true" />
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="Tìm tên, email hoặc SĐT kỹ thuật viên"
+            aria-label="Tìm kiếm hồ sơ"
+            class="h-10 w-full rounded-xl border border-ink-200/90 bg-white pl-9 pr-3 text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
 
-    <div class="animate-slide-up-delay-2">
-      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
-      <ConsoleTable v-else :columns="columns" :rows="filteredRows" :loading="loading" empty-text="Chưa có hồ sơ nào đang chờ.">
-        <template #cell-technician="{ row }">
-          <button type="button" class="cursor-pointer font-medium text-brand-700 hover:underline" @click="openDetail(row.technicianId)">{{ row.fullName || 'Kỹ thuật viên' }}</button>
-          <div class="truncate font-num text-xs text-ink-500">{{ row.phoneNumber || row.email }}</div>
-        </template>
-        <template #cell-stage="{ row }">
-          <FhStatusPill :status="stageTone(row.stage)" :label="reviewStageLabel(row.stage)" />
-        </template>
-        <template #cell-visit="{ row }">
-          <template v-if="row.visit">
-            <div class="text-ink-800">{{ row.visit.officeName }}</div>
-            <div class="font-num text-xs text-ink-500">{{ formatTime(row.visit.scheduledAt) }}</div>
-          </template>
-          <span v-else class="text-ink-400">Chưa đặt lịch</span>
-          <div v-if="row.missedVisits" class="font-num text-xs text-danger-700">Đã vắng {{ row.missedVisits }} lần</div>
-        </template>
-        <template #cell-actions="{ row }">
-          <FhButton variant="secondary" size="sm" :loading="detailLoading" @click="openDetail(row.technicianId)">Xem hồ sơ</FhButton>
-        </template>
-      </ConsoleTable>
+        <!-- Bộ lọc giai đoạn -->
+        <div class="relative">
+          <select
+            v-model="stageFilter"
+            aria-label="Bộ lọc giai đoạn"
+            class="h-10 appearance-none rounded-xl border border-ink-200/90 bg-white pl-3.5 pr-8 text-xs sm:text-sm font-medium text-ink-700 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 cursor-pointer"
+          >
+            <option value="ALL">Giai đoạn: Tất cả</option>
+            <option value="visit_required">Chờ thợ đặt lịch</option>
+            <option value="visit_scheduled">Đã đặt lịch lên trụ sở</option>
+            <option value="profile_review">Đã có mặt, chờ duyệt hồ sơ</option>
+            <option value="profile_rejected">Hồ sơ bị từ chối</option>
+            <option value="visit_blocked">Bị khóa đặt lịch</option>
+          </select>
+          <ChevronDown class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" :size="14" aria-hidden="true" />
+        </div>
+
+        <!-- Bộ lọc lịch hẹn -->
+        <div class="relative">
+          <select
+            v-model="appointmentFilter"
+            aria-label="Bộ lọc lịch hẹn"
+            class="h-10 appearance-none rounded-xl border border-ink-200/90 bg-white pl-3.5 pr-8 text-xs sm:text-sm font-medium text-ink-700 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 cursor-pointer"
+          >
+            <option value="ALL">Lịch hẹn: Tất cả</option>
+            <option value="NO_VISIT">Chưa đặt lịch</option>
+            <option value="HAS_VISIT">Đã đặt lịch</option>
+          </select>
+          <ChevronDown class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" :size="14" aria-hidden="true" />
+        </div>
+
+        <!-- Nút đặt lại bộ lọc -->
+        <button
+          v-if="hasFilters"
+          type="button"
+          class="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-ink-200 bg-ink-50/80 px-3 text-xs font-medium text-ink-600 transition-colors hover:bg-ink-100 hover:text-ink-900"
+          @click="resetFilters"
+        >
+          <RotateCcw :size="14" aria-hidden="true" />
+          <span>Đặt lại</span>
+        </button>
+      </div>
+
+      <!-- Nút Sắp lịch sang Lịch hẹn trụ sở -->
+      <button
+        type="button"
+        class="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-brand-600 px-4 text-xs sm:text-sm font-semibold text-white shadow-xs transition-colors hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 shrink-0"
+        @click="goToOfficeVisits"
+      >
+        <Calendar :size="16" aria-hidden="true" />
+        <span>Sắp lịch</span>
+        <ChevronDown :size="14" class="opacity-80" aria-hidden="true" />
+      </button>
     </div>
 
+    <!-- Thông báo lỗi hoặc thành công -->
+    <Transition name="fh-fade-slide">
+      <p v-if="error" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+        {{ error }}
+      </p>
+    </Transition>
+    <Transition name="fh-fade-slide">
+      <p v-if="successMessage" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
+        {{ successMessage }}
+      </p>
+    </Transition>
+
+    <!-- Danh sách hồ sơ -->
+    <div>
+      <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
+
+      <div v-else class="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xs">
+        <div class="overflow-x-auto overscroll-x-contain">
+          <table class="w-full text-left text-sm">
+            <thead>
+              <tr class="border-b border-ink-100 bg-ink-25/50">
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-600">Kỹ thuật viên</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-600 hidden md:table-cell">Kỹ năng / Chuyên môn chính</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-600">Giai đoạn</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-600 hidden lg:table-cell">Lịch hẹn</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-xs font-semibold text-ink-600">Trạng thái hồ sơ</th>
+                <th scope="col" class="whitespace-nowrap px-4 py-3.5 text-right text-xs font-semibold text-ink-600">Thao tác</th>
+              </tr>
+            </thead>
+
+            <tbody class="divide-y divide-ink-100">
+              <!-- Loading Skeleton -->
+              <template v-if="loading">
+                <tr v-for="n in 5" :key="`skeleton-${n}`" class="animate-pulse">
+                  <td class="px-4 py-3.5">
+                    <div class="flex items-center gap-3">
+                      <div class="h-10 w-10 rounded-full bg-ink-100"></div>
+                      <div class="space-y-1.5">
+                        <div class="h-4 w-28 rounded bg-ink-100"></div>
+                        <div class="h-3 w-36 rounded bg-ink-100"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3.5 hidden md:table-cell"><div class="h-6 w-36 rounded-lg bg-ink-100"></div></td>
+                  <td class="px-4 py-3.5"><div class="h-4 w-24 rounded bg-ink-100"></div></td>
+                  <td class="px-4 py-3.5 hidden lg:table-cell"><div class="h-4 w-28 rounded bg-ink-100"></div></td>
+                  <td class="px-4 py-3.5"><div class="h-6 w-28 rounded-lg bg-ink-100"></div></td>
+                  <td class="px-4 py-3.5 text-right"><div class="inline-block h-8 w-20 rounded-lg bg-ink-100"></div></td>
+                </tr>
+              </template>
+
+              <!-- Empty State -->
+              <tr v-else-if="filteredRows.length === 0">
+                <td colspan="6" class="px-4 py-12 text-center text-sm text-ink-500">
+                  <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-50 text-ink-400">
+                    <Search :size="22" aria-hidden="true" />
+                  </div>
+                  <p class="mt-2.5 font-medium text-ink-700">Không tìm thấy hồ sơ nào</p>
+                  <p class="text-xs text-ink-400">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
+                  <button
+                    v-if="hasFilters"
+                    type="button"
+                    class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-ink-50"
+                    @click="resetFilters"
+                  >
+                    Xóa tất cả bộ lọc
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Data Rows -->
+              <tr
+                v-else
+                v-for="row in paginatedRows"
+                :key="row.technicianId"
+                class="group cursor-pointer transition-[background-color] duration-150 hover:bg-brand-50/35"
+                :class="detail?.technicianId === row.technicianId ? 'border-l-4 border-l-brand-600 bg-brand-50/20' : ''"
+                @click="openDetail(row.technicianId)"
+              >
+                <!-- Kỹ thuật viên (Avatar + Tên + Email/SĐT) -->
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-ink-100 bg-brand-50 text-xs font-bold text-brand-700 font-num">
+                      <img
+                        v-if="(row as unknown as { avatarUrl?: string }).avatarUrl"
+                        :src="(row as unknown as { avatarUrl?: string }).avatarUrl"
+                        :alt="row.fullName"
+                        class="h-full w-full object-cover"
+                      />
+                      <span v-else>{{ getInitials(row.fullName) }}</span>
+                    </div>
+
+                    <div class="min-w-0">
+                      <button
+                        type="button"
+                        class="cursor-pointer text-left font-semibold text-ink-900 transition-colors group-hover:text-brand-600 hover:text-brand-600 truncate block"
+                        @click.stop="openDetail(row.technicianId)"
+                      >
+                        {{ row.fullName || 'Kỹ thuật viên' }}
+                      </button>
+                      <div class="flex items-center gap-1.5 text-xs text-ink-500 font-num truncate mt-0.5">
+                        <Mail :size="12" class="shrink-0 text-ink-400" aria-hidden="true" />
+                        <span class="truncate">{{ row.email || '—' }}</span>
+                      </div>
+                      <div v-if="row.phoneNumber" class="flex items-center gap-1.5 text-xs text-ink-400 font-num truncate mt-0.5">
+                        <Phone :size="11" class="shrink-0 text-ink-400" aria-hidden="true" />
+                        <span>{{ row.phoneNumber }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Kỹ năng / Chuyên môn chính -->
+                <td class="px-4 py-3.5 hidden md:table-cell">
+                  <div class="inline-flex items-center gap-1.5 rounded-lg border border-ink-200/80 bg-ink-50/60 px-2.5 py-1 text-xs font-medium text-ink-700">
+                    <component :is="getPrimarySkill(row).icon" :size="14" class="shrink-0 text-ink-500" aria-hidden="true" />
+                    <span>{{ getPrimarySkill(row).name }}</span>
+                  </div>
+                </td>
+
+                <!-- Giai đoạn (Dot indicator + Text) -->
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="h-2 w-2 shrink-0 rounded-full" :class="getStageDotTone(row.stage)"></span>
+                    <span :class="row.stage ? 'text-ink-700 font-medium' : 'text-amber-700 font-medium'">
+                      {{ reviewStageLabel(row.stage) }}
+                    </span>
+                  </div>
+                </td>
+
+                <!-- Lịch hẹn -->
+                <td class="px-4 py-3.5 hidden lg:table-cell">
+                  <template v-if="row.visit">
+                    <div class="flex items-center gap-1.5 text-xs text-ink-800 font-num font-medium">
+                      <Calendar :size="13" class="shrink-0 text-ink-400" aria-hidden="true" />
+                      <span>{{ formatAppointmentDate(row.visit.scheduledAt) }}</span>
+                    </div>
+                    <div v-if="row.visit.officeName" class="text-[11px] text-ink-500 mt-0.5 truncate max-w-[180px]">
+                      {{ row.visit.officeName }}
+                    </div>
+                    <div v-if="row.missedVisits" class="text-[11px] font-semibold text-rose-600 font-num mt-0.5">
+                      Đã vắng {{ row.missedVisits }} lần
+                    </div>
+                  </template>
+                  <span v-else class="text-xs text-ink-400">Chưa đặt lịch</span>
+                </td>
+
+                <!-- Trạng thái hồ sơ -->
+                <td class="px-4 py-3.5">
+                  <div
+                    class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium"
+                    :class="statusBadgeClasses(getProfileStatusBadge(row).tone)"
+                  >
+                    <component :is="getProfileStatusBadge(row).icon" :size="13" class="shrink-0" aria-hidden="true" />
+                    <span>{{ getProfileStatusBadge(row).label }}</span>
+                  </div>
+                </td>
+
+                <!-- Thao tác (Xem hồ sơ + Menu) -->
+                <td class="px-4 py-3.5 text-right">
+                  <div class="flex items-center justify-end gap-1.5" @click.stop>
+                    <button
+                      type="button"
+                      class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 text-xs font-semibold text-ink-700 shadow-2xs transition-all hover:border-brand-300 hover:bg-ink-50 hover:text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="loadingProfileId === row.technicianId"
+                      @click.stop="openDetail(row.technicianId)"
+                    >
+                      <Loader2 v-if="loadingProfileId === row.technicianId" :size="13" class="animate-spin text-brand-600" aria-hidden="true" />
+                      <span>Xem hồ sơ</span>
+                    </button>
+
+                    <ConsoleMoreMenu>
+                      <ConsoleMenuItem @click="openDetail(row.technicianId)">Xem chi tiết hồ sơ</ConsoleMenuItem>
+                      <ConsoleMenuItem @click="goToOfficeVisits">Xem lịch hẹn trụ sở</ConsoleMenuItem>
+                      <ConsoleMenuItem v-if="row.email" @click="copyToClipboard(row.email, 'email')">Sao chép email</ConsoleMenuItem>
+                      <ConsoleMenuItem v-if="row.phoneNumber" @click="copyToClipboard(row.phoneNumber, 'số điện thoại')">Sao chép SĐT</ConsoleMenuItem>
+                    </ConsoleMoreMenu>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Footer -->
+        <div v-if="filteredRows.length > 0" class="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 bg-white px-4 py-3.5 text-xs text-ink-600">
+          <div class="font-num">
+            Hiển thị <span class="font-semibold text-ink-900">{{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, filteredRows.length) }}</span> trên <span class="font-semibold text-ink-900">{{ filteredRows.length }}</span> hồ sơ
+          </div>
+
+          <div v-if="totalPages > 1" class="flex items-center gap-1">
+            <!-- Nút Trước -->
+            <button
+              type="button"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40"
+              :disabled="page <= 1"
+              aria-label="Trang trước"
+              @click="page = Math.max(1, page - 1)"
+            >
+              <ChevronLeft :size="15" aria-hidden="true" />
+            </button>
+
+            <!-- Các nút trang -->
+            <button
+              v-for="p in totalPages"
+              :key="`page-${p}`"
+              type="button"
+              class="flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 text-xs font-medium font-num transition-colors"
+              :class="p === page ? 'bg-brand-600 font-semibold text-white shadow-2xs' : 'border border-ink-200 bg-white text-ink-700 hover:bg-ink-50'"
+              @click="page = p"
+            >
+              {{ p }}
+            </button>
+
+            <!-- Nút Sau -->
+            <button
+              type="button"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40"
+              :disabled="page >= totalPages"
+              aria-label="Trang sau"
+              @click="page = Math.min(totalPages, page + 1)"
+            >
+              <ChevronRight :size="15" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawer Chi tiết hồ sơ (Giữ nguyên toàn bộ logic nghiệp vụ) -->
     <Teleport to="body">
       <Transition name="fh-drawer">
         <div
@@ -567,7 +1137,7 @@ const confirmReject = async () => {
       </Transition>
     </Teleport>
 
-    <!-- Document preview -->
+    <!-- Document preview modal -->
     <Teleport to="body">
       <Transition name="fh-modal">
         <div
@@ -620,6 +1190,7 @@ const confirmReject = async () => {
       </Transition>
     </Teleport>
 
+    <!-- Dialog từ chối hồ sơ -->
     <FhConfirmDialog
       :open="showReject"
       :loading="busy"

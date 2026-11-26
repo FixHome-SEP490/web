@@ -333,6 +333,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Hoàn trả linh kiện', roles: ['SERVICE_MANAGER'] },
       },
       {
+        path: 'part-returns/:orderId',
+        name: 'console-part-return-detail',
+        component: () => import('../pages/console/ConsolePartReturnDetailPage.vue'),
+        meta: { title: 'Chi tiết hoàn trả linh kiện', roles: ['SERVICE_MANAGER'] },
+      },
+      {
         path: 'part-requests',
         name: 'console-part-requests',
         component: () => import('../pages/console/ConsolePartRequestsPage.vue'),
