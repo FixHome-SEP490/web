@@ -609,8 +609,9 @@ const confirmReject = async () => {
             <tr
               v-for="row in filteredVerifications"
               :key="row.id"
-              class="group transition-colors"
+              class="group cursor-pointer transition-colors"
               :class="selectedVerification?.id === row.id && showDrawer ? 'bg-brand-50/50 ring-1 ring-inset ring-brand-300' : 'hover:bg-ink-50/60'"
+              @click="openDrawer(row)"
             >
               <!-- Kỹ thuật viên -->
               <td class="pl-4 pr-2 sm:pl-5 sm:pr-3 py-3.5">
@@ -654,7 +655,7 @@ const confirmReject = async () => {
                     type="button"
                     class="inline-flex max-w-full items-center gap-1 truncate text-left text-xs font-medium text-brand-600 hover:text-brand-800 hover:underline cursor-pointer"
                     :title="row.documents[0].fileName"
-                    @click="openDocument(row, row.documents[0].id, row.documents[0].fileName)"
+                    @click.stop="openDocument(row, row.documents[0].id, row.documents[0].fileName)"
                   >
                     <FileText :size="13" class="shrink-0" />
                     <span class="truncate">{{ row.documents[0].issuedById ? 'FixHome cấp' : row.documents[0].fileName }}</span>
@@ -692,7 +693,7 @@ const confirmReject = async () => {
 
               <!-- Hành động -->
               <td class="pl-2 pr-4 sm:pl-3 sm:pr-5 py-3.5 text-right">
-                <div class="flex items-center justify-end gap-1.5">
+                <div class="flex items-center justify-end gap-1.5" @click.stop>
                   <button
                     v-if="canDecide && row.status === 'PENDING'"
                     type="button"
