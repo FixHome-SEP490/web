@@ -174,13 +174,14 @@ export const adminSkillVerificationsApi = {
     return res.data.data;
   },
 
+  /** Duyệt không cần tệp; `certificate` chỉ cho luồng cũ có chứng chỉ FixHome cấp. */
   async approve(
     id: string,
-    certificate: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
+    certificate?: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
   ): Promise<SkillVerification> {
     const res = await apiClient.patch<{ data: unknown }>(
       `/admin/technician-skill-verifications/${id}/approve`,
-      certificate,
+      certificate ?? {},
     );
     return normalizeVerification(res.data.data);
   },

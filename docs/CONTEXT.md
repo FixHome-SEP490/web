@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-26 19:15 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-26 19:46 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -627,6 +627,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-26 19:46 (UTC+7) | Hgnv11 | feat/warranty-same-technician | Duyệt kỹ năng từng phiếu không còn bắt tải chứng chỉ FixHome cấp: hộp thoại Duyệt và cấp chứng chỉ đổi thành xác nhận Duyệt kỹ năng, api approve gửi body rỗng (chứng chỉ chỉ còn tuỳ chọn cho luồng cũ); cần backend có PATCH approve không bắt tệp
 - 2026-11-26 19:15 (UTC+7) | Hgnv11 | feat/warranty-same-technician | Đăng ký thợ trên web ngang mobile: wizard gửi cấp tự khai skills[] và giấy tờ nghề theo nhóm (gắn sau khi lưu kỹ năng, chặn trùng cùng loại + số hiệu), bỏ ảnh chứng chỉ khỏi KYC, khóa bước 1 sau khi nộp KYC; màn trạng thái theo reviewStage (8 giai đoạn) và trang /tech/office-visit đặt lịch trụ sở (GET/POST technicians/me/office-visit); chỉ onboardingStatus approved mới là được duyệt (KYC verified chưa đủ); hồ sơ thợ có tab Giấy tờ, dòng kỹ năng chọn lại giấy tờ đã up (documents/reuse) và Gửi lại, ô Tay nghề chỉ đọc và không gửi level; chuông thợ định tuyến SKILL_*, KYC_IDENTITY_APPROVED, OFFICE_VISIT_*, PROFILE_REJECTED; nhãn kỹ năng Chờ duyệt/Đã duyệt/Bị từ chối. Chưa kiểm trên trình duyệt thật
 - 2026-11-26 15:04 (UTC+7) | Hgnv11 | dev | PO 26/11: duyệt kỹ năng: phiếu thợ gửi lại hiện nhãn Gửi lại lần N ở danh sách và khung Lý do từ chối trước trong drawer (backend trả attemptNumber, previousRejectionReason); chuông thông báo SM mở trang Duyệt kỹ năng khi có SKILL_VERIFICATION_RESUBMITTED; cần backend mới
 - 2026-11-26 14:30 (UTC+7) | Hgnv11 | dev | PO 26/11: console bảo hành bỏ Phân công/Phân công lại và bộ lọc Chưa có kỹ thuật viên; thợ không còn nút Không nhận được; modal đóng chỉ cho Không được bảo hành khi kết luận not_covered; nút Đóng ẩn với SM đã duyệt claim đang khiếu nại; route chi tiết bảo hành thêm quyền support:read_all
@@ -667,4 +668,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
 - 2026-11-19 14:44 (UTC+7) | Lạc Vỹ | LacVy | Gỡ ràng buộc UI lệch Backend: chuẩn hóa ô tiền/min/max/regex khớp DTO và bỏ chặn cứng theo client (OTP, địa chỉ, số dư, hủy đơn, trần bảo hành).
 - 2026-11-17 19:47 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 3–4 (21 trang Admin/SM): chuẩn hóa toolbar, transition modal/drawer, animation và chuyển duyệt hồ sơ (AdminProfileReviewsPage.vue) sang drawer + lưới ảnh CCCD.
-- 2026-11-17 18:44 (UTC+7) | Lạc Vỹ | LacVy | Redesign Console Đợt 1–2 (19 file): chuẩn hóa console-ui.ts, drawers/modals/panels và các trang điểm nóng (khử raw colors, đồng bộ bảng/toolbar).
