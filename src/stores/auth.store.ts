@@ -1,7 +1,7 @@
 // src/stores/auth.store.ts
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { UserInfo, UserRole, LoginRequest, RegisterRequest } from '../types';
+import type { UserInfo, UserRole, LoginRequest, RegisterRequest, OtpChannel } from '../types';
 import { authApi } from '../api/auth.api';
 import { getHttpStatus, registerAuthSessionInvalidator, registerTokenRefreshed } from '../api/client';
 import { clearQueryCache } from '../lib/query-client';
@@ -72,7 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function verifyRegisterOtp(data: { email: string; otp: string }) {
+  async function verifyRegisterOtp(data: { email: string; otp: string; channel?: OtpChannel }) {
     loading.value = true;
     try {
       const response = await authApi.verifyRegisterOtp(data);
@@ -84,10 +84,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function resendRegisterOtp(email: string) {
+  async function resendRegisterOtp(email: string, channel?: OtpChannel) {
     loading.value = true;
     try {
-      return await authApi.resendRegisterOtp({ email });
+      return await authApi.resendRegisterOtp({ email, channel });
     } finally {
       loading.value = false;
     }

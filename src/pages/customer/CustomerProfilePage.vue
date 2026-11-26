@@ -3,6 +3,7 @@ import { tidyAddressText } from '../../utils/address-text';
 import { addressFieldError, addressLocationError, normalizeAddressText } from '../../utils/address-input';
 import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
+import ContactVerificationCard from '../../components/account/ContactVerificationCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
 import { computed, ref, onMounted, watch } from 'vue';
 import {
@@ -604,6 +605,7 @@ const handleSetDefaultAddress = async (addr: UserAddress) => {
           </dl>
         </section>
         <ReputationCard role="customer" />
+        <ContactVerificationCard />
         <ChangePasswordCard />
       </div>
 

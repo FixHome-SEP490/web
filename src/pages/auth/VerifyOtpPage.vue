@@ -2,7 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
-import { Mail, ArrowLeft, Clock, RotateCcw } from 'lucide-vue-next';
+import { Mail, Smartphone, ArrowLeft, Clock, RotateCcw } from 'lucide-vue-next';
+import type { OtpChannel } from '../../types';
 import { toast } from 'vue-sonner';
 import { extractApiErrorMessage } from '../../utils/input-validation';
 
@@ -11,6 +12,8 @@ const route = useRoute();
 const authStore = useAuthStore();
 
 const email = ref((route.query.email as string) || '');
+const channel: OtpChannel = route.query.channel === 'SMS' ? 'SMS' : 'EMAIL';
+const isSms = channel === 'SMS';
 const digits = ref<string[]>(['', '', '', '', '', '']);
 const inputRefs = ref<HTMLInputElement[]>([]);
 const errorMessage = ref('');
@@ -145,6 +148,7 @@ const handleVerify = async () => {
     const verifiedUser = await authStore.verifyRegisterOtp({
       email: email.value.trim().toLowerCase(),
       otp: otpCode.value,
+      channel,
     });
 
     toast.success('Xác thực tài khoản thành công!', {
@@ -183,9 +187,9 @@ const handleResend = async () => {
   errorMessage.value = '';
 
   try {
-    const res = await authStore.resendRegisterOtp(email.value.trim().toLowerCase());
+    const res = await authStore.resendRegisterOtp(email.value.trim().toLowerCase(), channel);
     toast.success('Mã OTP mới đã được gửi!', {
-      description: res?.message || 'Vui lòng kiểm tra email của bạn.',
+      description: res?.message || (isSms ? 'Vui lòng kiểm tra tin nhắn SMS của bạn.' : 'Vui lòng kiểm tra email của bạn.'),
     });
     digits.value = ['', '', '', '', '', ''];
     startCooldown(60);
@@ -220,7 +224,7 @@ const handleResend = async () => {
     <div class="text-left mb-6 space-y-1.5">
       <h2 class="text-3xl font-black text-slate-900 tracking-tight">Xác thực tài khoản</h2>
       <p class="text-slate-500 font-medium text-[13px] leading-relaxed">
-        Nhập mã OTP 6 chữ số vừa được gửi đến địa chỉ email của bạn.
+        {{ isSms ? 'Nhập mã OTP 6 chữ số vừa được gửi qua SMS đến số điện thoại bạn đã đăng ký.' : 'Nhập mã OTP 6 chữ số vừa được gửi đến địa chỉ email của bạn.' }}
       </p>
     </div>
 
@@ -228,10 +232,10 @@ const handleResend = async () => {
     <div class="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs mb-5">
       <div class="flex items-center gap-2.5 min-w-0">
         <div class="w-8 h-8 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center shrink-0 text-brand-600">
-          <Mail :size="15" />
+          <component :is="isSms ? Smartphone : Mail" :size="15" />
         </div>
         <div class="min-w-0 text-left">
-          <p class="text-[11px] font-semibold text-slate-400 leading-tight">Mã gửi đến email</p>
+          <p class="text-[11px] font-semibold text-slate-400 leading-tight">{{ isSms ? 'Mã gửi qua SMS cho tài khoản' : 'Mã gửi đến email' }}</p>
           <p class="text-[13px] font-bold text-slate-800 truncate leading-snug">{{ email }}</p>
         </div>
       </div>
@@ -239,7 +243,7 @@ const handleResend = async () => {
         to="/register"
         class="text-[12px] text-brand-600 hover:text-brand-700 font-bold px-2.5 py-1.5 rounded-lg hover:bg-brand-50/70 transition-colors cursor-pointer shrink-0"
       >
-        Đổi email
+        {{ isSms ? 'Đổi thông tin' : 'Đổi email' }}
       </router-link>
     </div>
 
@@ -317,7 +321,7 @@ const handleResend = async () => {
 
     <!-- Footer Links -->
     <div class="text-center text-[13px] text-slate-500 font-medium pt-6">
-      Chưa nhận được email? Kiểm tra hộp thư Rác (Spam) hoặc
+      {{ isSms ? 'Chưa nhận được tin nhắn? Đợi hết thời gian chờ để gửi lại hoặc' : 'Chưa nhận được email? Kiểm tra hộp thư Rác (Spam) hoặc' }}
       <router-link to="/login" class="text-brand-600 hover:text-brand-700 font-bold ml-1">
         Đăng nhập
       </router-link>
