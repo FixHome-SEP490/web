@@ -424,9 +424,10 @@ function getInitials(name?: string | null): string {
                 v-for="(row, index) in displayItems"
                 v-else
                 :key="row.id || index"
-                class="transition-colors duration-150"
+                class="cursor-pointer transition-colors duration-150"
                 :class="row.status === 'pending' ? 'bg-amber-50/60 hover:bg-amber-100/50' : 'bg-white hover:bg-slate-50/80'"
                 :data-testid="`cv-row-${row.id}`"
+                @click="selected = row"
               >
                 <!-- 1. Khách hàng (Avatar + Name + subtle CCCD) -->
                 <td class="py-3.5 pl-6 pr-4">
@@ -448,7 +449,7 @@ function getInitials(name?: string | null): string {
                       <button
                         type="button"
                         class="cursor-pointer text-left font-semibold text-brand-700 hover:text-brand-800 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 truncate block text-sm"
-                        @click="selected = row"
+                        @click.stop="selected = row"
                       >
                         {{ nameOf(row) }}
                       </button>
@@ -515,7 +516,7 @@ function getInitials(name?: string | null): string {
 
                 <!-- 6. Thao tác -->
                 <td class="py-3.5 pl-4 pr-6 text-right whitespace-nowrap">
-                  <div class="flex items-center justify-end gap-2">
+                  <div class="flex items-center justify-end gap-2" @click.stop>
                     <template v-if="canDecide && row.status === 'pending'">
                       <button
                         type="button"
