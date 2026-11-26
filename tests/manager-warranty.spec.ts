@@ -364,7 +364,7 @@ describe('ConsoleWarrantyPage', () => {
     expect(text).toContain('Gửi sau hạn');
     expect(text).toContain('Khách đồng ý, chờ đóng');
     expect(text).toContain('Duyệt kết luận');
-    expect(text).toContain('Phân công kỹ thuật viên');
+    expect(text).not.toContain('Phân công kỹ thuật viên');
     expect(text).toContain('Đóng yêu cầu');
     // a closed claim offers no decision
     expect(wrapper.findAll('button').filter((b) => b.text() === 'Duyệt kết luận')).toHaveLength(1);
@@ -397,7 +397,7 @@ describe('ConsoleWarrantyPage', () => {
     const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
 
-    await wrapper.findAll('input[type="checkbox"]')[1].setValue(true);
+    await wrapper.findAll('input[type="checkbox"]')[0].setValue(true);
     await flushPromises();
     expect(apiClientMock.get).toHaveBeenLastCalledWith('/service-manager/warranty-claims', {
       params: { page: 1, limit: 10, declineReview: 'pending' },

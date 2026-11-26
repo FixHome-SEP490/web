@@ -201,16 +201,10 @@ describe('technician warranty claim page', () => {
     expect(wrapper.text()).toContain('Đã xác nhận bạn có mặt');
   });
 
-  it('goes back to the list once the claim is handed back to the manager', async () => {
+  it('offers no way to hand the claim back: the technician of the order handles its warranty', async () => {
     const wrapper = await mountPage(claim());
-    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ technician: null }) } });
-
-    await button(wrapper, 'Không nhận được')!.trigger('click');
-    await wrapper.findAll('button').at(-1)!.trigger('click');
-    await flushPromises();
-
-    expect(apiClientMock.post).toHaveBeenCalledWith('/warranty-claims/claim-1/decline', expect.objectContaining({ reasonCode: expect.any(String) }));
-    expect(routerMock.replace).toHaveBeenCalledWith({ name: 'tech-warranty' });
+    expect(button(wrapper, 'Nhận yêu cầu')).toBeTruthy();
+    expect(button(wrapper, 'Không nhận được')).toBeUndefined();
   });
 
   it('offers no next step for a closed claim', async () => {

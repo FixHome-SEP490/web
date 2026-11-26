@@ -117,7 +117,15 @@ const handleItemClick = async (item: NotificationItem) => {
       return;
     }
     // Visit and profile-review notices carry a visit or profile id, never an order.
-    if (itemType.startsWith('OFFICE_VISIT_') || itemType === 'PROFILE_REJECTED' || itemType === 'KYC_IDENTITY_APPROVED') {
+    if (['KYC_IDENTITY_APPROVED', 'OFFICE_VISIT_MISSED', 'OFFICE_VISIT_RESET', 'OFFICE_VISIT_REMINDER'].includes(itemType)) {
+      router.push('/tech/office-visit');
+      return;
+    }
+    if (['OFFICE_VISIT_BLOCKED', 'OFFICE_VISIT_ATTENDED', 'PROFILE_REJECTED'].includes(itemType)) {
+      router.push('/tech/onboarding');
+      return;
+    }
+    if (itemType.startsWith('SKILL_')) {
       router.push('/tech/profile');
       return;
     }
@@ -155,6 +163,10 @@ const handleItemClick = async (item: NotificationItem) => {
     }
     if (itemType === 'OFFICE_VISIT_BOOKED') {
       router.push('/console/office-visits');
+      return;
+    }
+    if (itemType === 'SKILL_VERIFICATION_RESUBMITTED') {
+      router.push('/console/admin/skill-verifications');
       return;
     }
     if (itemType === 'TECHNICIAN_PROFILE_SUBMITTED') {

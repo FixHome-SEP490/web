@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User, X } from 'lucide-vue-next';
+import { CalendarClock, Check, ChevronRight, ClipboardCheck, CircleCheck, MapPin, MapPinCheck, PackageCheck, User } from 'lucide-vue-next';
 import { ConsoleTabs, FhButton, FhEmptyState, FhPagination, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
@@ -277,9 +277,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
           <div class="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-ink-100 pt-4">
             <div class="flex flex-wrap items-center gap-2">
               <template v-if="claim.status === 'submitted'">
-                <FhButton variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'accept')"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>
-                <FhButton variant="secondary" size="sm" class="h-10" @click.stop="openModal(claim, 'decline')"><X :size="16" aria-hidden="true" /> Không nhận được</FhButton>
-              </template>
+                <FhButton variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'accept')"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>              </template>
               <template v-else-if="claim.status === 'accepted'">
                 <FhButton v-if="!checkedIn(claim)" variant="secondary" size="sm" class="h-10" :disabled="!!busyId" @click.stop="openModal(claim, 'reschedule')"><CalendarClock :size="16" aria-hidden="true" /> Đổi lịch</FhButton>
                 <FhButton

@@ -53,10 +53,60 @@ export interface TechnicianServiceOfferingView {
   service: { id: string; name: string; pricingMode: string; isActive: boolean } | null;
 }
 
+export type SkillEvidenceType =
+  | 'national_skill_certificate'
+  | 'vocational_diploma'
+  | 'electrical_safety_card'
+  | 'manufacturer_training'
+  | 'employer_confirmation'
+  | 'social_insurance'
+  | 'work_photos'
+  | 'other';
+
+export interface SkillEvidenceDetailsInput {
+  evidenceType: SkillEvidenceType;
+  issuer?: string;
+  referenceNumber?: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  claimedYears?: number;
+}
+
 export interface SkillVerificationDocumentView {
   id: string;
   fileName: string;
   issuedById: string | null;
+  evidenceType: SkillEvidenceType | null;
+  issuer: string | null;
+  referenceNumber: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  claimedYears: number | null;
+}
+
+/** Trạng thái một giấy tờ, suy ra ở backend từ các kỹ năng nó gắn vào. */
+export type SentEvidenceStatus = 'in_review' | 'approved' | 'pending' | 'rejected';
+
+/** Một giấy tờ thợ đã nộp (mỗi file một mục). */
+export interface SentSkillEvidence {
+  documentId: string;
+  /** Một kỹ năng giấy tờ gắn vào, dùng cho đường xem ảnh. */
+  serviceId: string;
+  /** Mọi kỹ năng giấy tờ gắn vào; backend cũ không có. */
+  serviceIds?: string[];
+  fileName: string;
+  mimeType: string;
+  evidenceType: SkillEvidenceType | null;
+  issuer: string | null;
+  referenceNumber: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  claimedYears: number | null;
+  /** Backend cũ không có `status`; `editable` thay thế. */
+  status?: SentEvidenceStatus;
+  editable?: boolean;
+  rejectionReason?: string | null;
+  categories: { id: string; name: string }[];
 }
 
 export interface SkillVerificationView {
@@ -150,10 +200,18 @@ function normalizeSkillVerification(payload: unknown): SkillVerificationView {
     documents: Array.isArray(v.documents)
       ? v.documents.map((doc): SkillVerificationDocumentView => {
           const d = isRecord(doc) ? doc : {};
+          const text = (value: unknown) => (value == null || value === '' ? null : String(value));
+          const years = d.claimedYears == null ? NaN : Number(d.claimedYears);
           return {
             id: String(d.id ?? ''),
             fileName: String(d.fileName ?? ''),
             issuedById: d.issuedById == null ? null : String(d.issuedById),
+            evidenceType: text(d.evidenceType) as SkillEvidenceType | null,
+            issuer: text(d.issuer),
+            referenceNumber: text(d.referenceNumber),
+            issuedAt: text(d.issuedAt),
+            expiresAt: text(d.expiresAt),
+            claimedYears: Number.isFinite(years) ? years : null,
           };
         })
       : [],
@@ -279,13 +337,67 @@ export const technicianProfileApi = {
 
   async attachSkillEvidence(
     serviceId: string,
-    doc: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
+    doc: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string } & Partial<SkillEvidenceDetailsInput>,
   ): Promise<SkillVerificationView> {
     const res = await apiClient.post<{ data: unknown }>(
       `/technicians/me/services/${serviceId}/verification/documents`,
       doc,
     );
     return normalizeSkillVerification(res.data.data);
+  },
+
+  /** Giấy tờ thợ đã nộp, mỗi file một mục. */
+  async getMySkillEvidence(): Promise<SentSkillEvidence[]> {
+    const res = await apiClient.get<{ data: unknown }>('/technicians/me/skill-evidence');
+    return Array.isArray(res.data.data) ? (res.data.data as SentSkillEvidence[]) : [];
+  },
+
+  /** Xin chỗ tải ảnh giấy tờ theo nhóm (cùng đường tải của giấy tờ theo kỹ năng). */
+  async requestCategoryEvidenceUploadUrl(mimeType: string): Promise<{ storageObjectPath: string; uploadUrl: string }> {
+    const res = await apiClient.post<{ data: { storageObjectPath: string; uploadUrl: string } }>(
+      '/technicians/me/skill-evidence/upload-url',
+      { mimeType },
+    );
+    return res.data.data;
+  },
+
+  /** Gắn giấy tờ đã tải lên cho mọi kỹ năng thợ có trong `categoryIds`. */
+  async attachCategoryEvidence(
+    categoryIds: string[],
+    doc: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string } & SkillEvidenceDetailsInput,
+  ): Promise<{ attachedSkills: number; serviceIds: string[] }> {
+    const res = await apiClient.post<{ data: { attachedSkills?: number; serviceIds?: string[] } }>('/technicians/me/skill-evidence', { ...doc, categoryIds });
+    return { attachedSkills: Number(res.data.data?.attachedSkills ?? 0), serviceIds: res.data.data?.serviceIds ?? [] };
+  },
+
+  /** Dùng lại giấy tờ đã nộp cho kỹ năng này, không tải lại; giấy tờ kỹ năng đã có thì bị bỏ qua. */
+  async reuseSkillEvidence(serviceId: string, documentIds: string[]): Promise<{ attached: number; skipped: number }> {
+    const res = await apiClient.post<{ data: { attached?: number; skipped?: number } }>(
+      `/technicians/me/services/${serviceId}/verification/documents/reuse`,
+      { documentIds },
+    );
+    return { attached: Number(res.data.data?.attached ?? 0), skipped: Number(res.data.data?.skipped ?? 0) };
+  },
+
+  /** Gỡ một giấy tờ khỏi riêng kỹ năng này; các kỹ năng khác vẫn giữ. */
+  async deleteSkillEvidenceFromSkill(serviceId: string, documentId: string): Promise<void> {
+    await apiClient.delete(`/technicians/me/services/${serviceId}/verification/documents/${documentId}`);
+  },
+
+  /** Gỡ một giấy tờ khỏi mọi kỹ năng nó gắn vào. */
+  async deleteSkillEvidence(documentId: string): Promise<void> {
+    await apiClient.delete(`/technicians/me/skill-evidence/${documentId}`);
+  },
+
+  /** Xin xét duyệt lại một kỹ năng FixHome đã từ chối; giấy tờ đã gửi đi kèm yêu cầu mới. */
+  async resubmitSkill(serviceId: string): Promise<void> {
+    await apiClient.post(`/technicians/me/services/${serviceId}/verification/resubmit`);
+  },
+
+  /** Link ký ngắn hạn để xem ảnh giấy tờ của chính thợ. */
+  async getSkillEvidenceAccess(serviceId: string, documentId: string): Promise<string> {
+    const res = await apiClient.get<{ data: { signedUrl?: string } }>(`/technicians/me/services/${serviceId}/verification/documents/${documentId}/access`);
+    return String(res.data.data?.signedUrl ?? '');
   },
 
   // ---- Lịch làm việc ----
