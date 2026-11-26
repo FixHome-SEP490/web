@@ -3,8 +3,23 @@
 // 08/10/2026). Lowest scores first, why a score moved, and adding or removing
 // points with a reason. Raising a score to 70 or more lifts a running ban.
 import { computed, onMounted, ref } from 'vue';
-import { RotateCcw, X } from 'lucide-vue-next';
-import { FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
+import { getActivePinia } from 'pinia';
+import { toast } from 'vue-sonner';
+import {
+  BadgeCheck,
+  ChevronDown,
+  History,
+  Info,
+  Lock,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  TriangleAlert,
+  User,
+  Users,
+  Wrench,
+} from 'lucide-vue-next';
+import { FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
@@ -12,8 +27,12 @@ import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
 import ConsolePagination from '../../components/console/ConsolePagination.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
-import { CONSOLE_LOAD_ERROR, consoleField, consoleLabel, consoleTextarea } from '../../components/console/console-ui';
-import { reputationApi, type ReputationEvent, type ReputationRow } from '../../api/reputation.api';
+import ReputationHistoryDrawer from '../../components/console/ReputationHistoryDrawer.vue';
+import ReputationAdjustModal from '../../components/console/ReputationAdjustModal.vue';
+import { CONSOLE_LOAD_ERROR, consoleField } from '../../components/console/console-ui';
+import { reputationApi, type ReputationEvent, type ReputationRow, type ReputationSummary } from '../../api/reputation.api';
+import { useAuthStore } from '../../stores/auth';
+import { activeBanUntil, REPUTATION_SUSPEND_THRESHOLD, reputationTierOf } from '../../utils/reputation-rules';
 import { vnDateTimeString } from '../../utils/vn-time';
 import { extractApiErrorMessage } from '../../utils/input-validation';
 
@@ -23,44 +42,66 @@ const search = ref('');
 const page = ref(1);
 const totalPages = ref(0);
 const total = ref(0);
+const systemTotal = ref<number | null>(null);
+const summary = ref<ReputationSummary | null>(null);
 const rows = ref<ReputationRow[]>([]);
 const loading = ref(true);
 const loadError = ref('');
+const showRules = ref(false);
 
-const ROLE_LABELS: Record<string, string> = { customer: 'Khách hàng', technician: 'Kỹ thuật viên' };
-const KIND_LABELS: Record<string, string> = { violation: 'Trừ điểm', adjustment: 'Điều chỉnh', reset: 'Làm mới định kỳ' };
+const canAdjust = computed(() => {
+  if (!getActivePinia()) return true;
+  const auth = useAuthStore();
+  if (!auth.user) return true;
+  return auth.hasPermission('strike:waive');
+});
+
+const ROLE_LABELS: Record<ReputationRow['role'], string> = {
+  customer: 'Khách hàng',
+  technician: 'Kỹ thuật viên',
+};
+
 const columns: ConsoleColumn[] = [
   { key: 'user', label: 'Tài khoản' },
-  { key: 'role', label: 'Vai trò', hideBelow: 'xl' },
-  { key: 'points', label: 'Điểm', align: 'right' },
+  { key: 'role', label: 'Vai trò', hideBelow: 'md' },
+  { key: 'points', label: 'Điểm uy tín', align: 'right' },
+  { key: 'level', label: 'Mức độ', hideBelow: 'lg' },
   { key: 'ban', label: 'Tạm khoá', hideBelow: 'lg' },
-  { key: 'actions', label: '', align: 'right' },
+  { key: 'actions', label: 'Thao tác', align: 'right' },
 ];
-const signed = (delta: number) => (delta > 0 ? `+${delta}` : String(delta));
 
-/** A running ban for the row's role, or null when there is none. */
-function banUntil(row: ReputationRow): string | null {
-  const until = row.role === 'customer' ? row.bookingSuspendedUntil : row.workSuspendedUntil;
-  return until && new Date(until).getTime() > Date.now() ? until : null;
-}
+let activeListRequest = 0;
 
 async function load() {
+  const requestId = ++activeListRequest;
   loading.value = true;
   loadError.value = '';
   try {
+    const trimmedSearch = search.value.trim();
+    const isUnfiltered = !role.value && !trimmedSearch;
     const result = await reputationApi.list({
       role: role.value || undefined,
-      search: search.value.trim() || undefined,
+      search: trimmedSearch || undefined,
       page: page.value,
       pageSize: PAGE_SIZE,
     });
+    if (requestId !== activeListRequest) return;
     rows.value = result.data;
     total.value = result.meta.total;
     totalPages.value = result.meta.totalPages;
+    if (result.summary) {
+      summary.value = result.summary;
+      systemTotal.value = result.summary.totalAccounts;
+    } else if (isUnfiltered) {
+      systemTotal.value = result.meta.total;
+    }
   } catch (error) {
+    if (requestId !== activeListRequest) return;
     loadError.value = extractApiErrorMessage(error, CONSOLE_LOAD_ERROR);
   } finally {
-    loading.value = false;
+    if (requestId === activeListRequest) {
+      loading.value = false;
+    }
   }
 }
 
@@ -75,76 +116,6 @@ function goTo(next: number) {
   void load();
 }
 
-// History
-const historyFor = ref<ReputationRow | null>(null);
-const history = ref<ReputationEvent[]>([]);
-const historyLoading = ref(false);
-const historyError = ref('');
-
-async function openHistory(row: ReputationRow) {
-  historyFor.value = row;
-  history.value = [];
-  historyError.value = '';
-  historyLoading.value = true;
-  try {
-    history.value = await reputationApi.events(row.id);
-  } catch (error) {
-    historyError.value = extractApiErrorMessage(error, CONSOLE_LOAD_ERROR);
-  } finally {
-    historyLoading.value = false;
-  }
-}
-
-// Adjust
-const adjustFor = ref<ReputationRow | null>(null);
-const direction = ref<'add' | 'remove'>('add');
-const amount = ref('10');
-const reason = ref('');
-const adjustError = ref('');
-const busy = ref(false);
-
-const preview = computed(() => {
-  if (!adjustFor.value) return null;
-  const value = Number(amount.value);
-  if (!Number.isInteger(value) || value <= 0) return null;
-  const delta = direction.value === 'add' ? value : -value;
-  return Math.max(0, Math.min(100, adjustFor.value.reputationPoints + delta));
-});
-
-function openAdjust(row: ReputationRow) {
-  adjustFor.value = row;
-  direction.value = 'add';
-  amount.value = '10';
-  reason.value = '';
-  adjustError.value = '';
-}
-
-async function confirmAdjust() {
-  if (!adjustFor.value || busy.value) return;
-  const value = Number(amount.value);
-  if (!Number.isInteger(value) || value < 1 || value > 100) {
-    adjustError.value = 'Số điểm là số nguyên từ 1 đến 100.';
-    return;
-  }
-  const why = reason.value.trim();
-  if (why.length < 5) {
-    adjustError.value = 'Ghi lý do điều chỉnh, tối thiểu 5 ký tự.';
-    return;
-  }
-  busy.value = true;
-  adjustError.value = '';
-  try {
-    const result = await reputationApi.adjust(adjustFor.value.id, direction.value === 'add' ? value : -value, why);
-    adjustFor.value.reputationPoints = result.points;
-    adjustFor.value = null;
-    await load();
-  } catch (error) {
-    adjustError.value = extractApiErrorMessage(error, 'Chưa điều chỉnh được điểm, thử lại sau.');
-  } finally {
-    busy.value = false;
-  }
-}
-
 const hasFilters = computed(() => Boolean(search.value.trim() || role.value));
 function resetFilters() {
   search.value = '';
@@ -152,32 +123,218 @@ function resetFilters() {
   applyFilters();
 }
 
+// Right-side History Drawer (independent loading + race-condition protection)
+const historyFor = ref<ReputationRow | null>(null);
+const history = ref<ReputationEvent[]>([]);
+const historyLoading = ref(false);
+const historyError = ref('');
+let activeHistoryRequest = 0;
+
+async function openHistory(row: ReputationRow) {
+  const requestId = ++activeHistoryRequest;
+  historyFor.value = row;
+  history.value = [];
+  historyError.value = '';
+  historyLoading.value = true;
+  try {
+    const items = await reputationApi.events(row.id);
+    if (requestId !== activeHistoryRequest || historyFor.value?.id !== row.id) return;
+    history.value = items;
+  } catch (error) {
+    if (requestId !== activeHistoryRequest || historyFor.value?.id !== row.id) return;
+    historyError.value = extractApiErrorMessage(error, CONSOLE_LOAD_ERROR);
+  } finally {
+    if (requestId === activeHistoryRequest) {
+      historyLoading.value = false;
+    }
+  }
+}
+
+function closeHistory() {
+  activeHistoryRequest++;
+  historyFor.value = null;
+  history.value = [];
+  historyError.value = '';
+  historyLoading.value = false;
+}
+
+// Adjust Modal
+const adjustFor = ref<ReputationRow | null>(null);
+const adjustSubmitError = ref('');
+const busy = ref(false);
+
+function openAdjust(row: ReputationRow) {
+  if (!canAdjust.value) return;
+  adjustFor.value = row;
+  adjustSubmitError.value = '';
+}
+
+function closeAdjust() {
+  if (busy.value) return;
+  adjustFor.value = null;
+  adjustSubmitError.value = '';
+}
+
+async function submitAdjust(payload: { delta: number; reason: string }) {
+  const target = adjustFor.value;
+  if (!target || busy.value || !canAdjust.value) return;
+  busy.value = true;
+  adjustSubmitError.value = '';
+  try {
+    const result = await reputationApi.adjust(target.id, payload.delta, payload.reason);
+    target.reputationPoints = result.points;
+    adjustFor.value = null;
+    toast.success(`Đã cập nhật điểm uy tín cho ${target.fullName} (${result.points}/100).`);
+    await load();
+    if (historyFor.value?.id === target.id) {
+      const refreshed = rows.value.find((r) => r.id === target.id) ?? {
+        ...historyFor.value,
+        reputationPoints: result.points,
+      };
+      void openHistory(refreshed);
+    }
+  } catch (error) {
+    adjustSubmitError.value = extractApiErrorMessage(error, 'Chưa điều chỉnh được điểm, thử lại sau.');
+  } finally {
+    busy.value = false;
+  }
+}
+
+const statCards = computed(() => {
+  const totalDisplay = summary.value?.totalAccounts ?? systemTotal.value;
+  return [
+    {
+      key: 'total',
+      label: 'Tổng tài khoản',
+      value: loadError.value && totalDisplay === null ? '—' : (totalDisplay ?? '—'),
+      note: null as string | null,
+      icon: Users,
+      tileClass: 'bg-brand-50 text-brand-600',
+    },
+    {
+      key: 'low',
+      label: 'Điểm thấp (< 70)',
+      value: summary.value ? summary.value.lowScoreCount : '—',
+      note: summary.value ? null : 'Chưa có API thống kê',
+      icon: TriangleAlert,
+      tileClass: 'bg-danger-50 text-danger-600',
+    },
+    {
+      key: 'suspended',
+      label: 'Tạm khoá',
+      value: summary.value ? summary.value.suspendedCount : '—',
+      note: summary.value ? null : 'Chưa có API thống kê',
+      icon: Lock,
+      tileClass: 'bg-warning-50 text-warning-600',
+    },
+    {
+      key: 'average',
+      label: 'Điểm trung bình',
+      value: summary.value ? summary.value.averagePoints : '—',
+      note: summary.value ? null : 'Chưa có API thống kê',
+      icon: BadgeCheck,
+      tileClass: 'bg-success-50 text-success-600',
+    },
+  ];
+});
+
+function tierBadgeClass(tone: 'success' | 'warning' | 'danger'): string {
+  if (tone === 'success') return 'bg-success-50 text-success-700';
+  if (tone === 'warning') return 'bg-warning-50 text-warning-700';
+  return 'bg-danger-50 text-danger-700';
+}
+
+function tierIcon(tone: 'success' | 'warning' | 'danger', key: string) {
+  if (key === 'locked') return Lock;
+  if (tone === 'success') return BadgeCheck;
+  return TriangleAlert;
+}
+
 onMounted(load);
 </script>
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Điểm uy tín" :count="loading || loadError ? null : total">
+    <!-- Header & Rules Toggle -->
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Điểm uy tín"
+      :count="loading || loadError ? null : (systemTotal ?? total)"
+    >
       <template #meta>
-        <details class="mt-1 text-sm text-ink-600">
-          <summary class="cursor-pointer whitespace-nowrap font-medium text-brand-700 hover:underline">Quy tắc điểm</summary>
-          <ul class="mt-2 max-w-2xl list-disc space-y-1 pl-5 text-pretty">
-            <li>Bắt đầu <span class="font-num">100</span> điểm, huỷ đơn đã có người nhận trừ <span class="font-num">10</span> điểm.</li>
-            <li>Dưới <span class="font-num">70</span> điểm tạm khoá <span class="font-num">72</span> giờ, dưới <span class="font-num">40</span> điểm <span class="font-num">7</span> ngày, từ <span class="font-num">20</span> điểm trở xuống <span class="font-num">30</span> ngày, hết điểm khoá tài khoản.</li>
-            <li>Điểm làm mới về <span class="font-num">100</span> mỗi <span class="font-num">2</span> tháng.</li>
-          </ul>
-        </details>
+        <div class="mt-1.5">
+          <button
+            type="button"
+            class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-brand-700 transition-colors hover:text-brand-800 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+            :aria-expanded="showRules"
+            @click="showRules = !showRules"
+          >
+            <Info :size="15" aria-hidden="true" />
+            <span>Quy tắc điểm</span>
+            <ChevronDown
+              :size="14"
+              class="transition-transform duration-150"
+              :class="{ 'rotate-180': showRules }"
+              aria-hidden="true"
+            />
+          </button>
+
+          <Transition name="fh-fade-slide">
+            <div
+              v-if="showRules"
+              class="mt-2.5 max-w-3xl rounded-[var(--radius-md)] border border-brand-100 bg-brand-50/60 px-4 py-3 text-xs leading-relaxed text-ink-700"
+            >
+              <ul class="list-disc space-y-1 pl-4 text-pretty">
+                <li>Khởi đầu <strong class="font-num font-semibold text-ink-900">100</strong> điểm; huỷ đơn đã có người nhận trừ <strong class="font-num font-semibold text-ink-900">10</strong> điểm (vi phạm nghĩa vụ bảo hành trừ theo cấu hình hệ thống).</li>
+                <li>Dưới <strong class="font-num font-semibold text-ink-900">70</strong> điểm tạm khoá <strong class="font-num font-semibold text-ink-900">72</strong> giờ; dưới <strong class="font-num font-semibold text-ink-900">40</strong> điểm tạm khoá <strong class="font-num font-semibold text-ink-900">7</strong> ngày; từ <strong class="font-num font-semibold text-ink-900">20</strong> điểm trở xuống tạm khoá <strong class="font-num font-semibold text-ink-900">30</strong> ngày; <strong class="font-num font-semibold text-ink-900">0</strong> điểm khoá tài khoản.</li>
+                <li>Nâng điểm lên từ <strong class="font-num font-semibold text-ink-900">70</strong> điểm trở lên sẽ gỡ tạm khoá đang có; điểm được làm mới về <strong class="font-num font-semibold text-ink-900">100</strong> mỗi <strong class="font-num font-semibold text-ink-900">2</strong> tháng (không áp dụng với tài khoản đã khoá).</li>
+              </ul>
+            </div>
+          </Transition>
+        </div>
       </template>
     </ConsolePageHeader>
 
-    <form class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)" @submit.prevent="applyFilters">
-      <ConsoleSearch v-model="search" :maxlength="100" placeholder="Tìm tên, email, số điện thoại" label="Tìm kiếm" />
-      <select v-model="role" :class="consoleField" aria-label="Vai trò" @change="applyFilters">
+    <!-- 4 Compact Summary Cards -->
+    <section class="animate-slide-up-delay-1 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Thống kê điểm uy tín">
+      <div
+        v-for="card in statCards"
+        :key="card.key"
+        class="flex items-center gap-3.5 rounded-[var(--radius-md)] border border-ink-200/80 bg-white/95 px-4 py-3.5 shadow-(--shadow-e1)"
+        :title="card.note ?? undefined"
+      >
+        <div
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)]"
+          :class="card.tileClass"
+        >
+          <component :is="card.icon" :size="20" :stroke-width="1.75" aria-hidden="true" />
+        </div>
+        <div class="min-w-0">
+          <p class="truncate text-xs font-medium text-ink-500">{{ card.label }}</p>
+          <p class="mt-0.5 font-num text-xl font-bold leading-tight text-ink-900">{{ card.value }}</p>
+          <p v-if="card.note" class="mt-0.5 truncate text-[11px] text-ink-400">{{ card.note }}</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Single-row Unboxed Search & Filter Bar -->
+    <form class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5" @submit.prevent="applyFilters">
+      <ConsoleSearch
+        v-model="search"
+        :maxlength="100"
+        placeholder="Tìm tên, email, số điện thoại"
+        label="Tìm kiếm"
+        class="sm:w-80 lg:w-96"
+      />
+      <select v-model="role" :class="consoleField" class="w-full sm:w-44" aria-label="Vai trò" @change="applyFilters">
         <option value="">Tất cả vai trò</option>
         <option value="customer">Khách hàng</option>
         <option value="technician">Kỹ thuật viên</option>
       </select>
-      <FhButton type="submit" variant="secondary" size="sm">Tìm</FhButton>
+      <FhButton type="submit" variant="primary" size="sm">
+        <Search :size="15" aria-hidden="true" />
+        Tìm
+      </FhButton>
       <button
         v-if="hasFilters"
         type="button"
@@ -189,124 +346,113 @@ onMounted(load);
       </button>
     </form>
 
-    <div class="animate-slide-up-delay-2 space-y-5">
+    <!-- Accounts Table & Pagination -->
+    <div class="animate-slide-up-delay-2 space-y-4">
       <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
       <ConsoleTable
         v-else
         :columns="columns"
         :rows="rows"
         :loading="loading"
+        :row-class="(row) => (historyFor?.id === row.id ? 'bg-brand-50/70' : undefined)"
         empty-text="Không có tài khoản nào khớp bộ lọc."
       >
         <template #cell-user="{ row }">
           <div class="font-medium text-ink-900">{{ row.fullName }}</div>
-          <div class="truncate text-xs text-ink-500" :title="row.email">{{ row.email }}<template v-if="row.phoneNumber"> · <span class="whitespace-nowrap font-num">{{ row.phoneNumber }}</span></template></div>
+          <div class="truncate text-xs text-ink-500" :title="row.email">
+            {{ row.email }}<template v-if="row.phoneNumber"> · <span class="whitespace-nowrap font-num">{{ row.phoneNumber }}</span></template>
+          </div>
         </template>
+
         <template #cell-role="{ row }">
-          <span class="whitespace-nowrap text-ink-700">{{ ROLE_LABELS[row.role] ?? 'Không rõ' }}</span>
+          <span
+            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-medium"
+            :class="row.role === 'technician' ? 'bg-brand-50 text-brand-700' : 'bg-ink-100 text-ink-700'"
+          >
+            <component :is="row.role === 'technician' ? Wrench : User" :size="12" aria-hidden="true" />
+            <span>{{ ROLE_LABELS[row.role] ?? 'Không rõ' }}</span>
+          </span>
         </template>
+
         <template #cell-points="{ row }">
-          <span class="font-num font-semibold" :class="row.reputationPoints < 70 ? 'text-danger-700' : 'text-ink-900'">{{ row.reputationPoints }}</span>
+          <span
+            class="font-num font-semibold"
+            :class="row.reputationPoints < REPUTATION_SUSPEND_THRESHOLD ? 'text-danger-700' : 'text-ink-900'"
+          >
+            {{ row.reputationPoints }}
+          </span>
         </template>
+
+        <template #cell-level="{ row }">
+          <span
+            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] px-2.5 py-1 text-xs font-medium"
+            :class="tierBadgeClass(reputationTierOf(row).tone)"
+          >
+            <component
+              :is="tierIcon(reputationTierOf(row).tone, reputationTierOf(row).key)"
+              :size="12"
+              aria-hidden="true"
+            />
+            <span>{{ reputationTierOf(row).label }}</span>
+          </span>
+        </template>
+
         <template #cell-ban="{ row }">
-          <span v-if="row.status === 'locked'" class="whitespace-nowrap font-medium text-danger-700">Đã khoá tài khoản</span>
-          <span v-else-if="banUntil(row)" class="whitespace-nowrap text-danger-700">Tới <span class="font-num">{{ vnDateTimeString(banUntil(row)!) }}</span></span>
+          <span v-if="row.status === 'locked'" class="inline-flex items-center gap-1 whitespace-nowrap font-medium text-danger-700">
+            <Lock :size="13" aria-hidden="true" />
+            Đã khoá tài khoản
+          </span>
+          <span v-else-if="activeBanUntil(row)" class="whitespace-nowrap font-medium text-danger-700">
+            Tới <span class="font-num">{{ vnDateTimeString(activeBanUntil(row)!) }}</span>
+          </span>
           <span v-else class="text-ink-400">Không</span>
         </template>
+
         <template #cell-actions="{ row }">
           <div class="flex items-center justify-end gap-2">
-            <FhButton variant="secondary" size="sm" @click="openHistory(row)">Lịch sử</FhButton>
-            <ConsoleMoreMenu label="Thao tác khác với tài khoản">
-              <ConsoleMenuItem @click="openAdjust(row)">Điều chỉnh</ConsoleMenuItem>
+            <FhButton variant="secondary" size="sm" @click="openHistory(row)">
+              <History :size="14" aria-hidden="true" />
+              Lịch sử
+            </FhButton>
+            <ConsoleMoreMenu v-if="canAdjust" label="Thao tác khác với tài khoản">
+              <ConsoleMenuItem @click="openAdjust(row)">
+                <SlidersHorizontal :size="14" aria-hidden="true" />
+                Điều chỉnh
+              </ConsoleMenuItem>
             </ConsoleMoreMenu>
           </div>
         </template>
       </ConsoleTable>
-      <ConsolePagination :page="page" :total-pages="totalPages" :disabled="loading" @update:page="goTo" />
+
+      <ConsolePagination
+        :page="page"
+        :total-pages="totalPages"
+        :total="total"
+        :page-size="PAGE_SIZE"
+        :disabled="loading"
+        @update:page="goTo"
+      />
     </div>
 
-    <Teleport to="body">
-      <Transition name="fh-modal">
-        <div
-          v-if="historyFor"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reputation-history-title"
-          @click.self="historyFor = null"
-          @keydown.esc="historyFor = null"
-        >
-          <div class="fh-modal-panel flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-[var(--radius-lg)] border border-ink-200 bg-white shadow-(--shadow-e3)">
-            <div class="flex items-start justify-between gap-3 border-b border-ink-200 bg-ink-25/60 px-6 py-4">
-              <div>
-                <h3 id="reputation-history-title" class="text-base font-semibold text-ink-900">Lịch sử điểm: {{ historyFor.fullName }}</h3>
-                <p class="mt-0.5 text-xs text-ink-500">Mới nhất trước.</p>
-              </div>
-              <button
-                type="button"
-                class="cursor-pointer rounded-[var(--radius-sm)] p-1.5 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
-                aria-label="Đóng"
-                @click="historyFor = null"
-              >
-                <X :size="18" aria-hidden="true" />
-              </button>
-            </div>
+    <!-- Right-side Quick-View History Drawer -->
+    <ReputationHistoryDrawer
+      :account="historyFor"
+      :events="history"
+      :loading="historyLoading"
+      :error="historyError"
+      :can-adjust="canAdjust"
+      @close="closeHistory"
+      @retry="historyFor && openHistory(historyFor)"
+      @adjust="openAdjust"
+    />
 
-            <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-4">
-              <FhSkeleton v-if="historyLoading" height="36px" :count="3" />
-              <p v-else-if="historyError" class="text-sm text-danger-700">{{ historyError }}</p>
-              <p v-else-if="history.length === 0" class="py-6 text-center text-sm text-ink-500">Chưa có thay đổi nào.</p>
-              <ul v-else class="divide-y divide-ink-100" data-testid="reputation-events">
-                <li v-for="event in history" :key="event.id" class="flex items-start justify-between gap-3 py-2.5 text-sm">
-                  <div class="min-w-0">
-                    <div class="font-medium text-ink-800">{{ KIND_LABELS[event.kind] ?? 'Thay đổi điểm' }} · <span class="whitespace-nowrap font-num text-xs text-ink-500">{{ vnDateTimeString(event.createdAt) }}</span></div>
-                    <div class="mt-0.5 break-words text-xs text-ink-600">{{ [event.reason, event.penalty].filter(Boolean).join(' ') }}</div>
-                  </div>
-                  <div class="shrink-0 text-right">
-                    <div class="font-num font-semibold" :class="event.delta < 0 ? 'text-danger-700' : 'text-success-700'">{{ signed(event.delta) }}</div>
-                    <div class="whitespace-nowrap font-num text-xs text-ink-500">còn {{ event.pointsAfter }}</div>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            <div class="flex justify-end border-t border-ink-200 bg-ink-25/60 px-6 py-4">
-              <FhButton variant="secondary" size="sm" @click="historyFor = null">Đóng</FhButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <FhConfirmDialog
-      :open="!!adjustFor"
-      :title="`Điều chỉnh điểm: ${adjustFor?.fullName ?? ''}`"
-      consequence="Nâng lên từ 70 điểm thì gỡ tạm khoá đang có. Lý do được ghi vào lịch sử và gửi cho người dùng."
-      confirm-text="Lưu điều chỉnh"
-      cancel-text="Huỷ"
-      :danger="false"
-      :loading="busy"
-      @confirm="confirmAdjust"
-      @cancel="adjustFor = null"
-    >
-      <div class="space-y-3 text-sm">
-        <div class="flex gap-4">
-          <label class="flex cursor-pointer items-center gap-1.5"><input v-model="direction" type="radio" value="add" class="accent-brand-600" /> Cộng điểm</label>
-          <label class="flex cursor-pointer items-center gap-1.5"><input v-model="direction" type="radio" value="remove" class="accent-brand-600" /> Trừ điểm</label>
-        </div>
-        <label :class="consoleLabel">
-          Số điểm
-          <input v-model="amount" type="number" min="1" max="100" step="1" inputmode="numeric" :class="consoleField" class="font-num" data-testid="adjust-amount" />
-        </label>
-        <label :class="consoleLabel">
-          Lý do
-          <textarea v-model="reason" rows="3" maxlength="500" :class="consoleTextarea" data-testid="adjust-reason" />
-        </label>
-        <p v-if="preview !== null" class="text-ink-600">Điểm sau khi điều chỉnh: <strong class="font-num">{{ adjustFor?.reputationPoints }} → {{ preview }}</strong></p>
-        <Transition name="fh-fade-slide">
-          <p v-if="adjustError" class="text-danger-700" role="alert">{{ adjustError }}</p>
-        </Transition>
-      </div>
-    </FhConfirmDialog>
+    <!-- Adjust Reputation Modal -->
+    <ReputationAdjustModal
+      :account="adjustFor"
+      :busy="busy"
+      :submit-error="adjustSubmitError"
+      @close="closeAdjust"
+      @submit="submitAdjust"
+    />
   </div>
 </template>

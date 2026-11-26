@@ -9,7 +9,14 @@ export interface ReputationEvent {
   reason: string;
   penalty?: string | null;
   createdAt: string;
+  serviceOrderId?: string | null;
+  cancellationId?: string | null;
+  supportCaseId?: string | null;
+  warrantyClaimId?: string | null;
+  warrantyCause?: 'decline' | 'no_show' | 'unfixed' | null;
   actorUserId?: string | null;
+  orderCode?: string | null;
+  actorName?: string | null;
 }
 
 /** The signed-in customer's or technician's own score (GET /reputation/me). */
@@ -34,9 +41,17 @@ export interface ReputationRow {
   workSuspendedUntil: string | null;
 }
 
+export interface ReputationSummary {
+  totalAccounts: number;
+  lowScoreCount: number;
+  suspendedCount: number;
+  averagePoints: number;
+}
+
 export interface ReputationPage {
   data: ReputationRow[];
   meta: { page: number; limit: number; total: number; totalPages: number };
+  summary?: ReputationSummary | null;
 }
 
 export const reputationApi = {
@@ -46,8 +61,12 @@ export const reputationApi = {
   },
 
   async list(params: { role?: 'customer' | 'technician'; search?: string; page?: number; pageSize?: number }): Promise<ReputationPage> {
-    const res = await apiClient.get<{ data: ReputationRow[]; meta: ReputationPage['meta'] }>('/reputation', { params });
-    return { data: res.data.data ?? [], meta: res.data.meta ?? { page: 1, limit: params.pageSize ?? 20, total: 0, totalPages: 0 } };
+    const res = await apiClient.get<{ data: ReputationRow[]; meta: ReputationPage['meta']; summary?: ReputationSummary | null }>('/reputation', { params });
+    return {
+      data: res.data.data ?? [],
+      meta: res.data.meta ?? { page: 1, limit: params.pageSize ?? 20, total: 0, totalPages: 0 },
+      summary: res.data.summary ?? null,
+    };
   },
 
   async events(userId: string): Promise<ReputationEvent[]> {
@@ -55,8 +74,8 @@ export const reputationApi = {
     return res.data.data ?? [];
   },
 
-  async adjust(userId: string, delta: number, reason: string): Promise<{ points: number }> {
-    const res = await apiClient.post<{ data: { points: number } }>(`/reputation/${userId}/adjust`, { delta, reason });
+  async adjust(userId: string, delta: number, reason: string): Promise<{ points: number; event?: ReputationEvent }> {
+    const res = await apiClient.post<{ data: { points: number; event?: ReputationEvent } }>(`/reputation/${userId}/adjust`, { delta, reason });
     return res.data.data;
   },
 };
