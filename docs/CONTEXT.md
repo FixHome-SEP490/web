@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-26 10:17 (UTC+7) · Người cập nhật (git): hoangtruong01 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-26 15:46 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/part-returns-groups-302
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -627,6 +627,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+- 2026-11-26 15:46 (UTC+7) | ToanAltF4 | fix/part-returns-groups-302 | BUG 302: trang Linh kiện cần trả của thợ đọc từng nhóm từ /part-returns/mine?status=, ô đếm và tab lấy số từ meta máy chủ, tab Đã hoàn tất hiện đúng danh sách, nhãn Chưa ghi dùng
 - 2026-11-26 10:17 (UTC+7) | hoangtruong01 | dev | Sửa thứ tự thời gian và giữ 40 dòng nhật ký mới nhất trong context để qua CI
 - 2026-11-25 22:26 (UTC+7) | Lạc Vỹ | LacVy | Gộp dev (a0eedb4) vào LacVy: giữ nhật ký cả hai bên và giữ nhãn Hỗ trợ và khiếu nại trong console-navigation.ts
 - 2026-11-25 21:37 (UTC+7) | Hgnv11 | dev | Thêm chọn kênh OTP Email/SMS khi đăng ký và thẻ xác thực email/SĐT trong hồ sơ; CHƯA KIỂM CHỨNG với backend thật
@@ -666,4 +667,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-21 00:38 (UTC+7) | ToanAltF4 | fix/visit-device-links-181-182 | Bug 181/182: trang chủ khách mở thiết bị của lượt nhiều máy về trang lượt, ghi Kỹ thuật viên đã đến khi đã check-in; nút quay lại ở chi tiết đơn của lượt về trang lượt
 - 2026-11-21 00:33 (UTC+7) | ToanAltF4 | fix/bug184-part-return-cancelled | BUG 184: trang công việc của thợ hiện linh kiện cần trả và nút báo đã trả khi đơn (máy trong lượt nhiều máy) đã huỷ, kể cả khi thợ không còn phụ trách đơn
 - 2026-11-20 23:41 (UTC+7) | Hgnv11 | dev | Thêm trang console Xác nhận khuôn mặt check-in (so ảnh check-in với ảnh đăng ký, duyệt hoặc từ chối) và thông báo CHECKIN_FACE_*
-- 2026-11-19 14:44 (UTC+7) | Lạc Vỹ | LacVy | Gỡ ràng buộc UI lệch Backend: chuẩn hóa ô tiền/min/max/regex khớp DTO và bỏ chặn cứng theo client (OTP, địa chỉ, số dư, hủy đơn, trần bảo hành).

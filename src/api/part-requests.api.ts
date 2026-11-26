@@ -179,6 +179,38 @@ export interface PartCustodyReturnRecord {
   cohortActivatedAt?: string;
 }
 
+/** The three groups of the technician's return page (BUG DETECTOR 302, PO). */
+export type MyReturnGroup = 'need_declare' | 'awaiting_manager' | 'completed';
+export interface MyReturnGroupCount { qty: number; rows: number; orders: number }
+export interface MyReturnsPage {
+  records: PartCustodyReturnRecord[];
+  /** Counters of every group from the server; null when the server does not send them. */
+  counts: Record<MyReturnGroup | 'exception' | 'all', MyReturnGroupCount> | null;
+}
+
+/**
+ * Group of one line, the same as the server's: outstanding needs declaring; declared or
+ * partially received waits for the manager; nothing left (all used, or received) is completed.
+ * A reported mismatch belongs to none of them.
+ */
+export function partReturnGroup(record: PartCustodyReturnRecord): MyReturnGroup | null {
+  switch (record.returnStatus) {
+    case 'outstanding': return 'need_declare';
+    case 'declared': case 'partially_received': return 'awaiting_manager';
+    case 'not_required': case 'received': return 'completed';
+    case 'exception': return null;
+  }
+  if (record.discrepancies?.length && record.outstandingQty > 0) return null;
+  if (record.outstandingQty <= 0) return 'completed';
+  return record.declaredQty > 0 ? 'awaiting_manager' : 'need_declare';
+}
+
+const groupCount = (value: unknown): MyReturnGroupCount => {
+  const v = (value ?? {}) as Record<string, unknown>;
+  const n = (x: unknown) => (Number.isSafeInteger(Number(x)) && Number(x) >= 0 ? Number(x) : 0);
+  return { qty: n(v.qty), rows: n(v.rows), orders: n(v.orders) };
+};
+
 export interface DeclareReturnPayload {
   quantity: number;
   expectedVersion: number;
@@ -678,6 +710,27 @@ export const partRequestsApi = {
     return {
       records: res.data.data || [],
       completedQty: Number.isSafeInteger(completed) && completed >= 0 ? completed : null,
+    };
+  },
+
+  /** One group of the return page (or all lines), with every group's counters from the server. */
+  async getMyReturnsPage(status: MyReturnGroup | 'all', page = 1, pageSize = 100): Promise<MyReturnsPage> {
+    const res = await apiClient.get<{ data: PartCustodyReturnRecord[]; meta?: { groups?: Record<string, unknown> } }>(
+      '/part-returns/mine',
+      { params: { status, page, pageSize } },
+    );
+    const groups = res.data.meta?.groups;
+    return {
+      records: res.data.data || [],
+      counts: groups && typeof groups === 'object'
+        ? {
+          need_declare: groupCount(groups.need_declare),
+          awaiting_manager: groupCount(groups.awaiting_manager),
+          completed: groupCount(groups.completed),
+          exception: groupCount(groups.exception),
+          all: groupCount(groups.all),
+        }
+        : null,
     };
   },
 
