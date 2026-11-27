@@ -400,13 +400,14 @@ onUnmounted(() => {
 
 const lead = computed(() => visit.value?.items.find((item) => item.booking?.id === visit.value?.leadBookingId)?.booking ?? null);
 const cancelled = computed(() => visit.value?.status === 'cancelled');
-const interruptedDevices = computed(() => checkout.value?.devices.filter(device => device.state === 'interrupted') ?? []);
+const interruptedDevices = computed(() => checkout.value?.devices.filter(device => device.state === 'interrupted' && !device.rebooked) ?? []);
+const rebookedDevices = computed(() => checkout.value?.devices.filter(device => device.rebookedTo) ?? []);
 const financialFollowupRequired = computed(() => checkout.value?.financialFollowupRequired === true
   || checkout.value?.devices.some(device => device.financialFollowupRequired === true) === true);
 const failedBookingIds = computed(() => {
   if (checkoutError.value) return [];
   return (visit.value?.items ?? []).flatMap(item => item.booking?.id
-    && checkout.value?.devices.some(device => device.bookingId === item.booking!.id && device.state === 'failed') ? [item.booking.id] : []);
+    && checkout.value?.devices.some(device => device.bookingId === item.booking!.id && device.state === 'failed' && !device.rebooked) ? [item.booking.id] : []);
 });
 const held = computed(() => (checkout.value?.devices ?? []).some((device) => device.serviceOrderId));
 const matchingState = computed(() => lead.value?.status ?? 'SUBMITTED');
@@ -1274,6 +1275,15 @@ async function answerCash(agreed: boolean) {
             <div v-if="interruptedDevices.length" class="rounded-xl bg-ink-50/80 p-3 text-sm text-ink-700" data-testid="visit-interrupted">
               <StoppedDevicesRebookPicker :group-id="visitId" :customer-id="auth.user?.id" :revalidation="rebookVerificationVersion" :devices="interruptedDevices" :disabled="checkoutLoading || !!checkoutError || !!loadError" />
             </div>
+            <FhButton
+              v-for="device in rebookedDevices"
+              :key="device.bookingId"
+              variant="secondary"
+              :data-testid="`visit-rebooked-${device.sequence}`"
+              @click="router.push(device.rebookedTo!.visitGroupId ? `/app/visits/${device.rebookedTo!.visitGroupId}` : `/app/bookings/${device.rebookedTo!.bookingId}/candidates`)"
+            >
+              Máy {{ device.sequence }}: đã đặt lịch mới · Xem
+            </FhButton>
             <FhButton
               v-if="failedBookingIds.length > 1"
               variant="secondary"

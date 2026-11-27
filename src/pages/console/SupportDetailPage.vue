@@ -49,7 +49,6 @@ import {
   type SupportCaseFinalStatus,
   type SupportCaseResolvePayload,
   type TechnicianReportReasonClass,
-  type TechnicianReportReasonCode,
   type TechnicianResponsibility,
 } from '../../api/support-cases.api';
 import {
@@ -65,6 +64,7 @@ import {
   CASH_CONFIRMED_BY_MANAGER,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
+  technicianReportCodeLabels,
   supportExecutionLabel,
 } from './support-cases.utils';
 
@@ -107,17 +107,6 @@ const responsibilityCommandId = ref<string | null>(null);
 const technicianReportClassLabels: Record<TechnicianReportReasonClass, string> = {
   technician_skill_gap: 'Lỗi thuộc kỹ năng hoặc thao tác kỹ thuật',
   non_technician_exception: 'Ngoại lệ thiết bị hoặc khách hàng',
-};
-const technicianReportCodeLabels: Record<TechnicianReportReasonCode, string> = {
-  skill_gap: 'Thiếu kỹ năng hoặc thao tác chưa đúng',
-  device_too_old: 'Thiết bị đã quá cũ',
-  severe_damage: 'Thiết bị hư hỏng nặng',
-  no_compatible_part: 'Không có linh kiện phù hợp',
-  manufacturer_warranty_or_workshop: 'Cần trung tâm hoặc bảo hành hãng',
-  customer_absent: 'Khách không có mặt',
-  customer_unreachable: 'Không liên lạc được khách',
-  customer_cancelled: 'Khách đã hủy',
-  dispute_or_other: 'Tranh chấp hoặc tình huống khác',
 };
 const responsibilityLabels: Record<TechnicianResponsibility, string> = {
   pending: 'Chờ quản lý đánh giá',
