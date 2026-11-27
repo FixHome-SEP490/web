@@ -1,6 +1,19 @@
-import type { SupportCaseStatus, SupportCaseType, SupportCaseSummary } from '../../api/support-cases.api';
+import type { SupportCaseStatus, SupportCaseType, SupportCaseSummary, TechnicianReportReasonCode } from '../../api/support-cases.api';
 import { userFacingError } from '../../utils/user-facing-error';
 import { vnDateTimeString } from '../../utils/vn-time';
+
+/** The reason the technician picked when reporting; the queue shows it instead of one generic label for every report. */
+export const technicianReportCodeLabels: Record<TechnicianReportReasonCode, string> = {
+  skill_gap: 'Thiếu kỹ năng hoặc thao tác chưa đúng',
+  device_too_old: 'Thiết bị đã quá cũ',
+  severe_damage: 'Thiết bị hư hỏng nặng',
+  no_compatible_part: 'Không có linh kiện phù hợp',
+  manufacturer_warranty_or_workshop: 'Cần trung tâm hoặc bảo hành hãng',
+  customer_absent: 'Khách không có mặt',
+  customer_unreachable: 'Không liên lạc được khách',
+  customer_cancelled: 'Khách đã hủy',
+  dispute_or_other: 'Tranh chấp hoặc tình huống khác',
+};
 
 export const supportCaseTypeLabels: Record<SupportCaseType, string> = {
   matching_exhausted: 'Không ghép được thợ',

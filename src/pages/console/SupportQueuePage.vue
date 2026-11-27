@@ -21,6 +21,7 @@ import {
   isResponseOverdue,
   supportCaseStatusLabels,
   supportCaseTypeLabels,
+  technicianReportCodeLabels,
   supportExecutionLabel,
 } from './support-cases.utils';
 import { useRoute, useRouter } from 'vue-router';
@@ -83,6 +84,9 @@ let latestRequest = 0;
 function displayCaseTypeLabel(row: SupportCaseSummary): string {
   if (row.requestIntent === 'stop_or_replace') {
     return 'Khách yêu cầu dừng sửa / Đổi thợ';
+  }
+  if (row.caseType === 'technician_replacement' && row.reasonCode) {
+    return technicianReportCodeLabels[row.reasonCode] ?? supportCaseTypeLabels[row.caseType];
   }
   return supportCaseTypeLabels[row.caseType];
 }
