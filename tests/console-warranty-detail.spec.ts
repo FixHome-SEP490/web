@@ -81,15 +81,15 @@ describe('service manager warranty claim page', () => {
     expect(apiClientMock.get).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1');
     const text = wrapper.text();
     for (const expected of ['Board X', '#SO-1', 'Máy giặt lại không vắt được', '0911222333', '12 Lê Lợi, Quận 1', 'Thợ Hai',
-      'Thợ Một', 'Đã thanh toán', '90 ngày', 'Công thay bo mạch', 'Bo mạch cháy ở chân cắm', 'Đề xuất: Được bảo hành: lỗi do linh kiện', 'Chưa duyệt']) {
+      'Thợ Một', 'Đã thanh toán', '90 ngày', 'Công thay bo mạch', 'Bo mạch cháy ở chân cắm', 'Được bảo hành: lỗi do linh kiện']) {
       expect(text).toContain(expected);
     }
   });
 
   it('marks the invoice line the customer is claiming on and shows the money', async () => {
     const wrapper = await mountPage(claim());
-    expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('Thợ báo hỏng');
-    expect(wrapper.get('[data-testid="warranty-line-line-1"]').text()).not.toContain('Thợ báo hỏng');
+    expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('Kỹ thuật viên báo hỏng');
+    expect(wrapper.get('[data-testid="warranty-line-line-1"]').text()).not.toContain('Kỹ thuật viên báo hỏng');
     expect(wrapper.get('[data-testid="warranty-line-line-2"]').text()).toContain('FixHome');
     expect(wrapper.findAll('[data-money]').map((m) => m.text())).toEqual(expect.arrayContaining(['700000', '1000000']));
   });
@@ -119,8 +119,8 @@ describe('service manager warranty claim page', () => {
     const text = wrapper.text();
     expect(text).toContain('Thợ Chín');
     expect(text).toContain('Tuần này kẹt lịch');
-    expect(text).toContain('Chờ quản lý xét');
-    expect(button(wrapper, 'Xét từ chối')).toBeTruthy();
+    expect(text).toContain('cần xét kỹ thuật viên không phản hồi');
+    expect(button(wrapper, 'Xét không phản hồi')).toBeTruthy();
   });
 
   it('shows the warranty part with the faulty-part inspection and who pays', async () => {
@@ -128,14 +128,9 @@ describe('service manager warranty claim page', () => {
       partRequest: { id: 'pr-1', status: 'requested', chargeTechnician: true, faultyInspectionResult: 'installation', faultyInspectionNote: 'Đấu sai cực dây nguồn', faultyInspectionEvidence: ['https://cdn.test/f.jpg'], faultyInspectedAt: '2026-11-02T01:00:00.000Z', items: [{ id: 'i1', name: 'Board X', quantity: 1, unitPrice: 700000, usageStatus: 'pending' }] },
     }));
     const text = wrapper.text();
-    expect(text).toContain('Do lắp đặt, thợ trả tiền');
+    expect(text).toContain('Do lắp đặt, kỹ thuật viên trả tiền');
     expect(text).toContain('Kỹ thuật viên');
     expect(text).toContain('Đấu sai cực dây nguồn');
-  });
-
-  it('links to the other claims of the same order', async () => {
-    const wrapper = await mountPage(claim({}, { otherClaims: [{ id: 'claim-0', status: 'resolved', submittedAt: '2026-10-25T01:00:00.000Z', itemDescription: 'Công thay bo mạch' }] }));
-    expect(wrapper.find('a[href="/console/warranty/claim-0"]').exists()).toBe(true);
   });
 
   it('offers the next decision for the state of the claim, to a service manager only', async () => {
@@ -185,6 +180,37 @@ describe('service manager warranty claim page', () => {
     expect(wrapper.text()).not.toContain('Chưa có kỹ thuật viên nào từ chối hoặc vắng mặt.');
     expect(wrapper.text()).not.toContain('Chưa có kỹ thuật viên nhận và hẹn kiểm tra.');
     expect(wrapper.text()).not.toContain('Không tìm thấy hạng mục bảo hành.');
+  });
+
+  it('says who has to act next and builds the history only from recorded moments', async () => {
+    const wrapper = await mountPage(claim());
+    expect(wrapper.get('[data-testid="warranty-next-step"]').text()).toContain('Quản lý dịch vụ cần duyệt kết luận');
+    expect(wrapper.get('[data-testid="warranty-proposal-card"]').text()).toContain('Bo mạch cháy ở chân cắm');
+    expect(wrapper.get('[data-testid="warranty-technician-card"]').text()).toContain('Thợ Hai');
+    const text = wrapper.text();
+    expect(text).not.toContain('Xác minh bảo hành');
+    expect(text).not.toContain('Phân công kỹ thuật viên');
+  });
+
+  it('shows the decision card and the customer reply once they exist', async () => {
+    const wrapper = await mountPage(claim({ status: 'awaiting_customer', customerResponse: 'agreed', resolutionNotes: 'Đã thay bo mạch mới' }, {
+      decision: { finalResult: 'covered_part', finalReasonCode: null, smOverrodeProposal: false, reviewedBy: { id: 'sm-1', fullName: 'Quản lý B' }, reviewedAt: '2026-11-02T01:00:00.000Z', customerRespondedAt: '2026-11-03T01:00:00.000Z', awaitingSince: null, escalatedSupportCaseId: null },
+    }));
+    expect(wrapper.get('[data-testid="warranty-decision-card"]').text()).toContain('Quản lý B');
+    expect(wrapper.get('[data-testid="warranty-decision-card"]').text()).toContain('Đã thay bo mạch mới');
+    expect(wrapper.get('[data-testid="warranty-outcome-card"]').text()).toContain('Đồng ý');
+    expect(wrapper.get('[data-testid="warranty-next-step"]').text()).toContain('chờ quản lý dịch vụ đóng');
+  });
+
+  it('shows the part the technician named, not the item the claim was filed against', async () => {
+    const base = claim();
+    const lines = [...base.detail.originalJob.lines.map((l) => ({ ...l, faulty: false })), { ...base.detail.originalJob.lines[1], id: 'line-3', description: 'Cầu dao 16A', faulty: true }];
+    const wrapper = await mountPage(claim({}, { originalJob: { ...base.detail.originalJob, lines } }));
+    const card = wrapper.get('[data-testid="warranty-claimed-part"]').text();
+    expect(card).toContain('Cầu dao 16A');
+    expect(card).not.toContain('Board X');
+    const none = await mountPage(claim({}, { originalJob: { ...base.detail.originalJob, lines: base.detail.originalJob.lines.map((l) => ({ ...l, faulty: false })) } }));
+    expect(none.get('[data-testid="warranty-claimed-part"]').text()).toContain('Chưa xác định');
   });
 
   it('shows a retryable error when the claim cannot be loaded', async () => {

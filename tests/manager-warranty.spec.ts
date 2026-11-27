@@ -63,7 +63,7 @@ describe('warrantyManagerApi', () => {
 
   it('drops empty filters, keeps real ones and reads the paginated envelope', async () => {
     apiClientMock.get.mockResolvedValueOnce(listResponse([claim()]));
-    const result = await warrantyManagerApi.listQueue({ page: 1, limit: 10, status: undefined, unassigned: false, technicianId: 'tech-1' });
+    const result = await warrantyManagerApi.listQueue({ page: 1, limit: 10, status: undefined, technicianId: 'tech-1' });
     expect(apiClientMock.get).toHaveBeenCalledWith('/service-manager/warranty-claims', {
       params: { page: 1, limit: 10, technicianId: 'tech-1' },
     });
@@ -72,13 +72,11 @@ describe('warrantyManagerApi', () => {
 
   it('posts each decision to its own route', async () => {
     apiClientMock.post.mockResolvedValue({ data: { data: claim() } });
-    await warrantyManagerApi.assign('claim-1', 'tech-2');
     await warrantyManagerApi.approve('claim-1', { customerNote: 'Đã kiểm tra kỹ' });
     await warrantyManagerApi.reject('claim-1', { reasonCode: 'expired', customerNote: 'Đã hết hạn bảo hành.' });
     await warrantyManagerApi.close('claim-1', { outcome: 'resolved' });
     await warrantyManagerApi.reviewDecline('claim-1', { valid: false, note: 'Lịch của thợ còn trống.' });
     expect(apiClientMock.post.mock.calls.map((call) => call[0])).toEqual([
-      '/service-manager/warranty-claims/claim-1/assign',
       '/service-manager/warranty-claims/claim-1/approve',
       '/service-manager/warranty-claims/claim-1/reject',
       '/service-manager/warranty-claims/claim-1/close',
@@ -94,9 +92,7 @@ describe('warrantyManagerApi', () => {
     });
   });
 
-  it('reads eligible technicians and the rates for a window', async () => {
-    apiClientMock.get.mockResolvedValueOnce({ data: { data: [{ id: 'tech-2', fullName: 'B' }] } });
-    expect(await warrantyManagerApi.eligibleTechnicians()).toEqual([{ id: 'tech-2', fullName: 'B' }]);
+  it('reads the rates for a window', async () => {
     apiClientMock.get.mockResolvedValueOnce({ data: { data: [] } });
     await warrantyManagerApi.technicianStats(30);
     expect(apiClientMock.get).toHaveBeenLastCalledWith('/service-manager/warranty-claims/stats/technicians', {
@@ -108,9 +104,9 @@ describe('warrantyManagerApi', () => {
 describe('WarrantyDecisionModal', () => {
   beforeEach(() => vi.clearAllMocks());
   const submit = (wrapper: ReturnType<typeof mountModal>) => wrapper.findAll('button').at(-1)!;
-  const mountModal = (mode: 'assign' | 'approve' | 'reject' | 'close' | 'review', c = claim()) =>
+  const mountModal = (mode: 'approve' | 'reject' | 'close' | 'review', c = claim()) =>
     mount(WarrantyDecisionModal, {
-      props: { claim: c, mode, technicians: [{ id: 'tech-1', fullName: 'Kỹ thuật viên A' }, { id: 'tech-2', fullName: 'Kỹ thuật viên B' }] },
+      props: { claim: c, mode },
       attachTo: document.body,
     });
 
@@ -124,23 +120,6 @@ describe('WarrantyDecisionModal', () => {
     const lines = wrapper.get('[data-testid="faulty-lines"]').text();
     expect(lines).toContain('Tụ khởi động');
     expect(lines).not.toContain('Cánh quạt');
-    wrapper.unmount();
-  });
-
-  it('offers only other technicians and requires a choice', async () => {
-    const wrapper = mountModal('assign');
-    const options = wrapper.findAll('#warranty-assign option').map((o) => o.text());
-    expect(options).toContain('Kỹ thuật viên B');
-    expect(options).not.toContain('Kỹ thuật viên A');
-    await submit(wrapper).trigger('click');
-    expect(apiClientMock.post).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('chọn kỹ thuật viên');
-
-    apiClientMock.post.mockResolvedValueOnce({ data: { data: claim({ status: 'submitted' }) } });
-    await wrapper.get('#warranty-assign').setValue('tech-2');
-    await submit(wrapper).trigger('click');
-    await flushPromises();
-    expect(apiClientMock.post).toHaveBeenCalledWith('/service-manager/warranty-claims/claim-1/assign', { technicianId: 'tech-2' });
     wrapper.unmount();
   });
 
@@ -228,7 +207,7 @@ describe('WarrantyDecisionModal', () => {
 
   it('judges a decline: a note is required and "not justified" is sent as valid false', async () => {
     const wrapper = mountModal('review', claim({ status: 'submitted', technician: null, declineReview: 'pending', declineReasonCode: 'busy' }));
-    expect(wrapper.text()).toContain('Xét việc từ chối bảo hành');
+    expect(wrapper.text()).toContain('Xét việc không phản hồi');
     await submit(wrapper).trigger('click');
     expect(apiClientMock.post).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('nhận xét');
@@ -329,7 +308,7 @@ describe('WarrantyDecisionModal', () => {
     await wrapper.get('#warranty-close-note').setValue('Đã xem lại bằng chứng của hai bên.');
     await submit(wrapper).trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('một quản lý khác');
+    expect(wrapper.text()).toContain('một quản lý dịch vụ khác');
     expect(wrapper.emitted('done')).toBeUndefined();
     wrapper.unmount();
   });
@@ -360,7 +339,7 @@ describe('ConsoleWarrantyPage', () => {
 
     const text = wrapper.text();
     expect(text).toContain('Chờ duyệt kết luận');
-    expect(text).toContain('Chờ phân công');
+    expect(text).toContain('Kỹ thuật viên không còn hoạt động');
     expect(text).toContain('Gửi sau hạn');
     expect(text).toContain('Khách đồng ý, chờ đóng');
     expect(text).toContain('Duyệt kết luận');
@@ -383,11 +362,11 @@ describe('ConsoleWarrantyPage', () => {
     const wrapper = mount(ConsoleWarrantyPage, { global: { stubs: routerStub } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Chờ xét từ chối');
+    expect(wrapper.text()).toContain('Chờ xét không phản hồi');
     expect(wrapper.text()).toContain('Chờ xét không đến');
     expect(wrapper.text()).toContain('Không khắc phục được, đã hoàn tiền');
     const buttons = wrapper.findAll('button').map((b) => b.text());
-    expect(buttons).toContain('Xét từ chối');
+    expect(buttons).toContain('Xét không phản hồi');
     expect(buttons).toContain('Xét không đến');
   });
 
