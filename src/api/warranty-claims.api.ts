@@ -219,7 +219,6 @@ export interface WarrantyQueueQuery {
   page?: number;
   limit?: number;
   status?: WarrantyClaimStatus;
-  unassigned?: boolean;
   technicianId?: string;
   /** Only claims whose decline or missed response a manager still has to judge. */
   declineReview?: 'pending';
@@ -263,11 +262,6 @@ export const warrantyManagerApi = {
     return { data: res.data.data, meta: res.data.meta };
   },
 
-  async eligibleTechnicians(): Promise<{ id: string; fullName: string }[]> {
-    const res = await apiClient.get<{ data: { id: string; fullName: string }[] }>(`${MANAGER_BASE}/eligible-technicians`);
-    return res.data.data;
-  },
-
   async technicianStats(windowDays = 90): Promise<TechnicianWarrantyStat[]> {
     const res = await apiClient.get<{ data: TechnicianWarrantyStat[] }>(`${MANAGER_BASE}/stats/technicians`, {
       params: { windowDays },
@@ -281,8 +275,6 @@ export const warrantyManagerApi = {
     // A backend without the detail block still answers with the claim itself: show that, not a blank page.
     return { ...data, detail: data.detail ?? emptyClaimDetail(), detailLoaded: !!data.detail };
   },
-
-  assign: (claimId: string, technicianId: string) => managerPost(claimId, 'assign', { technicianId }),
 
   approve: (
     claimId: string,

@@ -240,7 +240,7 @@ describe('TechnicianWarrantyActionModal', () => {
     const wrapper = mountModal('decline');
     const options = wrapper.findAll('#warranty-decline-reason option').map((o) => o.text());
     expect(options).toContain('Đang nghỉ (hệ thống kiểm tra)');
-    expect(options).toContain('Đang bận (quản lý xác nhận)');
+    expect(options).toContain('Đang bận (quản lý dịch vụ xác nhận)');
     expect(wrapper.text()).toContain('trừ điểm uy tín');
     wrapper.unmount();
   });

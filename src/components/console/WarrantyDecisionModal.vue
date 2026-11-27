@@ -14,18 +14,16 @@ import {
   type NotCoveredReason,
 } from '../../utils/warranty-claim';
 
-export type WarrantyDecisionMode = 'assign' | 'approve' | 'reject' | 'close' | 'review';
+export type WarrantyDecisionMode = 'approve' | 'reject' | 'close' | 'review';
 
 const props = defineProps<{
   claim: StaffWarrantyClaim | null;
   mode: WarrantyDecisionMode | null;
-  technicians: { id: string; fullName: string }[];
 }>();
 const emit = defineEmits<{ (e: 'close'): void; (e: 'done', claim: StaffWarrantyClaim): void }>();
 
 const MIN_NOTE = 10;
 
-const technicianId = ref('');
 const result = ref<InspectionResult>('covered_part');
 const reasonCode = ref<NotCoveredReason>('other_component');
 const customerNote = ref('');
@@ -67,19 +65,16 @@ const customerAgreed = computed(
 const title = computed(
   () =>
     ({
-      assign: props.claim?.technician ? 'Phân công lại kỹ thuật viên' : 'Phân công kỹ thuật viên',
       approve: 'Duyệt kết luận kiểm tra',
       reject: 'Từ chối yêu cầu bảo hành',
       close: 'Đóng yêu cầu bảo hành',
-      review: props.claim?.noShowFlaggedAt ? 'Xét việc không đến kiểm tra' : 'Xét việc từ chối bảo hành',
-    })[props.mode ?? 'assign'],
+      review: props.claim?.noShowFlaggedAt ? 'Xét việc không đến kiểm tra' : 'Xét việc không phản hồi',
+    })[props.mode ?? 'approve'],
 );
-const assignable = computed(() => props.technicians.filter((t) => t.id !== props.claim?.technician?.id));
 
 watch(open, (isOpen) => {
   if (!isOpen || !props.claim) return;
   error.value = '';
-  technicianId.value = '';
   customerNote.value = '';
   closeNote.value = '';
   refundAmount.value = '';
@@ -116,7 +111,6 @@ function close() {
 }
 
 function validate(mode: WarrantyDecisionMode): string {
-  if (mode === 'assign' && !technicianId.value) return 'Vui lòng chọn kỹ thuật viên.';
   if (mode === 'approve' && notCovered.value && customerNote.value.trim().length < MIN_NOTE) {
     return `Vui lòng nhập nội dung giải thích cho khách hàng (ít nhất ${MIN_NOTE} ký tự).`;
   }
@@ -139,7 +133,6 @@ function validate(mode: WarrantyDecisionMode): string {
 }
 
 async function run(claim: StaffWarrantyClaim, mode: WarrantyDecisionMode): Promise<StaffWarrantyClaim> {
-  if (mode === 'assign') return warrantyManagerApi.assign(claim.id, technicianId.value);
   if (mode === 'approve') {
     return warrantyManagerApi.approve(claim.id, {
       ...(result.value !== proposal.value ? { result: result.value } : {}),
@@ -215,22 +208,7 @@ async function submit() {
             <p v-if="claim.submittedAfterExpiry" class="text-warning-700">Yêu cầu được gửi sau khi hạng mục hết hạn bảo hành.</p>
           </div>
 
-          <template v-if="mode === 'assign'">
-            <div class="space-y-1.5">
-              <label for="warranty-assign" class="text-xs font-medium text-ink-700">Kỹ thuật viên</label>
-              <select
-                id="warranty-assign"
-                v-model="technicianId"
-                :class="[consoleField, 'w-full']"
-              >
-                <option value="" disabled>Chọn kỹ thuật viên</option>
-                <option v-for="tech in assignable" :key="tech.id" :value="tech.id">{{ tech.fullName }}</option>
-              </select>
-            </div>
-            <p class="text-xs text-ink-500">Yêu cầu quay lại bước chờ nhận; các lượt kiểm tra đang mở sẽ bị hủy.</p>
-          </template>
-
-          <template v-else-if="mode === 'approve'">
+          <template v-if="mode === 'approve'">
             <div v-if="claim.visit" class="p-3 rounded-[var(--radius-sm)] border border-ink-200/90 bg-ink-50/40 text-xs space-y-1.5">
               <p class="font-semibold text-ink-800">Đề xuất của kỹ thuật viên</p>
               <p>{{ proposal ? inspectionResultLabels[proposal] : '—' }}</p>
@@ -276,7 +254,7 @@ async function submit() {
               <ul class="text-sm text-ink-900">
                 <li v-for="line in faultyLines" :key="line.id">{{ line.name }} <span class="font-num text-ink-500">× {{ claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity }}<template v-if="(claim?.visit?.faultyQuantities?.[line.id] ?? line.quantity) !== line.quantity"> / {{ line.quantity }}</template></span></li>
               </ul>
-              <p class="text-xs text-ink-500">FixHome cấp đúng các linh kiện này (dòng linh kiện thợ tự mua thì thợ tự thay).</p>
+              <p class="text-xs text-ink-500">FixHome cấp đúng các linh kiện này (dòng linh kiện kỹ thuật viên tự mua thì kỹ thuật viên tự thay).</p>
             </div>
             <div v-if="changing && workmanship" class="space-y-2 p-3 rounded-[var(--radius-sm)] border border-ink-200 bg-ink-50/40">
               <p class="text-xs font-medium text-ink-700">Cần linh kiện FixHome? Ai trả tiền do kết quả kiểm tra linh kiện hỏng quyết định (không bắt buộc)</p>
@@ -351,7 +329,7 @@ async function submit() {
 
           <template v-else-if="mode === 'review'">
             <p class="text-xs text-ink-700">
-              {{ claim.noShowFlaggedAt ? 'Kỹ thuật viên đã nhận nhưng chưa check-in đúng hạn.' : 'Lý do từ chối: ' + (claim.declineReasonCode || '—') }}
+              {{ claim.noShowFlaggedAt ? 'Kỹ thuật viên đã nhận nhưng chưa xác nhận đã đến đúng hạn.' : 'Kỹ thuật viên không phản hồi yêu cầu đúng hạn.' }}
             </p>
             <fieldset class="space-y-1.5">
               <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="reviewValid ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
@@ -394,10 +372,10 @@ async function submit() {
                 inputmode="numeric"
                 :class="[consoleField, 'w-full font-num']"
               />
-              <p class="text-xs text-ink-500">Số tiền này bị trừ từ ví kỹ thuật viên đã làm đơn gốc và thợ nhận bảo hành bị trừ điểm uy tín.</p>
+              <p class="text-xs text-ink-500">Số tiền này bị trừ từ ví kỹ thuật viên đã làm đơn gốc và kỹ thuật viên nhận bảo hành bị trừ điểm uy tín.</p>
             </div>
             <p v-if="claim.status === 'disputed'" class="text-xs text-warning-700">
-              Yêu cầu bị khách phản đối: quản lý đã duyệt lần đầu không thể tự đóng, cần một quản lý khác xem xét.
+              Yêu cầu bị khách phản đối: quản lý dịch vụ đã duyệt lần đầu không thể tự đóng, cần một quản lý dịch vụ khác xem xét.
             </p>
             <div class="space-y-1.5">
               <label for="warranty-close-note" class="text-xs font-medium text-ink-700">

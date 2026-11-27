@@ -62,10 +62,9 @@ const limit = 10;
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 const statusFilter = ref<WarrantyClaimStatus | ''>('');
-const timeFilter = ref<'all' | 'today' | '7d' | '30d' | 'this_month'>('all');
+const technicianFilter = ref<{ id: string; name: string } | null>(null);
 const searchQuery = ref('');
 const reviewOnly = ref(false);
-const technicians = ref<{ id: string; fullName: string }[]>([]);
 const artworkErrors = ref<Record<string, boolean>>({});
 function onArtworkError(id: string) {
   artworkErrors.value[id] = true;
@@ -101,15 +100,6 @@ function formatIsoToVN(iso: string): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
-}
-
-function formatTechId(id: string): string {
-  const digits = id.replace(/\D/g, '');
-  if (digits) {
-    const trimmed = digits.replace(/^0+/, '') || digits;
-    return trimmed.slice(-3).padStart(3, '0');
-  }
-  return id.slice(0, 3).toUpperCase();
 }
 
 const windowDateRangeText = computed(() => {
@@ -174,7 +164,6 @@ const overallClaimRatePct = computed(() => {
   if (!validRates.length) return 0;
   return Math.round((validRates.reduce((a, b) => a + b, 0) / validRates.length) * 100);
 });
-const pendingClaimsCount = computed(() => claims.value.filter((c) => !closed(c)).length);
 
 const filteredStats = computed(() => {
   let list = stats.value;
@@ -183,8 +172,7 @@ const filteredStats = computed(() => {
     list = list.filter(
       (s) =>
         s.fullName.toLowerCase().includes(q) ||
-        s.technicianId.toLowerCase().includes(q) ||
-        formatTechId(s.technicianId).toLowerCase().includes(q),
+        s.technicianId.toLowerCase().includes(q),
     );
   }
   return list;
@@ -199,9 +187,9 @@ const statsPageFrom = computed(() => (filteredStats.value.length === 0 ? 0 : (st
 const statsPageTo = computed(() => Math.min(statsPage.value * statsLimit.value, filteredStats.value.length));
 const statsPaginationItems = computed(() => pageItems(statsPage.value, statsTotalPages.value));
 
-function filterQueueByTech(name: string) {
+function filterQueueByTech(id: string, name: string) {
   tab.value = 'queue';
-  searchQuery.value = name;
+  technicianFilter.value = { id, name };
 }
 
 watch([statsSearchQuery, windowDays, statsLimit], () => {
@@ -220,6 +208,7 @@ async function loadQueue(quiet = false) {
       limit,
       status: statusFilter.value || undefined,
       declineReview: reviewOnly.value ? 'pending' : undefined,
+      technicianId: technicianFilter.value?.id,
     });
     if (requestId !== latestRequest) return;
     claims.value = result.data;
@@ -249,14 +238,6 @@ async function loadStats() {
 async function openModal(claim: StaffWarrantyClaim, mode: WarrantyDecisionMode) {
   notice.value = '';
   actionError.value = '';
-  if (mode === 'assign' && !technicians.value.length) {
-    try {
-      technicians.value = await warrantyManagerApi.eligibleTechnicians();
-    } catch (reason) {
-      actionError.value = getSupportErrorMessage(reason, 'Chưa tải được danh sách kỹ thuật viên, vui lòng thử lại.');
-      return;
-    }
-  }
   modalClaim.value = claim;
   modalMode.value = mode;
 }
@@ -276,32 +257,16 @@ const closed = (claim: StaffWarrantyClaim) => ['resolved', 'rejected'].includes(
 
 const statusOptions = Object.entries(warrantyClaimStatusMeta) as [WarrantyClaimStatus, { label: string }][];
 
-const hasQueueFilters = computed(() => Boolean(statusFilter.value || timeFilter.value !== 'all' || searchQuery.value || reviewOnly.value));
+const hasQueueFilters = computed(() => Boolean(statusFilter.value || technicianFilter.value || searchQuery.value || reviewOnly.value));
 const resetQueueFilters = () => {
   statusFilter.value = '';
-  timeFilter.value = 'all';
+  technicianFilter.value = null;
   searchQuery.value = '';
   reviewOnly.value = false;
 };
 
 const filteredClaims = computed(() => {
   let list = claims.value;
-  if (timeFilter.value !== 'all') {
-    const now = Date.now();
-    const oneDay = 24 * 60 * 60 * 1000;
-    list = list.filter((c) => {
-      const t = new Date(c.submittedAt).getTime();
-      if (timeFilter.value === 'today') return now - t < oneDay;
-      if (timeFilter.value === '7d') return now - t < 7 * oneDay;
-      if (timeFilter.value === '30d') return now - t < 30 * oneDay;
-      if (timeFilter.value === 'this_month') {
-        const d = new Date(c.submittedAt);
-        const cur = new Date();
-        return d.getMonth() === cur.getMonth() && d.getFullYear() === cur.getFullYear();
-      }
-      return true;
-    });
-  }
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     list = list.filter((c) =>
@@ -345,7 +310,7 @@ function statusBadgeIcon(claim: StaffWarrantyClaim): Component {
   return Clock;
 }
 
-watch([statusFilter, reviewOnly], () => {
+watch([statusFilter, reviewOnly, technicianFilter], () => {
   if (page.value !== 1) page.value = 1;
   else void loadQueue();
 });
@@ -463,29 +428,23 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
             <ChevronDown :size="14" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           </div>
 
-          <!-- Filter 2: Time Dropdown -->
-          <div class="relative shrink-0 min-w-[150px]">
-            <select
-              v-model="timeFilter"
-              class="w-full appearance-none rounded-xl border border-ink-200 bg-white py-2 pl-8.5 pr-8 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer transition-colors"
-              aria-label="Thời gian gửi"
-            >
-              <option value="all">Thời gian gửi</option>
-              <option value="today">Hôm nay</option>
-              <option value="7d">7 ngày qua</option>
-              <option value="30d">30 ngày qua</option>
-              <option value="this_month">Tháng này</option>
-            </select>
-            <Calendar :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-            <ChevronDown :size="14" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          </div>
+          <button
+            v-if="technicianFilter"
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            :aria-label="`Bỏ lọc kỹ thuật viên ${technicianFilter.name}`"
+            @click="technicianFilter = null"
+          >
+            Kỹ thuật viên: {{ technicianFilter.name }}
+            <span aria-hidden="true">×</span>
+          </button>
 
           <!-- Filter 3: Search Input -->
           <div class="relative flex-1 min-w-[240px]">
             <input
               v-model="searchQuery"
               type="search"
-              placeholder="Tìm theo mã yêu cầu, khách hàng, kỹ thuật viên..."
+              placeholder="Tìm trong trang này theo mã đơn, khách hàng, kỹ thuật viên..."
               class="w-full rounded-xl border border-ink-200 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 transition-colors"
             />
             <Search :size="15" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -508,7 +467,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
           <div class="flex flex-wrap items-center gap-4">
             <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap text-ink-700 hover:text-ink-900 select-none">
               <input v-model="reviewOnly" type="checkbox" class="h-4 w-4 rounded accent-brand-600" />
-              <span>Chờ xét từ chối hoặc không đến</span>
+              <span>Chờ xét không đến hoặc không phản hồi</span>
             </label>
           </div>
           <button
@@ -531,7 +490,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
             <table class="w-full min-w-[720px] md:min-w-full table-fixed text-left text-sm">
               <thead>
                 <tr class="border-b border-ink-100 bg-slate-50/70 text-xs font-semibold text-ink-600">
-                  <th scope="col" class="w-[15%] min-w-[115px] px-2.5 py-3 pl-3 sm:pl-4">Mã yêu cầu</th>
+                  <th scope="col" class="w-[15%] min-w-[115px] px-2.5 py-3 pl-3 sm:pl-4">Mã đơn</th>
                   <th scope="col" class="w-[18%] min-w-[125px] px-2 py-3">Hạng mục</th>
                   <th scope="col" class="w-[18%] min-w-[130px] px-2 py-3">Trạng thái</th>
                   <th scope="col" class="w-[15%] min-w-[110px] px-2 py-3">Kỹ thuật viên</th>
@@ -680,7 +639,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                           class="!px-2 !py-1 text-xs shrink-0"
                           @click="openModal(row, 'review')"
                         >
-                          <span>Xét {{ row.noShowFlaggedAt ? 'không đến' : 'từ chối' }}</span>
+                          <span>Xét {{ row.noShowFlaggedAt ? 'không đến' : 'không phản hồi' }}</span>
                         </FhButton>
                         <FhButton
                           v-else-if="row.status === 'inspected'"
@@ -776,8 +735,8 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
 
     <!-- TAB 2: TỶ LỆ THEO KỸ THUẬT VIÊN -->
     <template v-else>
-      <!-- 4 Metric Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- 3 Metric Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <ConsoleStatCard
           featured
           :loading="statsLoading && !stats.length"
@@ -807,14 +766,6 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
           :value="`${overallClaimRatePct}%`"
           :icon="CheckCircle2"
           tone="success"
-        />
-
-        <ConsoleStatCard
-          :loading="statsLoading && !stats.length"
-          label="Đang xử lý"
-          :value="pendingClaimsCount"
-          :icon="Clock"
-          tone="warning"
         />
       </div>
 
@@ -974,9 +925,8 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                   <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center">Yêu cầu</th>
                   <th scope="col" class="whitespace-nowrap px-3.5 py-3">Tỷ lệ bảo hành</th>
                   <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden md:table-cell">Không bảo hành</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden lg:table-cell">Quản lý bởi kỹ thuật viên</th>
+                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden lg:table-cell">Quản lý dịch vụ đổi kết luận</th>
                   <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden xl:table-cell">Khách phản đối</th>
-                  <th scope="col" class="whitespace-nowrap px-3.5 py-3 text-center hidden lg:table-cell">Từ chối nhận</th>
                   <th scope="col" class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right w-10"></th>
                 </tr>
               </thead>
@@ -1011,9 +961,6 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                         <User :size="14" />
                       </div>
                       <span class="font-medium text-ink-900">{{ row.fullName }}</span>
-                      <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-mono text-blue-600 bg-blue-50 border border-blue-200/50">
-                        Id: {{ formatTechId(row.technicianId) }}
-                      </span>
                     </div>
                   </td>
 
@@ -1059,15 +1006,11 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
                     {{ pct(row.disputedRate) }}
                   </td>
 
-                  <!-- 9. Từ chối nhận -->
-                  <td class="whitespace-nowrap px-3.5 py-3 text-center font-num text-ink-700 hidden lg:table-cell">
-                    {{ row.declineRate === null ? '—' : `${pct(row.declineRate)} (${row.declines})` }}
-                  </td>
 
                   <!-- 10. Actions -->
                   <td class="whitespace-nowrap px-3.5 py-3 pr-4 sm:pr-5 text-right">
                     <ConsoleMoreMenu>
-                      <ConsoleMenuItem @click="filterQueueByTech(row.fullName)">
+                      <ConsoleMenuItem @click="filterQueueByTech(row.technicianId, row.fullName)">
                         <Eye :size="14" />
                         Xem yêu cầu bảo hành
                       </ConsoleMenuItem>
@@ -1146,7 +1089,6 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
     <WarrantyDecisionModal
       :claim="modalClaim"
       :mode="modalMode"
-      :technicians="technicians"
       @close="modalClaim = null; modalMode = null"
       @done="onDone"
     />
