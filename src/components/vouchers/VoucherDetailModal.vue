@@ -154,18 +154,18 @@ const previewScopeText = computed(() => {
 
           <!-- Body -->
           <div class="flex-1 overflow-y-auto p-6 space-y-6">
-            <!-- 1. Realistic Voucher Ticket Visual -->
-            <div class="relative rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-[#F2FBF7] to-[#E8F8F0] p-5 sm:p-6 shadow-sm overflow-hidden">
+            <!-- 1. Voucher Ticket Summary -->
+            <div class="relative rounded-[var(--radius-md)] border border-ink-200 bg-ink-25 p-5 sm:p-6 shadow-(--shadow-e1) overflow-hidden">
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-2xl sm:text-3xl font-extrabold text-emerald-950 tracking-tight">
+                  <div class="text-2xl sm:text-3xl font-extrabold text-ink-900 tracking-tight font-num">
                     {{ campaign.discount.type === 'PERCENT' ? `Giảm ${campaign.discount.value}%` : `Giảm ${formatVoucherAmount(campaign.discount.value)}` }}
                   </div>
-                  <div class="text-xs font-medium text-emerald-700 mt-0.5">
+                  <div class="text-xs font-medium text-ink-600 mt-0.5">
                     {{ campaign.discount.capVnd ? `Tối đa ${formatVoucherAmount(campaign.discount.capVnd)}` : 'Tối đa — Không giới hạn' }}
                   </div>
                 </div>
-                <div class="w-12 h-10 rounded-xl bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center text-emerald-700 font-bold text-lg shadow-2xs">
+                <div class="w-11 h-9 rounded-[var(--radius-sm)] bg-success-50 border border-success-200 flex items-center justify-center text-success-700 font-bold text-base">
                   %
                 </div>
               </div>

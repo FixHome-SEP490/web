@@ -29,6 +29,8 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, FhConfirmDialog, FhSkeleton, FhStatusPill } from '../../../components';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
 import { CONSOLE_LOAD_ERROR, consoleTextarea } from '../../../components/console/console-ui';
@@ -103,8 +105,8 @@ const resetFilters = () => {
   page.value = 1;
 };
 
-const filterByCard = (type: 'WAITING_BOOKING' | 'BOOKED' | 'WAITING_SKILL') => {
-  if (activeCardFilter.value === type) {
+const filterByCard = (type: 'ALL' | 'WAITING_BOOKING' | 'BOOKED' | 'WAITING_SKILL') => {
+  if (type === 'ALL' || activeCardFilter.value === type) {
     activeCardFilter.value = 'ALL';
     stageFilter.value = 'ALL';
     appointmentFilter.value = 'ALL';
@@ -163,10 +165,21 @@ const paginatedRows = computed(() => {
   return filteredRows.value.slice(start, start + pageSize.value);
 });
 
-watch([searchQuery, stageFilter, appointmentFilter], () => {
-  if (activeCardFilter.value !== 'ALL') {
+const matchesCardPreset = (card: typeof activeCardFilter.value) => {
+  if (card === 'WAITING_BOOKING') return stageFilter.value === 'ALL' && appointmentFilter.value === 'NO_VISIT';
+  if (card === 'BOOKED') return stageFilter.value === 'ALL' && appointmentFilter.value === 'HAS_VISIT';
+  if (card === 'WAITING_SKILL') return stageFilter.value === 'profile_review' && appointmentFilter.value === 'ALL';
+  return stageFilter.value === 'ALL' && appointmentFilter.value === 'ALL';
+};
+
+watch([stageFilter, appointmentFilter], () => {
+  if (activeCardFilter.value !== 'ALL' && !matchesCardPreset(activeCardFilter.value)) {
     activeCardFilter.value = 'ALL';
   }
+  page.value = 1;
+});
+
+watch(searchQuery, () => {
   page.value = 1;
 });
 
@@ -535,12 +548,15 @@ const confirmReject = async () => {
 <template>
   <div class="space-y-5">
     <!-- Header: Tiêu đề và mô tả nghiệp vụ chuẩn FixHome -->
-    <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">Duyệt hồ sơ</h1>
-        <p class="mt-1 text-sm text-ink-600 text-pretty">
-          Xác nhận thông tin kỹ thuật viên, đặt lịch lên trụ sở để kiểm tra và duyệt cấp độ kỹ năng.
-        </p>
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-profile-review.png" />
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">Duyệt hồ sơ</h1>
+          <p class="mt-0.5 text-sm text-ink-600 text-pretty">
+            Xác nhận thông tin kỹ thuật viên, đặt lịch lên trụ sở để kiểm tra và duyệt cấp độ kỹ năng.
+          </p>
+        </div>
       </div>
       <div class="flex items-center gap-2 self-start sm:self-auto">
         <ConsoleMoreMenu>
@@ -550,76 +566,59 @@ const confirmReject = async () => {
       </div>
     </div>
 
-    <!-- 3 Thẻ thống kê: nhỏ gọn, màu nhẹ nhàng, phản ánh số liệu thực tế -->
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <!-- Thẻ 1: Chờ đặt lịch -->
-      <button
-        type="button"
-        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-amber-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-        :class="activeCardFilter === 'WAITING_BOOKING' ? 'border-amber-400 bg-amber-50/40 ring-2 ring-amber-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+    <!-- 4 Thẻ thống kê: đồng bộ Console -->
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ConsoleStatCard
+        interactive
+        :active="activeCardFilter === 'ALL' && stageFilter === 'ALL' && appointmentFilter === 'ALL'"
+        :loading="loading"
+        label="Tổng hồ sơ"
+        :value="rows.length"
+        sublabel="Hồ sơ đang theo dõi"
+        :icon="FileText"
+        tone="brand"
+        title="Nhấn để xem tất cả hồ sơ"
+        @click="filterByCard('ALL')"
+      />
+
+      <ConsoleStatCard
+        interactive
+        :active="activeCardFilter === 'WAITING_BOOKING'"
+        :loading="loading"
+        label="Chờ đặt lịch"
+        :value="stats.waitingBooking"
+        sublabel="Chưa xếp lịch trụ sở"
+        :icon="Calendar"
+        tone="warning"
         title="Nhấn để lọc hồ sơ chờ đặt lịch"
         @click="filterByCard('WAITING_BOOKING')"
-      >
-        <div class="flex items-center gap-3.5">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-            <Calendar :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Chờ đặt lịch</div>
-            <div class="text-xs text-ink-400">Chưa xếp lịch trụ sở</div>
-          </div>
-        </div>
-        <div class="font-num text-2xl font-bold text-amber-600">
-          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-amber-100/70"></span>
-          <span v-else>{{ stats.waitingBooking }}</span>
-        </div>
-      </button>
+      />
 
-      <!-- Thẻ 2: Đã đặt lịch -->
-      <button
-        type="button"
-        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-emerald-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-        :class="activeCardFilter === 'BOOKED' ? 'border-emerald-400 bg-emerald-50/40 ring-2 ring-emerald-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+      <ConsoleStatCard
+        interactive
+        :active="activeCardFilter === 'BOOKED'"
+        :loading="loading"
+        label="Đã đặt lịch"
+        :value="stats.booked"
+        sublabel="Có lịch hẹn trụ sở"
+        :icon="Calendar"
+        tone="success"
         title="Nhấn để lọc hồ sơ đã đặt lịch"
         @click="filterByCard('BOOKED')"
-      >
-        <div class="flex items-center gap-3.5">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <Calendar :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Đã đặt lịch</div>
-            <div class="text-xs text-ink-400">Có lịch hẹn trụ sở</div>
-          </div>
-        </div>
-        <div class="font-num text-2xl font-bold text-emerald-600">
-          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-emerald-100/70"></span>
-          <span v-else>{{ stats.booked }}</span>
-        </div>
-      </button>
+      />
 
-      <!-- Thẻ 3: Chờ duyệt kỹ năng -->
-      <button
-        type="button"
-        class="flex cursor-pointer items-center justify-between rounded-2xl border bg-white p-4 text-left transition-all hover:border-blue-300 hover:shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        :class="activeCardFilter === 'WAITING_SKILL' ? 'border-blue-400 bg-blue-50/40 ring-2 ring-blue-400/20 shadow-xs' : 'border-ink-100 shadow-2xs'"
+      <ConsoleStatCard
+        interactive
+        :active="activeCardFilter === 'WAITING_SKILL'"
+        :loading="loading"
+        label="Chờ duyệt kỹ năng"
+        :value="stats.waitingSkillApproval"
+        sublabel="Đã có mặt tại trụ sở"
+        :icon="Award"
+        tone="brand"
         title="Nhấn để lọc hồ sơ chờ duyệt kỹ năng"
         @click="filterByCard('WAITING_SKILL')"
-      >
-        <div class="flex items-center gap-3.5">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <Award :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Chờ duyệt kỹ năng</div>
-            <div class="text-xs text-ink-400">Đã có mặt tại trụ sở</div>
-          </div>
-        </div>
-        <div class="font-num text-2xl font-bold text-blue-600">
-          <span v-if="loading" class="inline-block h-6 w-8 animate-pulse rounded bg-blue-100/70"></span>
-          <span v-else>{{ stats.waitingSkillApproval }}</span>
-        </div>
-      </button>
+      />
     </div>
 
     <!-- Thanh tìm kiếm và bộ lọc: cùng 1 hàng, cân đối, bố trí hiện đại -->
@@ -728,18 +727,18 @@ const confirmReject = async () => {
                 <tr v-for="n in 5" :key="`skeleton-${n}`" class="animate-pulse">
                   <td class="px-4 py-3.5">
                     <div class="flex items-center gap-3">
-                      <div class="h-10 w-10 rounded-full bg-ink-100"></div>
+                      <div class="h-10 w-10 rounded-full bg-ink-200/75 shrink-0"></div>
                       <div class="space-y-1.5">
-                        <div class="h-4 w-28 rounded bg-ink-100"></div>
-                        <div class="h-3 w-36 rounded bg-ink-100"></div>
+                        <div class="h-4 w-28 rounded bg-ink-200/75"></div>
+                        <div class="h-3 w-36 rounded bg-ink-200/60"></div>
                       </div>
                     </div>
                   </td>
-                  <td class="px-4 py-3.5 hidden md:table-cell"><div class="h-6 w-36 rounded-lg bg-ink-100"></div></td>
-                  <td class="px-4 py-3.5"><div class="h-4 w-24 rounded bg-ink-100"></div></td>
-                  <td class="px-4 py-3.5 hidden lg:table-cell"><div class="h-4 w-28 rounded bg-ink-100"></div></td>
-                  <td class="px-4 py-3.5"><div class="h-6 w-28 rounded-lg bg-ink-100"></div></td>
-                  <td class="px-4 py-3.5 text-right"><div class="inline-block h-8 w-20 rounded-lg bg-ink-100"></div></td>
+                  <td class="px-4 py-3.5 hidden md:table-cell"><div class="h-6 w-36 rounded-lg bg-ink-200/75"></div></td>
+                  <td class="px-4 py-3.5"><div class="h-4 w-24 rounded bg-ink-200/75"></div></td>
+                  <td class="px-4 py-3.5 hidden lg:table-cell"><div class="h-4 w-28 rounded bg-ink-200/75"></div></td>
+                  <td class="px-4 py-3.5"><div class="h-6 w-28 rounded-lg bg-ink-200/75"></div></td>
+                  <td class="px-4 py-3.5 text-right"><div class="inline-block h-8 w-20 rounded-lg bg-ink-200/75"></div></td>
                 </tr>
               </template>
 
@@ -998,9 +997,7 @@ const confirmReject = async () => {
                       @click="frontIdDoc ? openDocument('CCCD mặt trước', frontIdDoc) : null"
                     >
                       <template v-if="frontIdDoc?.id">
-                        <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                          <Loader2 class="animate-spin text-brand-500" :size="22" aria-hidden="true" />
-                        </div>
+                        <div v-if="isLoadingUrls" class="h-full w-full animate-pulse rounded-[calc(var(--radius-sm)-2px)] bg-ink-200/70" aria-hidden="true" />
                         <img
                           v-else-if="documentUrls[frontIdDoc.id]"
                           :src="documentUrls[frontIdDoc.id]"
@@ -1027,9 +1024,7 @@ const confirmReject = async () => {
                       @click="backIdDoc ? openDocument('CCCD mặt sau', backIdDoc) : null"
                     >
                       <template v-if="backIdDoc?.id">
-                        <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                          <Loader2 class="animate-spin text-brand-500" :size="22" aria-hidden="true" />
-                        </div>
+                        <div v-if="isLoadingUrls" class="h-full w-full animate-pulse rounded-[calc(var(--radius-sm)-2px)] bg-ink-200/70" aria-hidden="true" />
                         <img
                           v-else-if="documentUrls[backIdDoc.id]"
                           :src="documentUrls[backIdDoc.id]"
@@ -1056,9 +1051,7 @@ const confirmReject = async () => {
                       @click="(facePhotoDoc || faceVideoDoc) ? openDocument('Xác minh khuôn mặt', (facePhotoDoc || faceVideoDoc)!) : null"
                     >
                       <template v-if="facePhotoDoc?.id || faceVideoDoc?.id">
-                        <div v-if="isLoadingUrls" class="flex flex-col items-center gap-2">
-                          <Loader2 class="animate-spin text-brand-500" :size="22" aria-hidden="true" />
-                        </div>
+                        <div v-if="isLoadingUrls" class="h-full w-full animate-pulse rounded-[calc(var(--radius-sm)-2px)] bg-ink-200/70" aria-hidden="true" />
                         <template v-else-if="facePhotoDoc?.id && documentUrls[facePhotoDoc.id]">
                           <img
                             :src="documentUrls[facePhotoDoc.id]"

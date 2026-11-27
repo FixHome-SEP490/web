@@ -18,7 +18,6 @@ import {
   FileText,
   Hourglass,
   Package,
-  PackageCheck,
   Search,
   Undo2,
   User,
@@ -28,6 +27,8 @@ import {
 } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '..';
 import ConsolePagination from './ConsolePagination.vue';
+import ConsoleStatCard from './ConsoleStatCard.vue';
+import ConsoleTitleArtwork from './ConsoleTitleArtwork.vue';
 import LegacyManualReviewForm from './LegacyManualReviewForm.vue';
 import FaultyPartInspectionModal from './FaultyPartInspectionModal.vue';
 import PartReturnProcessModal from './PartReturnProcessModal.vue';
@@ -91,7 +92,11 @@ const inspectionRequest = ref<PartRequest | null>(null);
 const activeTab = ref<'all' | 'awaiting' | 'in_use' | 'returned'>('all');
 const searchQuery = ref('');
 const timeFilter = ref<'all' | 'today' | '7d' | '30d'>('all');
-const statusFilter = ref<'all' | 'awaiting_return' | 'in_use' | 'returned'>('all');
+
+const selectStatFilter = (tab: 'all' | 'awaiting' | 'in_use' | 'returned') => {
+  activeTab.value = tab !== 'all' && activeTab.value === tab ? 'all' : tab;
+  currentPage.value = 1;
+};
 
 const currentPage = ref(1);
 const pageSize = 10;
@@ -217,7 +222,6 @@ function byRequest(rows: PartCustodyReturnRecord[]) {
   return [...grouped.entries()].map(([id, list]) => ({ id, first: list[0], rows: list }));
 }
 
-const groups = computed(() => byRequest(awaiting.value));
 const heldGroups = computed(() => byRequest(undeclared.value));
 
 // Grouping into Order-level summaries
@@ -260,11 +264,6 @@ const filteredOrders = computed(() => {
     list = list.filter((o) => o.returnStatus === 'in_use');
   } else if (activeTab.value === 'returned') {
     list = list.filter((o) => o.returnStatus === 'returned');
-  }
-
-  // Status dropdown filter
-  if (statusFilter.value !== 'all') {
-    list = list.filter((o) => o.returnStatus === statusFilter.value);
   }
 
   // Time filter
@@ -463,9 +462,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
   <div class="space-y-6">
     <!-- Header banner & icon -->
     <header class="flex items-center gap-3.5">
-      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 border border-brand-100/80 shadow-xs">
-        <PackageCheck :size="24" />
-      </div>
+      <ConsoleTitleArtwork src="/images/ui/console-part-returns.png" />
       <div>
         <h1 class="text-2xl font-bold tracking-tight text-ink-900">Hoàn trả linh kiện</h1>
         <p class="text-sm text-ink-500">Quản lý và theo dõi việc hoàn trả các linh kiện sau khi hoàn thành đơn sửa chữa.</p>
@@ -492,51 +489,44 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </div>
     </Transition>
 
-    <!-- 4 Compact Stat Cards (Real system numbers) -->
-    <section class="grid grid-cols-2 md:grid-cols-4 gap-4" aria-label="Thống kê hoàn trả linh kiện">
-      <!-- Stat 1: Đơn đã lấy linh kiện -->
-      <div class="rounded-xl border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) flex items-center justify-between">
-        <div>
-          <span class="text-xs font-medium text-ink-500 block mb-1">Đơn đã lấy linh kiện</span>
-          <span class="text-2xl font-bold font-num text-ink-900">{{ statTotalOrders }}</span>
-        </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-          <Package :size="20" />
-        </div>
-      </div>
-
-      <!-- Stat 2: Đang sử dụng -->
-      <div class="rounded-xl border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) flex items-center justify-between">
-        <div>
-          <span class="text-xs font-medium text-ink-500 block mb-1">Đang sử dụng</span>
-          <span class="text-2xl font-bold font-num text-amber-700">{{ statInUseOrders }}</span>
-        </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-          <Hourglass :size="20" />
-        </div>
-      </div>
-
-      <!-- Stat 3: Chờ hoàn trả -->
-      <div class="rounded-xl border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) flex items-center justify-between">
-        <div>
-          <span class="text-xs font-medium text-ink-500 block mb-1">Chờ hoàn trả</span>
-          <span class="text-2xl font-bold font-num text-warning-700">{{ statAwaitingOrders }}</span>
-        </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning-50 text-warning-600">
-          <Clock :size="20" />
-        </div>
-      </div>
-
-      <!-- Stat 4: Đã hoàn trả / đối soát -->
-      <div class="rounded-xl border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1) flex items-center justify-between">
-        <div>
-          <span class="text-xs font-medium text-ink-500 block mb-1">Đã hoàn trả</span>
-          <span class="text-2xl font-bold font-num text-success-700">{{ statReturnedOrders }}</span>
-        </div>
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-600">
-          <CheckCircle2 :size="20" />
-        </div>
-      </div>
+    <!-- 4 Interactive Stat Cards (Real system numbers) -->
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê hoàn trả linh kiện">
+      <ConsoleStatCard
+        interactive
+        :active="activeTab === 'all'"
+        :loading="returnsLoading && !returnQueue.length"
+        label="Đơn đã lấy linh kiện"
+        :value="statTotalOrders"
+        :icon="Package"
+        @click="selectStatFilter('all')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="activeTab === 'in_use'"
+        :loading="returnsLoading && !returnQueue.length"
+        label="Đang sử dụng"
+        :value="statInUseOrders"
+        :icon="Hourglass"
+        @click="selectStatFilter('in_use')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="activeTab === 'awaiting'"
+        :loading="returnsLoading && !returnQueue.length"
+        label="Chờ hoàn trả"
+        :value="statAwaitingOrders"
+        :icon="Clock"
+        @click="selectStatFilter('awaiting')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="activeTab === 'returned'"
+        :loading="returnsLoading && !returnQueue.length"
+        label="Đã hoàn trả"
+        :value="statReturnedOrders"
+        :icon="CheckCircle2"
+        @click="selectStatFilter('returned')"
+      />
     </section>
 
     <!-- Main Section with testid container -->
@@ -546,112 +536,44 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       aria-label="Linh kiện chờ nhận hoàn trả"
       class="space-y-4"
     >
-      <!-- Navigation Tabs -->
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200">
-        <div class="flex items-center gap-6 overflow-x-auto pb-px">
-          <button
-            type="button"
-            class="pb-3 text-sm font-semibold transition-colors relative cursor-pointer shrink-0"
-            :class="activeTab === 'all' ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'"
-            @click="activeTab = 'all'"
-          >
-            Tất cả ({{ statTotalOrders }})
-            <span v-if="activeTab === 'all'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full"></span>
-          </button>
-
-          <button
-            type="button"
-            class="pb-3 text-sm font-semibold transition-colors relative cursor-pointer shrink-0"
-            :class="activeTab === 'awaiting' ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'"
-            @click="activeTab = 'awaiting'"
-          >
-            Chờ hoàn trả ({{ statAwaitingOrders }})
-            <span v-if="activeTab === 'awaiting'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full"></span>
-          </button>
-
-          <button
-            type="button"
-            class="pb-3 text-sm font-semibold transition-colors relative cursor-pointer shrink-0"
-            :class="activeTab === 'in_use' ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'"
-            @click="activeTab = 'in_use'"
-          >
-            Đang sử dụng ({{ statInUseOrders }})
-            <span v-if="activeTab === 'in_use'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full"></span>
-          </button>
-
-          <button
-            type="button"
-            class="pb-3 text-sm font-semibold transition-colors relative cursor-pointer shrink-0"
-            :class="activeTab === 'returned' ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'"
-            @click="activeTab = 'returned'"
-          >
-            Đã hoàn trả ({{ statReturnedOrders }})
-            <span v-if="activeTab === 'returned'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 rounded-full"></span>
-          </button>
-        </div>
-
-        <FhButton variant="ghost" size="sm" :disabled="returnsLoading" @click="loadReturns">
-          Làm mới
-        </FhButton>
-      </div>
-
-      <!-- Search and Filter Bar -->
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="relative flex-1 min-w-[260px]">
-          <Search :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
+      <!-- Search, Time Filter & Refresh Bar -->
+      <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
+        <div class="relative flex-1 min-w-[240px]">
+          <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             v-model="searchQuery"
             type="text"
             placeholder="Tìm theo mã đơn, tên khách hàng, kỹ thuật viên..."
-            class="w-full rounded-xl border border-ink-200 bg-white py-2.5 pl-10 pr-4 text-xs text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-xs"
+            class="h-10 w-full rounded-xl border border-ink-200 bg-white pl-10 pr-4 text-xs sm:text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
 
         <div class="flex items-center gap-2 shrink-0">
           <!-- Time Filter -->
-          <div class="relative">
-            <select
-              v-model="timeFilter"
-              class="rounded-xl border border-ink-200 bg-white py-2.5 pl-3 pr-8 text-xs text-ink-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-xs"
-            >
-              <option value="all">Tất cả thời gian</option>
-              <option value="today">Hôm nay</option>
-              <option value="7d">7 ngày qua</option>
-              <option value="30d">30 ngày qua</option>
-            </select>
-          </div>
+          <select
+            v-model="timeFilter"
+            class="h-10 rounded-xl border border-ink-200 bg-white px-3 pr-8 text-xs sm:text-sm text-ink-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+          >
+            <option value="all">Tất cả thời gian</option>
+            <option value="today">Hôm nay</option>
+            <option value="7d">7 ngày qua</option>
+            <option value="30d">30 ngày qua</option>
+          </select>
 
-          <!-- Status Filter -->
-          <div class="relative">
-            <select
-              v-model="statusFilter"
-              class="rounded-xl border border-ink-200 bg-white py-2.5 pl-3 pr-8 text-xs text-ink-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 shadow-xs"
-            >
-              <option value="all">Tất cả trạng thái</option>
-              <option value="awaiting_return">Chờ hoàn trả</option>
-              <option value="in_use">Đang sử dụng</option>
-              <option value="returned">Đã hoàn trả</option>
-            </select>
-          </div>
+          <FhButton variant="secondary" size="sm" :disabled="returnsLoading" @click="loadReturns">
+            Làm mới
+          </FhButton>
         </div>
       </div>
 
-      <!-- Loading State -->
-      <div v-if="returnsLoading && !returnQueue.length" class="space-y-2 p-5 bg-white rounded-xl border border-ink-200" aria-busy="true" aria-label="Đang tải linh kiện chờ nhận">
-        <FhSkeleton height="14px" width="30%" />
-        <FhSkeleton height="44px" rounded="md" />
-        <FhSkeleton height="44px" rounded="md" />
-        <FhSkeleton height="44px" rounded="md" />
-      </div>
-
       <!-- Error State -->
-      <div v-else-if="returnsLoadError" role="alert" class="flex flex-wrap items-center justify-between gap-3 p-5 bg-white rounded-xl border border-ink-200 text-sm text-ink-600">
+      <div v-if="returnsLoadError" role="alert" class="flex flex-wrap items-center justify-between gap-3 p-5 bg-white rounded-xl border border-ink-200 text-sm text-ink-600">
         <span>Chưa tải được danh sách chờ nhận.</span>
         <FhButton variant="secondary" size="md" @click="loadReturns">Thử lại</FhButton>
       </div>
 
-      <!-- Empty State -->
-      <div v-else-if="groups.length === 0" class="p-8 text-center bg-white rounded-xl border border-ink-200">
+      <!-- Empty Queue State (only when not loading and genuinely no custody orders exist) -->
+      <div v-else-if="!returnsLoading && !orderGroups.length && !heldGroups.length" class="p-8 text-center bg-white rounded-xl border border-ink-200">
         <Package :size="36" class="mx-auto text-ink-300 mb-2" />
         <p class="text-sm font-medium text-ink-700">Không có linh kiện nào đang chờ xác nhận hoàn trả.</p>
         <p class="mt-1 text-xs text-ink-500">Hàng chờ này chỉ gồm các dòng có sổ custody; trống không có nghĩa là mọi linh kiện đã được trả đủ.</p>
@@ -669,7 +591,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
               </span>
             </div>
             <span class="text-xs text-ink-500 font-num">
-              Hiển thị {{ Math.min(1 + (currentPage - 1) * pageSize, totalFiltered) }} - {{ Math.min(currentPage * pageSize, totalFiltered) }} trên {{ totalFiltered }} đơn
+              Hiển thị {{ totalFiltered === 0 ? 0 : Math.min(1 + (currentPage - 1) * pageSize, totalFiltered) }} - {{ Math.min(currentPage * pageSize, totalFiltered) }} trên {{ totalFiltered }} đơn
             </span>
           </div>
 
@@ -688,6 +610,33 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
+                <!-- Skeleton loading rows in table -->
+                <template v-if="returnsLoading">
+                  <tr v-for="n in 4" :key="`pr-skel-${n}`" class="animate-pulse">
+                    <td class="py-3.5 pl-4 pr-3"><div class="h-4 w-24 rounded bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3"><div class="h-4 w-24 rounded bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3">
+                      <div class="flex items-center gap-2">
+                        <div class="h-6 w-6 rounded-full bg-ink-200/75 shrink-0" />
+                        <div class="h-4 w-20 rounded bg-ink-200/75" />
+                      </div>
+                    </td>
+                    <td class="py-3.5 px-2"><div class="mx-auto h-5 w-8 rounded-full bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3"><div class="h-4 w-16 rounded bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3"><div class="h-4 w-16 rounded bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3"><div class="h-5 w-20 rounded-full bg-ink-200/75" /></td>
+                    <td class="py-3.5 pr-4 pl-3 text-right"><div class="ml-auto h-7 w-16 rounded-lg bg-ink-200/75" /></td>
+                  </tr>
+                </template>
+
+                <!-- Filtered empty state -->
+                <tr v-else-if="!paginatedOrders.length">
+                  <td colspan="8" class="px-5 py-12 text-center text-sm text-ink-500">
+                    Không có đơn hoàn trả linh kiện nào phù hợp.
+                  </td>
+                </tr>
+
+                <template v-else>
                 <tr
                   v-for="order in paginatedOrders"
                   :key="order.orderId"
@@ -764,6 +713,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                     </button>
                   </td>
                 </tr>
+                </template>
               </tbody>
             </table>
           </div>
