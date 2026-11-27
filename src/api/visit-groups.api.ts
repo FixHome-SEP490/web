@@ -158,6 +158,10 @@ export interface VisitCheckout {
     amount: number;
     paid: boolean;
     financialFollowupRequired?: boolean;
+    /** A stopped or failed device already booked again: no second rebook is offered. */
+    rebooked?: boolean;
+    /** The new visit (several devices booked together) or the single new booking. */
+    rebookedTo?: { bookingId: string; visitGroupId: string | null };
   }>;
   total: number;
   waiting: number;
