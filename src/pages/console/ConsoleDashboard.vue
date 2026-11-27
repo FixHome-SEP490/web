@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 import { FhSkeleton, FhStatusPill } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
 import AdminDashboardIllustration from '../../components/console/AdminDashboardIllustration.vue';
 import AdminOrderTrendChart from '../../components/console/AdminOrderTrendChart.vue';
 import AdminOrderStatusDonut from '../../components/console/AdminOrderStatusDonut.vue';
@@ -64,35 +65,35 @@ const totalOrdersCount = computed(() => {
   return Math.max(sumStatuses, completedCount.value + activeCount.value + cancelledCount.value);
 });
 
-// 4 KPI Cards configuration - fully synchronized with FixHome design tokens & icons
-const kpiCards = computed(() => [
+// 4 KPI Cards configuration - clean Console metrics with semantic indicator dots
+const kpiCards = computed<{ key: string; label: string; value: number; icon: typeof FileText; tone: ConsoleStatTone }[]>(() => [
   {
     key: 'total',
     label: 'Tổng đơn',
     value: totalOrdersCount.value,
     icon: FileText,
-    iconBg: 'bg-brand-50 border-brand-200/80 text-brand-600',
+    tone: 'neutral',
   },
   {
     key: 'active',
     label: 'Đang thực hiện',
     value: activeCount.value,
     icon: CirclePlay,
-    iconBg: 'bg-success-50 border-success-200/80 text-success-600',
+    tone: 'brand',
   },
   {
     key: 'completed',
     label: 'Hoàn thành',
     value: completedCount.value,
     icon: CheckCircle2,
-    iconBg: 'bg-violet-50 border-violet-200/80 text-violet-600',
+    tone: 'success',
   },
   {
     key: 'cancelled',
     label: 'Đã hủy',
     value: cancelledCount.value,
     icon: CircleX,
-    iconBg: 'bg-danger-50 border-danger-200/80 text-danger-600',
+    tone: 'danger',
   },
 ]);
 
@@ -178,17 +179,15 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
     <template v-if="loading && !ops">
       <!-- 4 KPI Skeletons -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div
-          v-for="i in 4"
-          :key="'kpi-skel-' + i"
-          class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-xs"
-        >
-          <FhSkeleton width="48px" height="48px" class="rounded-2xl shrink-0" />
-          <div class="space-y-2 flex-1">
-            <FhSkeleton height="12px" width="60%" />
-            <FhSkeleton height="24px" width="40%" />
-          </div>
-        </div>
+        <ConsoleStatCard
+          v-for="kpi in kpiCards"
+          :key="'kpi-skel-' + kpi.key"
+          :featured="kpi.key === 'total'"
+          :label="kpi.label"
+          :icon="kpi.icon"
+          :tone="kpi.tone"
+          loading
+        />
       </div>
 
       <!-- 2 Charts Skeletons -->
@@ -220,29 +219,15 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
         class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Thống kê tổng quan đơn hàng"
       >
-        <div
+        <ConsoleStatCard
           v-for="kpi in kpiCards"
           :key="kpi.key"
-          class="flex items-center gap-4.5 rounded-2xl border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) transition-all hover:shadow-(--shadow-e2)"
-        >
-          <!-- Icon container with system stroke width & tokens -->
-          <div
-            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-200 group-hover:scale-105"
-            :class="kpi.iconBg"
-          >
-            <component :is="kpi.icon" :size="24" :stroke-width="2" aria-hidden="true" />
-          </div>
-
-          <!-- Labels and value -->
-          <div class="min-w-0 flex-1">
-            <span class="block text-xs font-medium text-ink-500 truncate">
-              {{ kpi.label }}
-            </span>
-            <span class="mt-1 block font-num text-2xl sm:text-3xl font-bold tracking-tight text-ink-900">
-              {{ kpi.value }}
-            </span>
-          </div>
-        </div>
+          :featured="kpi.key === 'total'"
+          :label="kpi.label"
+          :value="kpi.value"
+          :icon="kpi.icon"
+          :tone="kpi.tone"
+        />
       </section>
 
       <!-- Middle Section: C. Biến động đơn dịch vụ & D. Tình trạng đơn hàng -->

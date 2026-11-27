@@ -22,6 +22,7 @@ import {
 import { FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
@@ -200,16 +201,16 @@ async function submitAdjust(payload: { delta: number; reason: string }) {
   }
 }
 
-const statCards = computed(() => {
+const statCards = computed<{ key: string; label: string; value: string | number; note: string | null; icon: typeof Users; tone: ConsoleStatTone }[]>(() => {
   const totalDisplay = summary.value?.totalAccounts ?? systemTotal.value;
   return [
     {
       key: 'total',
       label: 'Tổng tài khoản',
       value: loadError.value && totalDisplay === null ? '—' : (totalDisplay ?? '—'),
-      note: null as string | null,
+      note: null,
       icon: Users,
-      tileClass: 'bg-brand-50 text-brand-600',
+      tone: 'neutral',
     },
     {
       key: 'low',
@@ -217,7 +218,7 @@ const statCards = computed(() => {
       value: summary.value ? summary.value.lowScoreCount : '—',
       note: summary.value ? null : 'Chưa có API thống kê',
       icon: TriangleAlert,
-      tileClass: 'bg-danger-50 text-danger-600',
+      tone: 'danger',
     },
     {
       key: 'suspended',
@@ -225,7 +226,7 @@ const statCards = computed(() => {
       value: summary.value ? summary.value.suspendedCount : '—',
       note: summary.value ? null : 'Chưa có API thống kê',
       icon: Lock,
-      tileClass: 'bg-warning-50 text-warning-600',
+      tone: 'warning',
     },
     {
       key: 'average',
@@ -233,7 +234,7 @@ const statCards = computed(() => {
       value: summary.value ? summary.value.averagePoints : '—',
       note: summary.value ? null : 'Chưa có API thống kê',
       icon: BadgeCheck,
-      tileClass: 'bg-success-50 text-success-600',
+      tone: 'success',
     },
   ];
 });
@@ -296,25 +297,19 @@ onMounted(load);
     </ConsolePageHeader>
 
     <!-- 4 Compact Summary Cards -->
-    <section class="animate-slide-up-delay-1 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Thống kê điểm uy tín">
-      <div
+    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê điểm uy tín">
+      <ConsoleStatCard
         v-for="card in statCards"
         :key="card.key"
-        class="flex items-center gap-3.5 rounded-[var(--radius-md)] border border-ink-200/80 bg-white/95 px-4 py-3.5 shadow-(--shadow-e1)"
+        :featured="card.key === 'total'"
+        :loading="loading && !loadError && (card.key === 'total' ? summary === null && systemTotal === null : summary === null)"
+        :label="card.label"
+        :value="card.value"
+        :sublabel="card.note ?? undefined"
+        :icon="card.icon"
+        :tone="card.tone"
         :title="card.note ?? undefined"
-      >
-        <div
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)]"
-          :class="card.tileClass"
-        >
-          <component :is="card.icon" :size="20" :stroke-width="1.75" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <p class="truncate text-xs font-medium text-ink-500">{{ card.label }}</p>
-          <p class="mt-0.5 font-num text-xl font-bold leading-tight text-ink-900">{{ card.value }}</p>
-          <p v-if="card.note" class="mt-0.5 truncate text-[11px] text-ink-400">{{ card.note }}</p>
-        </div>
-      </div>
+      />
     </section>
 
     <!-- Single-row Unboxed Search & Filter Bar -->

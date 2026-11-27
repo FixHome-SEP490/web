@@ -83,7 +83,12 @@ async function confirmReject() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Xác nhận khuôn mặt check-in" :count="loading || loadError ? null : total" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Xác nhận khuôn mặt check-in"
+      artwork-src="/images/ui/console-face-checkin.png"
+      :count="loading || loadError ? null : total"
+    />
 
     <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <select v-model="statusFilter" :class="consoleField" aria-label="Trạng thái yêu cầu" data-testid="cf-status-filter">
