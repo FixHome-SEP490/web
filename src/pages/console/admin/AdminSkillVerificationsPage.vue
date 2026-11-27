@@ -9,13 +9,12 @@ import {
   FileText,
   RotateCw,
   Search,
-  UploadCloud,
   User,
   Wrench,
   X,
   AlertCircle,
 } from 'lucide-vue-next';
-import { FhButton, FhConfirmDialog, FhSkeleton } from '../../../components';
+import { FhConfirmDialog, FhSkeleton } from '../../../components';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
 import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
@@ -240,53 +239,31 @@ const openDocumentAccess = (title: string, documentId: string) => {
   void openDocument(selectedVerification.value, documentId, title);
 };
 
-// ---- Approve Modal (FixHome-issued certificate upload) ----
+// ---- Approve dialog (no certificate file: the manager confirms after seeing the papers) ----
 const showApproveModal = ref(false);
 const verificationToApprove = ref<SkillVerification | null>(null);
-const certificateFile = ref<File | null>(null);
-const approveError = ref('');
 
 const openApprove = (verification: SkillVerification) => {
   verificationToApprove.value = verification;
-  certificateFile.value = null;
-  approveError.value = '';
   showApproveModal.value = true;
-};
-
-const onCertificateFileChange = (event: Event) => {
-  certificateFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
 };
 
 const confirmApprove = async () => {
   const verification = verificationToApprove.value;
-  const file = certificateFile.value;
   if (!verification || actionLoadingId.value) return;
-  if (!file) {
-    approveError.value = 'Chọn tệp chứng chỉ FixHome cấp cho thợ.';
-    return;
-  }
 
   actionLoadingId.value = verification.id;
   error.value = '';
   successMessage.value = '';
   try {
-    const { storageObjectPath, uploadUrl } = await adminSkillVerificationsApi.requestCertificateUploadUrl(
-      verification.id,
-      file.type,
-    );
-    await adminSkillVerificationsApi.uploadCertificateFile(uploadUrl, file.type, file);
-    await adminSkillVerificationsApi.approve(verification.id, {
-      storageObjectPath,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    });
+    await adminSkillVerificationsApi.approve(verification.id);
     successMessage.value = `Đã duyệt kỹ năng "${verification.serviceName}" cho ${verification.technician?.fullName ?? 'thợ'}.`;
     showApproveModal.value = false;
     showDrawer.value = false;
     await loadAll();
   } catch (reason) {
-    approveError.value = getErrorMessage(reason, 'Chưa duyệt được kỹ năng, vui lòng thử lại.');
+    showApproveModal.value = false;
+    error.value = getErrorMessage(reason, 'Chưa duyệt được kỹ năng, vui lòng thử lại.');
   } finally {
     actionLoadingId.value = null;
   }
@@ -636,6 +613,7 @@ const confirmReject = async () => {
                   <Wrench :size="12" class="shrink-0 text-brand-600" />
                   <span class="truncate">{{ row.serviceName || 'Dịch vụ' }}</span>
                 </span>
+                <span v-if="row.attemptNumber > 1" class="ml-1.5 inline-flex rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800" data-testid="skill-resubmitted-tag">Gửi lại lần {{ row.attemptNumber }}</span>
               </td>
 
               <!-- Ngày gửi -->
@@ -728,7 +706,7 @@ const confirmReject = async () => {
                       v-if="canDecide && row.status === 'PENDING'"
                       @click="openApprove(row)"
                     >
-                      Duyệt và cấp chứng chỉ
+                      Duyệt kỹ năng
                     </ConsoleMenuItem>
                     <ConsoleMenuItem
                       v-if="canDecide && row.status === 'PENDING'"
@@ -751,53 +729,18 @@ const confirmReject = async () => {
       </div>
     </div>
 
-    <!-- Approve Modal: Upload the certificate FixHome issues -->
-    <Teleport to="body">
-      <Transition name="fh-modal">
-        <div
-          v-if="showApproveModal"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="skill-approve-title"
-          @click.self="showApproveModal = false"
-          @keydown.esc="showApproveModal = false"
-        >
-          <div class="fh-modal-panel w-full max-w-md space-y-4 rounded-2xl border border-ink-200 bg-white p-6 shadow-xl">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h3 id="skill-approve-title" class="text-base font-semibold text-ink-900">Duyệt và cấp chứng chỉ</h3>
-                <p class="mt-1 text-sm text-ink-600 text-pretty">
-                  {{ verificationToApprove?.serviceName }} của <strong>{{ verificationToApprove?.technician?.fullName }}</strong>.
-                </p>
-              </div>
-              <button
-                type="button"
-                class="cursor-pointer rounded-xl p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-900"
-                aria-label="Đóng"
-                @click="showApproveModal = false"
-              >
-                <X :size="18" aria-hidden="true" />
-              </button>
-            </div>
-            <div>
-              <label class="flex h-24 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink-200 bg-ink-25/50 px-3 text-sm text-ink-600 transition-colors hover:border-brand-500 hover:bg-brand-50/30">
-                <UploadCloud :size="18" class="shrink-0 text-brand-600" aria-hidden="true" />
-                <span class="truncate">{{ certificateFile?.name || 'Chọn tệp chứng chỉ (ảnh hoặc PDF)' }}</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="hidden" @change="onCertificateFileChange" />
-              </label>
-              <Transition name="fh-fade-slide">
-                <p v-if="approveError" class="mt-1.5 text-sm text-rose-600" role="alert">{{ approveError }}</p>
-              </Transition>
-            </div>
-            <div class="flex justify-end gap-2 border-t border-ink-100 pt-3">
-              <FhButton variant="secondary" size="sm" @click="showApproveModal = false">Huỷ</FhButton>
-              <FhButton variant="primary" size="sm" :loading="actionLoadingId === verificationToApprove?.id" @click="confirmApprove">Duyệt</FhButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <!-- Approve: confirm only, no file -->
+    <FhConfirmDialog
+      :open="showApproveModal"
+      :loading="actionLoadingId === verificationToApprove?.id"
+      :danger="false"
+      title="Duyệt kỹ năng"
+      :consequence="`${verificationToApprove?.serviceName ?? 'Kỹ năng'} của ${verificationToApprove?.technician?.fullName ?? 'thợ'} sẽ được dùng để ghép việc. Chỉ duyệt khi bạn đã xem giấy tờ của thợ.`"
+      confirm-text="Duyệt"
+      cancel-text="Quay lại"
+      @confirm="confirmApprove"
+      @cancel="showApproveModal = false"
+    />
 
     <!-- Reject Dialog -->
     <FhConfirmDialog

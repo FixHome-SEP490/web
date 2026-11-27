@@ -57,6 +57,10 @@ const faultyLines = computed(() => {
   return (props.claim?.order.partLines ?? []).filter((line) => ids.has(line.id));
 });
 const unfixed = computed(() => outcome.value === 'unfixed');
+// A claim concluded "not covered" can only be closed as rejected (the backend enforces it too). The queue row has no decision block, so this only shows on the detail page.
+const finalNotCovered = computed(
+  () => (props.claim as { detail?: { decision?: { finalResult?: string | null } } } | null)?.detail?.decision?.finalResult === 'not_covered',
+);
 const customerAgreed = computed(
   () => props.claim?.status === 'awaiting_customer' && props.claim.customerResponse === 'agreed',
 );
@@ -87,7 +91,7 @@ watch(open, (isOpen) => {
   partOptions.value = [];
   partId.value = '';
   partQty.value = 1;
-  outcome.value = props.claim.awaitingPrompt === 'completion' || props.claim.status === 'in_progress' ? 'resolved' : 'rejected';
+  outcome.value = !finalNotCovered.value && (props.claim.awaitingPrompt === 'completion' || props.claim.status === 'in_progress') ? 'resolved' : 'rejected';
   result.value = proposal.value ?? 'covered_part';
   reasonCode.value = (props.claim.visit?.notCoveredReasonCode as NotCoveredReason) || 'other_component';
 }, { immediate: true });
@@ -372,13 +376,13 @@ async function submit() {
           <template v-else>
             <fieldset class="space-y-1.5">
               <legend class="text-xs font-medium text-ink-700 mb-1">Kết quả đóng</legend>
-              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'resolved' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+              <label v-if="!finalNotCovered" class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'resolved' ?'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
                 <input v-model="outcome" type="radio" name="warranty-outcome" value="resolved" class="accent-brand-600" /> Đã hoàn tất bảo hành
               </label>
               <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'rejected' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
                 <input v-model="outcome" type="radio" name="warranty-outcome" value="rejected" class="accent-brand-600" /> Không được bảo hành
               </label>
-              <label class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'unfixed' ? 'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
+              <label v-if="!finalNotCovered" class="flex items-center gap-2 p-2.5 rounded-[var(--radius-sm)] border text-xs transition-colors duration-150 cursor-pointer" :class="outcome === 'unfixed' ?'border-brand-600 bg-brand-50/70' : 'border-ink-200 bg-white hover:bg-ink-50'">
                 <input v-model="outcome" type="radio" name="warranty-outcome" value="unfixed" class="accent-brand-600" /> Không khắc phục được: hoàn tiền cho khách
               </label>
             </fieldset>

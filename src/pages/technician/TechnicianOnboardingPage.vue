@@ -54,6 +54,9 @@ import type {
   Gender,
   OnboardingStatusResponse,
 } from '../../types/technician-onboarding.types';
+import { technicianProfileApi, type SentSkillEvidence } from '../../api/technician-profile.api';
+import OnboardingPapersSection, { type PendingPaper } from '../../components/technician/OnboardingPapersSection.vue';
+import { isKycRejected, kycSummaryLabel, stageView } from '../../components/technician/onboarding-stage';
 import { userFacingError } from '../../utils/user-facing-error';
 import { parseDayKey, vnParts } from '../../utils/vn-time';
 import { validateFullName } from '../../utils/input-validation';
@@ -169,38 +172,6 @@ const slots = ref<KycSlot[]>([
     uploaded: false,
   },
 ]);
-
-// Professional certificates (PO 08/10/2026): optional, several photos, must be notarised copies.
-interface CertificatePhoto {
-  file: File | null;
-  previewUrl: string | null;
-  storageObjectPath?: string;
-  fileName?: string;
-  fileSize?: number;
-  mimeType?: string;
-}
-const MAX_CERTIFICATES = 5;
-const certificates = ref<CertificatePhoto[]>([]);
-const certificateInput = ref<HTMLInputElement | null>(null);
-const addCertificates = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  for (const file of files) {
-    if (certificates.value.length >= MAX_CERTIFICATES) {
-      toast.info(`Tối đa ${MAX_CERTIFICATES} ảnh chứng chỉ`);
-      break;
-    }
-    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
-      toast.error('Chỉ nhận ảnh dưới 10 MB');
-      continue;
-    }
-    certificates.value.push({ file, previewUrl: URL.createObjectURL(file) });
-  }
-  input.value = '';
-};
-const removeCertificate = (index: number) => {
-  certificates.value.splice(index, 1);
-};
 
 const frontInput = ref<HTMLInputElement | null>(null);
 const backInput = ref<HTMLInputElement | null>(null);
@@ -329,7 +300,7 @@ const uploadKycDocuments = async (): Promise<boolean> => {
     }
   }
 
-  const hasNewFiles = slots.value.some((s) => !!s.file) || certificates.value.some((c) => !!c.file);
+  const hasNewFiles = slots.value.some((s) => !!s.file);
   if (!hasNewFiles) {
     return true;
   }
@@ -372,24 +343,6 @@ const uploadKycDocuments = async (): Promise<boolean> => {
       }
     }
 
-    for (const cert of certificates.value) {
-      if (cert.file) {
-        const { mimeType, fileName } = getKycUploadMeta(cert.file, 'certificate');
-        const slotInfo = await technicianVerificationApi.requestUploadUrl(mimeType);
-        await technicianVerificationApi.uploadToSignedUrl(slotInfo.uploadUrl, mimeType, cert.file);
-        Object.assign(cert, { storageObjectPath: slotInfo.storageObjectPath, fileName, fileSize: cert.file.size, mimeType, file: null });
-      }
-      if (cert.storageObjectPath) {
-        uploadPayloads.push({
-          documentType: 'certificate',
-          storageObjectPath: cert.storageObjectPath,
-          fileName: cert.fileName || 'certificate.jpg',
-          fileSize: cert.fileSize || 500000,
-          mimeType: (cert.mimeType as KycMimeType) || 'image/jpeg',
-        });
-      }
-    }
-
     try {
       await technicianVerificationApi.submit(uploadPayloads);
     } catch (err: unknown) {
@@ -416,6 +369,24 @@ const uploadKycDocuments = async (): Promise<boolean> => {
 const categories = ref<ServiceCategory[]>([]);
 const allServices = ref<ServiceItem[]>([]);
 const selectedServiceIds = ref<string[]>([]);
+// Cấp độ thợ tự khai cho từng kỹ năng; FixHome xác nhận cấp thật khi xem bản công chứng.
+const SKILL_LEVELS = [
+  { value: 'BEGINNER', label: 'Thợ mới' },
+  { value: 'INTERMEDIATE', label: 'Thợ lành nghề' },
+  { value: 'ADVANCED', label: 'Thợ kỹ thuật cao' },
+  { value: 'EXPERT', label: 'Chuyên gia' },
+];
+const skillLevels = ref<Record<string, string>>({});
+const levelOf = (id: string) => skillLevels.value[id] ?? 'INTERMEDIATE';
+const selectedServices = computed(() => allServices.value.filter((s) => selectedServiceIds.value.includes(s.id)));
+const selectedCategories = computed(() =>
+  categories.value.filter((c) => selectedServices.value.some((s) => s.categoryId === c.id)).map((c) => ({ id: c.id, name: c.name })),
+);
+const sentPapers = ref<SentSkillEvidence[]>([]);
+const pendingPapers = ref<PendingPaper[]>([]);
+const loadSentPapers = async () => {
+  sentPapers.value = await technicianProfileApi.getMySkillEvidence().catch(() => []);
+};
 const yearsExperience = ref<number>(2);
 const bio = ref<string>('');
 const skillSearch = ref<string>('');
@@ -881,11 +852,18 @@ const selectedAreaLabels = computed(() => {
 });
 
 // ----------------- Step 5: Summary & Submission -----------------
-const isApproved = computed(
-  () =>
-    statusData.value?.onboardingStatus === 'approved' ||
-    statusData.value?.verificationStatus === 'verified',
-);
+// Chỉ duyệt hồ sơ cuối mới là approved; danh tính đã xác nhận (KYC verified) chưa đủ.
+const isApproved = computed(() => statusData.value?.onboardingStatus === 'approved');
+const kycRejected = computed(() => isKycRejected(statusData.value));
+// Đã nộp KYC (và chưa bị từ chối) thì khóa thông tin cá nhân: CCCD đã khớp với ảnh đã nộp.
+const personalLocked = computed(() => !!statusData.value?.kycSubmitted && !kycRejected.value);
+const stage = computed(() => stageView(statusData.value));
+const openStageAction = () => {
+  const action = stage.value?.action;
+  if (action === 'visit') router.push('/tech/office-visit');
+  else if (action === 'call' && statusData.value?.supportPhone) window.location.href = `tel:${statusData.value.supportPhone}`;
+  else if (action === 'edit') handleEditRejected();
+};
 const isRejected = computed(
   () =>
     (statusData.value?.onboardingStatus === 'rejected' ||
@@ -935,14 +913,8 @@ const loadInitialData = async () => {
     if (myVerificationRes?.documents && myVerificationRes.documents.length > 0) {
       for (const doc of myVerificationRes.documents) {
         const docTypeLower = doc.documentType.toLowerCase();
-        if (docTypeLower === 'certificate') {
-          const cert: CertificatePhoto = { file: null, previewUrl: null, storageObjectPath: doc.storageObjectPath ?? undefined, fileName: doc.fileName ?? undefined };
-          certificates.value.push(cert);
-          if (doc.id) {
-            technicianVerificationApi.getDocumentAccess(doc.id).then((url) => { if (url) cert.previewUrl = url; }).catch(() => {});
-          }
-          continue;
-        }
+        // Ảnh chứng chỉ cũ nằm trong KYC của hồ sơ trước đây; bản mới không nhận nữa nên bỏ qua.
+        if (docTypeLower === 'certificate') continue;
         const slot = slots.value.find((s) => s.documentType.toLowerCase() === docTypeLower);
         if (slot) {
           slot.uploaded = true;
@@ -959,6 +931,8 @@ const loadInitialData = async () => {
         }
       }
     }
+
+    await loadSentPapers();
 
     if (statusRes) {
       statusData.value = statusRes;
@@ -991,6 +965,9 @@ const loadInitialData = async () => {
       }
       if (statusRes.selectedServiceIds && statusRes.selectedServiceIds.length > 0) {
         selectedServiceIds.value = statusRes.selectedServiceIds;
+      }
+      for (const s of statusRes.skills ?? []) {
+        if (s.declaredLevel) skillLevels.value[s.serviceId] = s.declaredLevel;
       }
 
       if (statusRes.kycSubmitted) {
@@ -1040,6 +1017,10 @@ onUnmounted(() => {
 
 // Step Handlers
 const handleSaveStep1 = async () => {
+  if (personalLocked.value) {
+    currentStep.value = 2;
+    return;
+  }
   if (!validateStep1()) {
     toast.error('Vui lòng kiểm tra lại thông tin cá nhân.');
     return;
@@ -1082,12 +1063,29 @@ const handleSaveStep3 = async () => {
   try {
     const updated = await technicianOnboardingApi.saveSkills({
       serviceIds: selectedServiceIds.value,
+      skills: selectedServiceIds.value.map((serviceId) => ({ serviceId, level: levelOf(serviceId) })),
       yearsExperience: Number(yearsExperience.value),
       bio: bio.value.trim() || undefined,
     });
     statusData.value = updated;
-    currentStep.value = 4;
     toast.success('Đã lưu kỹ năng chuyên môn thành công');
+    // Kỹ năng đã lưu rồi mới gắn giấy tờ được; giấy tờ nào lỗi thì giữ lại và ở bước này để thử lại.
+    const failed: PendingPaper[] = [];
+    for (const paper of pendingPapers.value) {
+      try {
+        const { storageObjectPath, uploadUrl } = await technicianProfileApi.requestCategoryEvidenceUploadUrl(paper.file.type);
+        await technicianProfileApi.uploadSkillEvidenceFile(uploadUrl, paper.file.type, paper.file);
+        await technicianProfileApi.attachCategoryEvidence(paper.categoryIds, {
+          storageObjectPath, fileName: paper.file.name, fileSize: paper.file.size, mimeType: paper.file.type, ...paper.details,
+        });
+      } catch (err: unknown) {
+        failed.push(paper);
+        toast.error(getErrorMessage(err, 'Không gửi được một giấy tờ. Kỹ năng đã lưu, bạn có thể thử lại.'));
+      }
+    }
+    pendingPapers.value = failed;
+    await loadSentPapers();
+    if (!failed.length) currentStep.value = 4;
   } catch (err: unknown) {
     const msg = getErrorMessage(err, 'Lỗi khi lưu kỹ năng');
     toast.error(msg);
@@ -1288,13 +1286,20 @@ const handleLogout = async () => {
           <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-100 text-warning-800 text-xs font-bold">
             <Clock :size="13" /> Đang chờ ban quản trị phê duyệt
           </div>
-          <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ thợ đã được tiếp nhận!</h2>
-          <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
-            Căn cước, ảnh chân dung, chứng chỉ, kỹ năng và địa chỉ của bạn đã được lưu.
-          </p>
-          <p class="text-sm font-semibold text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3 max-w-md mx-auto" data-testid="visit-office-note">
-            Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.
-          </p>
+          <template v-if="stage">
+            <h2 class="text-2xl sm:text-3xl font-bold text-ink-900" data-testid="stage-title">{{ stage.title }}</h2>
+            <p class="text-sm max-w-md mx-auto leading-relaxed text-pretty" :class="stage.tone === 'danger' ? 'text-danger-700' : 'text-ink-600'" data-testid="stage-body">{{ stage.body }}</p>
+            <FhButton v-if="stage.action" variant="primary" size="lg" data-testid="stage-action" @click="openStageAction">{{ stage.actionLabel }}</FhButton>
+          </template>
+          <template v-else>
+            <h2 class="text-2xl sm:text-3xl font-bold text-ink-900">Hồ sơ thợ đã được tiếp nhận!</h2>
+            <p class="text-ink-600 text-sm max-w-md mx-auto leading-relaxed">
+              Căn cước, ảnh chân dung, kỹ năng và địa chỉ của bạn đã được lưu.
+            </p>
+            <p class="text-sm font-semibold text-warning-800 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3 max-w-md mx-auto" data-testid="visit-office-note">
+              Vui lòng đến trụ sở trong thời gian sớm nhất để tiến hành xác minh thông tin và bắt đầu công việc.
+            </p>
+          </template>
         </div>
 
         <div class="p-4 rounded-2xl bg-ink-50 border border-ink-200 text-left text-xs space-y-2 text-ink-600">
@@ -1434,6 +1439,9 @@ const handleLogout = async () => {
             </h3>
           </div>
 
+          <p v-if="personalLocked" class="rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-xs text-ink-700" data-testid="personal-locked">
+            Thông tin cá nhân đã gắn với hồ sơ xác minh nên không sửa được. Cần đổi, hãy liên hệ FixHome.
+          </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <!-- Full Name -->
             <div class="sm:col-span-2">
@@ -1442,6 +1450,7 @@ const handleLogout = async () => {
               </label>
               <input
                 v-model="fullName"
+                :disabled="personalLocked"
                 type="text"
                 placeholder="Nguyễn Văn A"
                 class="w-full h-11 px-4 text-sm bg-ink-50 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -1456,6 +1465,7 @@ const handleLogout = async () => {
               </label>
               <input
                 v-model="dateOfBirth"
+                :disabled="personalLocked"
                 type="date"
                 class="w-full h-11 px-4 text-sm bg-ink-50 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
@@ -1469,6 +1479,7 @@ const handleLogout = async () => {
               </label>
               <select
                 v-model="gender"
+                :disabled="personalLocked"
                 class="w-full h-11 px-4 text-sm bg-ink-50 border border-ink-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="male">Nam</option>
@@ -1484,6 +1495,7 @@ const handleLogout = async () => {
               </label>
               <input
                 v-model="citizenIdNumber"
+                :disabled="personalLocked"
                 type="text"
                 maxlength="12"
                 placeholder="001234567890"
@@ -1499,6 +1511,7 @@ const handleLogout = async () => {
               </label>
               <input
                 v-model="phoneNumber"
+                :disabled="personalLocked"
                 type="text"
                 maxlength="10"
                 placeholder="0912345678"
@@ -1648,23 +1661,9 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div class="space-y-3 border-t border-ink-100 pt-4" data-testid="certificate-section">
-            <div>
-              <h4 class="text-sm font-bold text-ink-900">Chứng chỉ nghề <span class="font-normal text-ink-400">(không bắt buộc)</span></h4>
-              <p class="mt-1 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800">Ảnh chứng chỉ phải chụp từ bản đã công chứng. Tối đa {{ MAX_CERTIFICATES }} ảnh.</p>
-            </div>
-            <input ref="certificateInput" type="file" accept="image/*" multiple class="hidden" @change="addCertificates" />
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div v-for="(cert, index) in certificates" :key="index" class="relative rounded-xl border border-ink-200 overflow-hidden">
-                <img v-if="cert.previewUrl" :src="cert.previewUrl" alt="Chứng chỉ" class="h-28 w-full object-cover" />
-                <div v-else class="h-28 flex items-center justify-center text-xs text-ink-400">Đã tải lên</div>
-                <button v-if="cert.file" type="button" class="absolute top-1 right-1 rounded-lg bg-white/90 px-2.5 py-1 text-xs font-semibold text-danger-700" aria-label="Bỏ ảnh chứng chỉ này" @click="removeCertificate(index)">Bỏ</button>
-              </div>
-              <button v-if="certificates.length < MAX_CERTIFICATES" type="button" class="h-28 rounded-xl border-2 border-dashed border-ink-200 text-xs font-semibold text-ink-600 hover:border-brand-400" @click="certificateInput?.click()">
-                + Thêm ảnh chứng chỉ
-              </button>
-            </div>
-          </div>
+          <p class="rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs text-warning-800" data-testid="notarised-note">
+            Bằng cấp, chứng chỉ nghề không tải ở bước này. Hãy thêm giấy tờ ở bước 3 và mang bản công chứng lên trụ sở khi hẹn gặp.
+          </p>
 
           <div class="flex justify-between items-center pt-4 border-t border-ink-100">
             <FhButton variant="secondary" size="md" @click="currentStep = 1">
@@ -1672,7 +1671,7 @@ const handleLogout = async () => {
               <span>Quay lại</span>
             </FhButton>
             <FhButton variant="primary" size="lg" :loading="saving" @click="handleSaveStep2">
-              <span>Lưu & Tiếp tục: Bước 3</span>
+              <span>{{ kycRejected ? 'Cập nhật hồ sơ xác minh & Tiếp tục' : 'Lưu & Tiếp tục: Bước 3' }}</span>
               <ArrowRight :size="16" class="ml-2" />
             </FhButton>
           </div>
@@ -1750,6 +1749,25 @@ const handleLogout = async () => {
           <div class="text-xs text-ink-500">
             Đã chọn: <strong class="text-brand-700 font-num">{{ selectedServiceIds.length }}</strong> kỹ năng dịch vụ
           </div>
+
+          <!-- Self-declared level per selected skill -->
+          <div v-if="selectedServices.length" class="space-y-2 border-t border-ink-100 pt-4" data-testid="skill-levels">
+            <h4 class="text-sm font-bold text-ink-900">Tay nghề của bạn</h4>
+            <p class="text-xs text-ink-500">Cấp bạn tự khai cho từng kỹ năng. FixHome xác nhận cấp thật khi xem bản công chứng bằng cấp.</p>
+            <div v-for="svc in selectedServices" :key="svc.id" class="flex items-center justify-between gap-3">
+              <label :for="`ob-level-${svc.id}`" class="text-sm text-ink-800">{{ svc.name }}</label>
+              <select
+                :id="`ob-level-${svc.id}`"
+                :value="levelOf(svc.id)"
+                class="h-10 px-3 text-sm bg-white border border-ink-200 rounded-xl"
+                @change="skillLevels[svc.id] = ($event.target as HTMLSelectElement).value"
+              >
+                <option v-for="l in SKILL_LEVELS" :key="l.value" :value="l.value">{{ l.label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <OnboardingPapersSection v-model="pendingPapers" :categories="selectedCategories" :sent="sentPapers" />
 
           <!-- Bio / Introduction -->
           <div>
@@ -2240,11 +2258,9 @@ const handleLogout = async () => {
                   Sửa
                 </button>
               </div>
-              <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs sm:text-sm text-success-700 font-medium">
-                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Mặt trước CCCD: Đã sẵn sàng</span>
-                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Mặt sau CCCD: Đã sẵn sàng</span>
-                <span class="inline-flex items-center gap-1.5"><CheckCircle2 :size="14" /> Ảnh chân dung khuôn mặt: Đã sẵn sàng</span>
-              </div>
+              <p class="text-xs sm:text-sm font-medium" :class="kycRejected ? 'text-danger-700' : 'text-success-700'" data-testid="kyc-summary">
+                CCCD và ảnh chân dung: {{ kycSummaryLabel(statusData) }}
+              </p>
             </div>
 
             <!-- Row 3: Skills -->
@@ -2262,6 +2278,8 @@ const handleLogout = async () => {
                   Kinh nghiệm: <strong class="text-ink-900 font-num">{{ yearsExperience }} năm</strong>
                   <span class="mx-2 text-ink-300">·</span>
                   Kỹ năng đã đăng ký: <strong class="text-brand-700 font-semibold font-num">{{ selectedServiceIds.length }} dịch vụ</strong>
+                  <span class="mx-2 text-ink-300">·</span>
+                  Giấy tờ đã gửi: <strong class="text-ink-900 font-num" data-testid="papers-count">{{ sentPapers.length }}</strong>
                 </p>
                 <p v-if="bio" class="text-xs text-ink-500 line-clamp-2 text-pretty">{{ bio }}</p>
               </div>

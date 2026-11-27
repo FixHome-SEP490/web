@@ -219,7 +219,6 @@ describe('Hồ sơ kỹ thuật viên: bố cục gọn', () => {
     await flushPromises();
     expect(technicianProfileApi.setSkillPricing).toHaveBeenCalledWith('s-1', {
       isActive: true,
-      level: 'INTERMEDIATE',
       typicalWarrantyDays: 30,
       listedLaborPrice: 200000,
     });

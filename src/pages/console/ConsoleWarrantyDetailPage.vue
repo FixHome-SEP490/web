@@ -33,7 +33,6 @@ import {
   Snowflake,
   User,
   UserCheck,
-  UserPlus,
   Users,
   Wrench,
   Zap,
@@ -103,11 +102,11 @@ const primary = computed<{ mode: WarrantyDecisionMode; label: string } | null>((
   if (!current || !canDecide.value || closed.value) return null;
   if (current.declineReview === 'pending') return { mode: 'review', label: current.noShowFlaggedAt ? 'Xét không đến' : 'Xét từ chối' };
   if (current.status === 'inspected') return { mode: 'approve', label: 'Duyệt kết luận' };
-  if (['submitted', 'accepted'].includes(current.status)) return { mode: 'assign', label: current.technician ? 'Phân công lại' : 'Phân công kỹ thuật viên' };
-  if (['in_progress', 'awaiting_customer', 'disputed'].includes(current.status)) return { mode: 'close', label: 'Đóng yêu cầu' };
+  // The backend refuses to let the manager who approved a disputed claim close it; another manager has to.
+  const reviewedByMe = current.status === 'disputed' && detail.value?.decision.reviewedBy?.id === authStore.user?.id;
+  if (['in_progress', 'awaiting_customer', 'disputed'].includes(current.status) && !reviewedByMe) return { mode: 'close', label: 'Đóng yêu cầu' };
   return null;
 });
-const canAssignToo = computed(() => canDecide.value && claim.value?.status === 'inspected');
 const canReject = computed(() => canDecide.value && ['submitted', 'accepted', 'inspected'].includes(claim.value?.status ?? ''));
 
 const reasonLabel = (code: string | null | undefined) =>
@@ -693,15 +692,11 @@ onMounted(load);
           <div class="flex shrink-0 items-center gap-2">
             <FhButton v-if="primary" size="sm" @click="openModal(primary.mode)">{{ primary.label }}</FhButton>
             <ConsoleMoreMenu
-              v-if="canAssignToo || canReject || detail.decision.escalatedSupportCaseId"
+              v-if="canReject || detail.decision.escalatedSupportCaseId"
               :show-label="true"
               button-label="Thao tác"
               label="Thao tác với yêu cầu"
             >
-              <ConsoleMenuItem v-if="canAssignToo" @click="openModal('assign')">
-                <UserPlus :size="15" />
-                Phân công lại
-              </ConsoleMenuItem>
               <ConsoleMenuItem v-if="detail.decision.escalatedSupportCaseId" @click="$router.push(`/console/support/${detail.decision.escalatedSupportCaseId}`)">
                 <FileSearch :size="15" />
                 Xem hồ sơ phản đối

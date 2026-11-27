@@ -6,6 +6,8 @@ import AvatarDialog from '../../components/account/AvatarDialog.vue';
 import ChangePasswordCard from '../../components/account/ChangePasswordCard.vue';
 import ContactVerificationCard from '../../components/account/ContactVerificationCard.vue';
 import ReputationCard from '../../components/account/ReputationCard.vue';
+import TechnicianPapersTab from '../../components/technician/TechnicianPapersTab.vue';
+import SkillPapersPanel from '../../components/technician/SkillPapersPanel.vue';
 import TimeSelect24 from '../../components/technician/TimeSelect24.vue';
 import TechnicianWeekCalendar from '../../components/technician/TechnicianWeekCalendar.vue';
 import ServiceAreaPicker from '../../components/technician/ServiceAreaPicker.vue';
@@ -21,7 +23,6 @@ import {
   Plus,
   Trash2,
   Search,
-  UploadCloud,
   AlertCircle,
   ChevronRight,
 } from 'lucide-vue-next';
@@ -58,11 +59,12 @@ import { isLandPlace, NOT_AN_ADDRESS } from '../../utils/place-check';
 const authStore = useAuthStore();
 
 // ----------------- State & Navigation -----------------
-type TabKey = 'info' | 'services' | 'schedule' | 'location' | 'reviews';
+type TabKey = 'info' | 'services' | 'papers' | 'schedule' | 'location' | 'reviews';
 const activeTab = ref<TabKey>('info');
 const profileTabs: { key: TabKey; label: string }[] = [
   { key: 'info', label: 'Thông tin' },
   { key: 'services', label: 'Dịch vụ và giá công' },
+  { key: 'papers', label: 'Giấy tờ' },
   { key: 'schedule', label: 'Lịch làm việc' },
   { key: 'location', label: 'Khu vực nhận việc' },
   { key: 'reviews', label: 'Đánh giá' },
@@ -326,10 +328,8 @@ const skillDrafts = ref<
 const savingSkillId = ref<string | null>(null);
 const serviceSearchQuery = ref('');
 const selectedCategoryId = ref<string>('ALL');
-const selectedSkillFilter = ref<'ALL' | 'ACTIVE' | 'VERIFIED' | 'PENDING'>('ALL');
+const selectedSkillFilter = ref<'ALL' | 'ACTIVE' | 'VERIFIED' | 'PENDING' | 'REJECTED'>('ALL');
 
-const evidenceUploadingId = ref<string | null>(null);
-const rejectionReasons = ref<Record<string, string | null>>({});
 
 const reference = useReferenceData();
 
@@ -416,9 +416,9 @@ const handleSaveDefaultWarranty = async () => {
 const isFixedPrice = (service: ServiceItem) => String(service.pricingMode).toLowerCase() === 'fixed_price';
 
 const SKILL_STATUS_LABELS: Record<string, string> = {
-  pending: 'Chờ duyệt chứng chỉ',
-  verified: 'Đã duyệt chứng chỉ',
-  rejected: 'Chứng chỉ bị từ chối',
+  pending: 'Chờ duyệt',
+  verified: 'Đã duyệt',
+  rejected: 'Bị từ chối',
 };
 
 const filteredServices = computed(() => {
@@ -439,6 +439,8 @@ const filteredServices = computed(() => {
     list = list.filter((s) => myOfferings.value.get(s.id)?.verificationStatus === 'verified');
   } else if (selectedSkillFilter.value === 'PENDING') {
     list = list.filter((s) => myOfferings.value.get(s.id)?.verificationStatus === 'pending');
+  } else if (selectedSkillFilter.value === 'REJECTED') {
+    list = list.filter((s) => myOfferings.value.get(s.id)?.verificationStatus === 'rejected');
   }
 
   return list;
@@ -464,7 +466,6 @@ const handleSaveSkill = async (service: ServiceItem) => {
   try {
     const offering = await technicianProfileApi.setSkillPricing(service.id, {
       isActive: draft.enabled,
-      level: draft.level.trim() || 'INTERMEDIATE',
       typicalWarrantyDays: warranty,
       listedLaborPrice: price,
     });
@@ -476,37 +477,6 @@ const handleSaveSkill = async (service: ServiceItem) => {
   } finally {
     savingSkillId.value = null;
   }
-};
-
-const handleUploadEvidence = async (serviceId: string, event: Event) => {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  evidenceUploadingId.value = serviceId;
-  try {
-    const { storageObjectPath, uploadUrl } = await technicianProfileApi.requestSkillEvidenceUploadUrl(
-      serviceId,
-      file.type,
-    );
-    await technicianProfileApi.uploadSkillEvidenceFile(uploadUrl, file.type, file);
-    await technicianProfileApi.attachSkillEvidence(serviceId, {
-      storageObjectPath,
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    });
-    showFeedback('Đã gửi chứng chỉ. FixHome sẽ xem xét.');
-    await loadServicesAndOfferings();
-  } catch (err) {
-    showFeedback(userFacingError(err, 'Không thể gửi chứng chỉ. Vui lòng thử lại.'), 'error');
-  } finally {
-    evidenceUploadingId.value = null;
-  }
-};
-
-const showRejectionReason = async (serviceId: string) => {
-  if (rejectionReasons.value[serviceId] !== undefined) return;
-  const verification = await technicianProfileApi.getSkillVerification(serviceId).catch(() => null);
-  rejectionReasons.value[serviceId] = verification?.rejectionReason ?? 'Không có lý do chi tiết từ FixHome';
 };
 
 // ----------------- Vị trí & Bán kính hoạt động -----------------
@@ -1237,8 +1207,9 @@ const openAvatarModal = () => {
             >
               <option value="ALL">Tất cả trạng thái</option>
               <option value="ACTIVE">Đang nhận làm</option>
-              <option value="VERIFIED">Đã duyệt chứng chỉ</option>
-              <option value="PENDING">Chờ duyệt chứng chỉ</option>
+              <option value="VERIFIED">Đã duyệt</option>
+              <option value="PENDING">Chờ duyệt</option>
+              <option value="REJECTED">Bị từ chối</option>
             </select>
           </div>
         </div>
@@ -1345,7 +1316,8 @@ const openAvatarModal = () => {
                   <select
                     :id="`tp-level-${service.id}`"
                     v-model="skillDrafts[service.id].level"
-                    class="w-full h-11 px-3 bg-white border border-ink-200 rounded-xl focus:outline-none focus:border-brand-600"
+                    disabled
+                    class="w-full h-11 px-3 bg-ink-50 border border-ink-200 rounded-xl text-ink-700 disabled:cursor-not-allowed"
                   >
                     <option value="BEGINNER">Thợ mới</option>
                     <option value="INTERMEDIATE">Thợ lành nghề</option>
@@ -1355,36 +1327,11 @@ const openAvatarModal = () => {
                 </div>
               </div>
 
-              <div
-                v-if="myOfferings.get(service.id)?.verificationStatus !== 'verified'"
-                class="flex flex-wrap items-center gap-2"
-              >
-                <label
-                  class="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl bg-white border border-ink-200 text-ink-700 text-sm font-semibold hover:bg-ink-50 cursor-pointer whitespace-nowrap focus-within:ring-2 focus-within:ring-brand-600"
-                >
-                  <UploadCloud :size="16" />
-                  <span>{{ evidenceUploadingId === service.id ? 'Đang tải lên…' : 'Tải lên chứng chỉ' }}</span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    class="sr-only"
-                    :disabled="evidenceUploadingId === service.id"
-                    @change="handleUploadEvidence(service.id, $event)"
-                  />
-                </label>
-                <button
-                  v-if="myOfferings.get(service.id)?.verificationStatus === 'rejected' && rejectionReasons[service.id] === undefined"
-                  type="button"
-                  class="h-10 px-3 rounded-xl text-sm font-semibold text-danger-600 hover:bg-danger-50 whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-danger-600"
-                  @click="showRejectionReason(service.id)"
-                >
-                  Xem lý do từ chối
-                </button>
-              </div>
-
-              <p v-if="rejectionReasons[service.id]" class="text-sm text-danger-700 text-pretty">
-                Lý do từ chối: {{ rejectionReasons[service.id] }}
-              </p>
+              <SkillPapersPanel
+                :service-id="service.id"
+                :status="myOfferings.get(service.id)?.verificationStatus ?? 'pending'"
+                @changed="loadServicesAndOfferings"
+              />
               </div>
             </Transition>
           </li>
@@ -1392,6 +1339,10 @@ const openAvatarModal = () => {
       </div>
 
       <!-- TAB: Lịch làm việc -->
+      <div v-if="activeTab === 'papers'" class="animate-slide-up">
+        <TechnicianPapersTab />
+      </div>
+
       <div v-if="activeTab === 'schedule'" class="animate-slide-up space-y-6">
         <TechnicianWeekCalendar :schedule="weeklyScheduleDraft" :saved-schedule="uniqueSchedule" :time-off="timeOffList" />
 

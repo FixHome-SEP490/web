@@ -95,8 +95,8 @@ const onboardingQuery = useCachedQuery(sharedQueries.technicianOnboarding);
 const onboardingStatus = computed<string | null>(() =>
   onboardingQuery.error.value ? null : (onboardingQuery.data.value?.onboardingStatus ?? null),
 );
-const verificationStatus = computed<string | null>(() =>
-  onboardingQuery.error.value ? null : onboardingQuery.data.value?.verificationStatus || null,
+const reviewStage = computed<string | null>(() =>
+  onboardingQuery.error.value ? null : (onboardingQuery.data.value?.reviewStage ?? null),
 );
 
 const walletQuery = useCachedQuery(sharedQueries.technicianWallet);
@@ -107,7 +107,7 @@ const walletSummary = computed<WalletSummary | null>(() =>
 /** Approved, but the deposit is below the floor: no new jobs until topped up. */
 const needsDeposit = computed(
   () =>
-    (onboardingStatus.value === 'approved' || verificationStatus.value === 'verified') &&
+    onboardingStatus.value === 'approved' &&
     !!walletSummary.value &&
     !walletSummary.value.eligibleForJobs,
 );
@@ -191,13 +191,21 @@ const unread = computed(() => (chatStore.totalUnreadCount > 99 ? '99+' : String(
 
 /** Rejected profiles are blocked until fixed (red); pending ones only wait (yellow). */
 const onboardingBanner = computed(() => {
-  if (!onboardingStatus.value || onboardingStatus.value === 'approved' || verificationStatus.value === 'verified') {
+  // Danh tính được xác nhận (KYC verified) chưa phải hồ sơ được duyệt: chỉ `approved` mới tắt banner.
+  if (!onboardingStatus.value || onboardingStatus.value === 'approved') {
     return null;
   }
   if (onboardingStatus.value === 'rejected') {
-    return { tone: 'alert' as const, state: 'Cần bổ sung' };
+    return { tone: 'alert' as const, state: 'Cần bổ sung', text: 'Hoàn tất hồ sơ để nhận đơn.', to: '/tech/onboarding', cta: 'Hoàn tất hồ sơ' };
   }
-  return { tone: 'note' as const, state: onboardingStatus.value === 'submitted' ? 'Chờ xét duyệt' : 'Chưa hoàn tất' };
+  if (onboardingStatus.value === 'submitted') {
+    if (reviewStage.value === 'visit_required') return { tone: 'note' as const, state: 'Cần đặt lịch lên trụ sở', text: 'Chọn trụ sở và giờ hẹn để FixHome duyệt hồ sơ.', to: '/tech/office-visit', cta: 'Đặt lịch' };
+    if (reviewStage.value === 'visit_scheduled') return { tone: 'note' as const, state: 'Đã có lịch hẹn', text: 'Hãy đến trụ sở đúng giờ và mang bản công chứng bằng cấp.', to: '/tech/office-visit', cta: 'Xem lịch hẹn' };
+    if (reviewStage.value === 'visit_blocked') return { tone: 'alert' as const, state: 'Cần liên hệ quản lý dịch vụ', text: 'Bạn đã vắng buổi hẹn nhiều lần.', to: '/tech/onboarding', cta: 'Xem chi tiết' };
+    if (reviewStage.value === 'profile_rejected' || reviewStage.value === 'identity_rejected') return { tone: 'alert' as const, state: 'Cần bổ sung', text: 'Cập nhật hồ sơ để được xét duyệt lại.', to: '/tech/onboarding', cta: 'Cập nhật hồ sơ' };
+    return { tone: 'note' as const, state: 'Chờ xét duyệt', text: 'Hoàn tất hồ sơ để nhận đơn.', to: '/tech/onboarding', cta: 'Hoàn tất hồ sơ' };
+  }
+  return { tone: 'note' as const, state: 'Chưa hoàn tất', text: 'Hoàn tất hồ sơ để nhận đơn.', to: '/tech/onboarding', cta: 'Hoàn tất hồ sơ' };
 });
 
 type TabNavItem = { to: string; label: string; icon: typeof Wrench; exact?: boolean; badge?: () => string | null };
@@ -420,15 +428,15 @@ const tabItems: TabNavItem[] = [
             <span>
               Hồ sơ của bạn:
               <strong class="font-semibold whitespace-nowrap">{{ onboardingBanner.state }}</strong>.
-              Hoàn tất hồ sơ để nhận đơn.
+              {{ onboardingBanner.text }}
             </span>
           </p>
           <router-link
-            to="/tech/onboarding"
+            :to="onboardingBanner.to"
             class="shrink-0 h-9 px-4 inline-flex items-center gap-1 rounded-xl bg-white border text-sm font-semibold whitespace-nowrap transition-colors"
             :class="onboardingBanner.tone === 'alert' ? 'border-danger-200 text-danger-700 hover:bg-danger-100' : 'border-warning-200 text-warning-800 hover:bg-warning-100'"
           >
-            Hoàn tất hồ sơ
+            {{ onboardingBanner.cta }}
             <ChevronRight :size="16" />
           </router-link>
         </div>

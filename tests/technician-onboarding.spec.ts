@@ -8,11 +8,11 @@ import { useAuthStore } from '../src/stores/auth.store';
 import { UserRole } from '../src/types';
 import { toast } from 'vue-sonner';
 
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('vue-router', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
+  useRouter: () => ({ push }),
 }));
+import { technicianProfileApi } from '../src/api/technician-profile.api';
 
 // The chat dock has its own spec (public-layout-widgets); here it only has to be
 // present, without opening a real chat connection.
@@ -28,6 +28,15 @@ vi.mock('../src/api/technician-onboarding.api', () => ({
     saveSkills: vi.fn(),
     saveAddress: vi.fn(),
     submit: vi.fn(),
+  },
+}));
+
+vi.mock('../src/api/technician-profile.api', () => ({
+  technicianProfileApi: {
+    getMySkillEvidence: vi.fn().mockResolvedValue([]),
+    requestCategoryEvidenceUploadUrl: vi.fn(),
+    uploadSkillEvidenceFile: vi.fn(),
+    attachCategoryEvidence: vi.fn(),
   },
 }));
 
@@ -345,6 +354,116 @@ describe('TechnicianOnboardingPage', () => {
   });
 });
 
+
+const submittedBase = {
+  onboardingStatus: 'submitted',
+  verificationStatus: 'verified',
+  currentStep: 5,
+  personalInfoCompleted: true,
+  kycSubmitted: true,
+  skillsSelected: true,
+  addressSet: true,
+  fullName: 'minh CU',
+} as const;
+
+describe('TechnicianOnboardingPage review stages and wizard rules', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
+
+  it('asks the technician to book an office visit once identity is confirmed', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValue({ ...submittedBase, reviewStage: 'visit_required' });
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="stage-title"]').text()).toBe('Đặt lịch lên trụ sở');
+    await wrapper.get('[data-testid="stage-action"]').trigger('click');
+    expect(push).toHaveBeenCalledWith('/tech/office-visit');
+  });
+
+  it('shows the booked visit, the support phone when blocked, and the profile rejection reason', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({
+      ...submittedBase, reviewStage: 'visit_scheduled',
+      officeVisit: { id: 'v', officeId: 'o', officeName: 'Trụ sở Q1', officeAddress: '1 Lê Lợi', scheduledAt: '2026-12-01T02:00:00.000Z' },
+    });
+    let wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="stage-body"]').text()).toContain('Trụ sở Q1');
+
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({ ...submittedBase, reviewStage: 'visit_blocked', supportPhone: '0900000001' });
+    wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="stage-body"]').text()).toContain('0900000001');
+    expect(wrapper.get('[data-testid="stage-action"]').text()).toBe('Gọi 0900000001');
+
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValueOnce({ ...submittedBase, reviewStage: 'profile_rejected', profileRejectionReason: 'Thiếu bằng cấp' });
+    wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="stage-body"]').text()).toBe('Thiếu bằng cấp');
+  });
+
+  it('does not treat a verified identity alone as an approved profile', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValue({ ...submittedBase, reviewStage: 'profile_review' });
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Hồ sơ đã được phê duyệt!');
+    expect(wrapper.get('[data-testid="stage-title"]').text()).toBe('Đang chờ xét duyệt');
+  });
+
+  it('locks personal info after KYC is submitted and drops the certificate photos', async () => {
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValue({
+      ...submittedBase, onboardingStatus: 'in_progress', currentStep: 1, reviewStage: null, citizenIdNumber: '001200001111',
+    });
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="personal-locked"]').exists()).toBe(true);
+    expect(wrapper.find('input[maxlength="12"]').attributes('disabled')).toBeDefined();
+    await wrapper.findAll('button').find((b) => b.text().includes('Tiếp tục: Bước 2'))!.trigger('click');
+    await flushPromises();
+    expect(technicianOnboardingApi.savePersonalInfo).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="certificate-section"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="notarised-note"]').exists()).toBe(true);
+  });
+
+  it('sends the declared level per skill and attaches papers only after the skills are saved', async () => {
+    const { catalogApi } = await import('../src/api/catalog.api');
+    vi.mocked(catalogApi.getCategories).mockResolvedValue([{ id: 'c1', name: 'Điện', isActive: true } as never]);
+    vi.mocked(catalogApi.getServices).mockResolvedValue({ data: [{ id: 's1', name: 'Sửa điện', categoryId: 'c1' }] } as never);
+    vi.mocked(technicianOnboardingApi.getStatus).mockResolvedValue({
+      onboardingStatus: 'in_progress', verificationStatus: 'pending', currentStep: 3, personalInfoCompleted: true,
+      kycSubmitted: true, skillsSelected: false, addressSet: false, fullName: 'minh CU', selectedServiceIds: ['s1'],
+      skills: [{ serviceId: 's1', declaredLevel: 'ADVANCED', level: 'INTERMEDIATE', verificationStatus: 'pending' }],
+    });
+    const calls: string[] = [];
+    vi.mocked(technicianOnboardingApi.saveSkills).mockImplementation(async () => { calls.push('skills'); return {} as never; });
+    vi.mocked(technicianProfileApi.requestCategoryEvidenceUploadUrl).mockImplementation(async () => { calls.push('upload-url'); return { storageObjectPath: 'p', uploadUrl: 'u' }; });
+    vi.mocked(technicianProfileApi.uploadSkillEvidenceFile).mockResolvedValue(undefined);
+    vi.mocked(technicianProfileApi.attachCategoryEvidence).mockImplementation(async () => { calls.push('attach'); return { attachedSkills: 1, serviceIds: ['s1'] }; });
+
+    const wrapper = mount(TechnicianOnboardingPage, mountOptions);
+    await flushPromises();
+    expect((wrapper.get('#ob-level-s1').element as HTMLSelectElement).value).toBe('ADVANCED');
+
+    await wrapper.get('[data-testid="onboarding-paper-add"]').trigger('click');
+    await wrapper.get('[data-testid="onboarding-papers"] input[type="checkbox"]').setValue(true);
+    await wrapper.get('[data-testid="paper-type"]').setValue('vocational_diploma');
+    const file = wrapper.get('[data-testid="paper-file"]');
+    Object.defineProperty(file.element, 'files', { configurable: true, value: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] });
+    await file.trigger('change');
+    await wrapper.get('[data-testid="paper-form"]').trigger('submit');
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="onboarding-paper-pending"]')).toHaveLength(1);
+    expect(technicianProfileApi.attachCategoryEvidence).not.toHaveBeenCalled();
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Lưu & Tiếp tục: Bước 4'))!.trigger('click');
+    await flushPromises();
+    expect(technicianOnboardingApi.saveSkills).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceIds: ['s1'], skills: [{ serviceId: 's1', level: 'ADVANCED' }] }),
+    );
+    expect(calls).toEqual(['skills', 'upload-url', 'attach']);
+    expect(wrapper.text()).toContain('Bước 4');
+  });
+});
 
 describe('TechnicianOnboardingPage chat', () => {
   it('keeps the technician chat bubble on the onboarding page', () => {

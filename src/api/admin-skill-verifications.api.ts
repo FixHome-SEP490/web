@@ -61,6 +61,10 @@ export interface SkillVerification {
   submittedAt: string;
   reviewedAt: string | null;
   rejectionReason: string | null;
+  /** 1 for the first request of the skill, 2 after one earlier request, and so on. */
+  attemptNumber: number;
+  /** Reason of the latest earlier rejection of this skill. */
+  previousRejectionReason: string | null;
   documents: SkillVerificationDocument[];
   technician?: { fullName: string; email: string } | null;
 }
@@ -103,7 +107,7 @@ export function normalizeDocument(payload: unknown): SkillVerificationDocument {
   };
 }
 
-function normalizeVerification(payload: unknown): SkillVerification {
+export function normalizeVerification(payload: unknown): SkillVerification {
   const v = isRecord(payload) ? payload : {};
   const technician = isRecord(v.technician) ? v.technician : null;
   return {
@@ -116,6 +120,8 @@ function normalizeVerification(payload: unknown): SkillVerification {
     submittedAt: String(v.submittedAt ?? ''),
     reviewedAt: v.reviewedAt == null ? null : String(v.reviewedAt),
     rejectionReason: v.rejectionReason == null ? null : String(v.rejectionReason),
+    attemptNumber: Number(v.attemptNumber) > 0 ? Number(v.attemptNumber) : 1,
+    previousRejectionReason: v.previousRejectionReason == null ? null : String(v.previousRejectionReason),
     documents: Array.isArray(v.documents) ? v.documents.map(normalizeDocument) : [],
     technician: technician
       ? { fullName: String(technician.fullName ?? ''), email: String(technician.email ?? '') }
@@ -168,13 +174,14 @@ export const adminSkillVerificationsApi = {
     return res.data.data;
   },
 
+  /** Duyệt không cần tệp; `certificate` chỉ cho luồng cũ có chứng chỉ FixHome cấp. */
   async approve(
     id: string,
-    certificate: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
+    certificate?: { storageObjectPath: string; fileName: string; fileSize: number; mimeType: string },
   ): Promise<SkillVerification> {
     const res = await apiClient.patch<{ data: unknown }>(
       `/admin/technician-skill-verifications/${id}/approve`,
-      certificate,
+      certificate ?? {},
     );
     return normalizeVerification(res.data.data);
   },

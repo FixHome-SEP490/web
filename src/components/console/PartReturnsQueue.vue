@@ -982,8 +982,12 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                           </span>
                         </div>
                       </div>
-                      <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium" :class="item.statusTone">
-                        {{ item.statusLabel }}
+                      <span
+                        class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                        :class="item.statusTone"
+                        :data-testid="item.maxAcceptQty > 0 ? `part-return-pending-${item.raw.partRequestItemId}` : undefined"
+                      >
+                        {{ item.maxAcceptQty > 0 ? `Chờ nhận ${item.maxAcceptQty}` : item.statusLabel }}
                       </span>
                     </div>
 
