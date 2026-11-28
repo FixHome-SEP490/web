@@ -41,18 +41,30 @@ export interface ReputationRow {
   workSuspendedUntil: string | null;
 }
 
-export interface ReputationSummary {
-  totalAccounts: number;
-  lowScoreCount: number;
-  suspendedCount: number;
-  averagePoints: number;
+/** Account states a stat card filters by; the backend counts and filters with the same rule (BUG 318). */
+export type ReputationState = 'deducted' | 'low' | 'suspended' | 'locked';
+
+/** GET /reputation/stats: counts over every account, not the page on screen. */
+export interface ReputationStats {
+  /** Accounts by role whatever is filtered: the numbers of the role filter. */
+  roles: { all: number; customer: number; technician: number };
+  /** Accounts in the selected role (both when none). */
+  total: number;
+  deducted: number;
+  low: number;
+  suspended: number;
+  locked: number;
 }
 
 export interface ReputationPage {
   data: ReputationRow[];
   meta: { page: number; limit: number; total: number; totalPages: number };
-  summary?: ReputationSummary | null;
 }
+
+const count = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
 
 export const reputationApi = {
   async mine(): Promise<MyReputation> {
@@ -60,12 +72,25 @@ export const reputationApi = {
     return res.data.data;
   },
 
-  async list(params: { role?: 'customer' | 'technician'; search?: string; page?: number; pageSize?: number }): Promise<ReputationPage> {
-    const res = await apiClient.get<{ data: ReputationRow[]; meta: ReputationPage['meta']; summary?: ReputationSummary | null }>('/reputation', { params });
+  async list(params: { role?: 'customer' | 'technician'; search?: string; state?: ReputationState; page?: number; pageSize?: number }): Promise<ReputationPage> {
+    const res = await apiClient.get<{ data: ReputationRow[]; meta: ReputationPage['meta'] }>('/reputation', { params });
     return {
       data: res.data.data ?? [],
       meta: res.data.meta ?? { page: 1, limit: params.pageSize ?? 20, total: 0, totalPages: 0 },
-      summary: res.data.summary ?? null,
+    };
+  },
+
+  async stats(role?: 'customer' | 'technician'): Promise<ReputationStats> {
+    const res = await apiClient.get<{ data: Partial<ReputationStats> | null }>('/reputation/stats', { params: role ? { role } : {} });
+    const raw = res.data.data;
+    if (!raw || typeof raw !== 'object') throw new Error('Backend returned an invalid reputation stats response.');
+    return {
+      roles: { all: count(raw.roles?.all), customer: count(raw.roles?.customer), technician: count(raw.roles?.technician) },
+      total: count(raw.total),
+      deducted: count(raw.deducted),
+      low: count(raw.low),
+      suspended: count(raw.suspended),
+      locked: count(raw.locked),
     };
   },
 

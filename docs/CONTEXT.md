@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-28 17:06 (UTC+7) · Người cập nhật (git): hoangtruong01 · Nhánh: hoang_mac
+> Cập nhật lần cuối: 2026-11-28 18:26 (UTC+7) · Người cập nhật (git): ToanAltF4 · Nhánh: fix/strike-stats-318
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -351,7 +351,7 @@ Ví khách (PO 08/10/2026, backend #90): trang `/app/wallet` (`CustomerWalletPag
 
 Đặt lịch theo buổi phía khách (PO 08/10/2026, bổ sung tối 19/10/2026): form đặt lịch (`NewBookingWizardPage.vue`) chọn "Đặt trước theo buổi" (chip ngày 14 ngày tới + Sáng 8-12 / Chiều 13-18 / Tối 18-23, giờ VN, `components/customer/BookingSessionPicker.vue`) hoặc "Tới ngay", kèm ô "Ghi chú cho thợ"; gửi `mode/date/slot/customerNote`, không còn `preferredStartAt`. Ca tối hôm nay vẫn nhận đặt sau 18:00 và trước 23:00; 23:00 không phải giờ bắt đầu được chọn, "Tới ngay" vẫn dùng sau 23:00. Quy tắc sáng/chiều giữ nguyên. Chi tiết booking (`BookingDetailPage.vue`) hiện lịch hẹn theo buổi và ghi chú; nút "Đổi buổi hẹn" mới tải `GET /bookings/:id/available-slots` (buổi thợ bận bị khoá kèm lý do), đổi được trước khi có thợ nhận (lượt mời cũ huỷ) và sau khi thợ nhận nhưng chưa xuất phát (thợ được báo). "Đặt lại thợ" (`components/customer/RebookDialog.vue`) ở đơn hoàn tất/đã huỷ (danh sách đơn, chi tiết đơn) và booking đã huỷ: chọn ngày + buổi (xem buổi thợ cũ bận), `POST /bookings/:id/rebook`; mời được thợ cũ thì mở booking mới, không thì sang trang chọn thợ với câu báo. Lời mời phía thợ (trang lời mời, tổng quan) hiện buổi hẹn.
 
-Điểm uy tín (PO 08/10/2026, backend `reputation`): hồ sơ khách (`/app/profile`) và thợ (`/tech/profile`) có `components/account/ReputationCard.vue` gọi `GET /reputation/me`, hiện điểm trên 100, hạn tạm khoá đặt lịch hoặc nhận đơn nếu đang bị khoá, khoá tài khoản khi hết điểm, quy tắc trừ điểm, ngày điểm làm mới và lịch sử. SM có trang `/console/reputation` (`ConsoleReputationPage.vue`, menu "Điểm uy tín"): lọc vai trò, tìm theo tên/email/SĐT, điểm thấp trước, phân trang theo `meta`, xem lịch sử, cộng hoặc trừ điểm kèm lý do (xem trước điểm mới). API ở `api/reputation.api.ts`.
+Điểm uy tín (PO 08/10/2026, backend `reputation`): hồ sơ khách (`/app/profile`) và thợ (`/tech/profile`) có `components/account/ReputationCard.vue` gọi `GET /reputation/me`, hiện điểm trên 100, hạn tạm khoá đặt lịch hoặc nhận đơn nếu đang bị khoá, khoá tài khoản khi hết điểm, quy tắc trừ điểm, ngày điểm làm mới và lịch sử. SM có trang `/console/reputation` (`ConsoleReputationPage.vue`, menu "Điểm uy tín"): lọc vai trò, tìm theo tên/email/SĐT, điểm thấp trước, phân trang theo `meta`, xem lịch sử, cộng hoặc trừ điểm kèm lý do (xem trước điểm mới). Hàng 5 thẻ thống kê (BUG 318, kiểu thẻ compact bấm lọc như trang yêu cầu linh kiện): Tất cả tài khoản, Bị trừ điểm, Điểm thấp (< 70), Đang tạm khoá, Đã khoá tài khoản, số lấy từ `GET /reputation/stats?role` trên toàn bộ tài khoản (không đếm trang đang xem), gọi lại khi đổi vai trò hoặc sau Điều chỉnh, không gọi lại khi đổi trang hay tìm; bấm thẻ gửi `state` cho `GET /reputation`, bấm lại hoặc bấm Tất cả thì bỏ lọc; ô chọn vai trò hiện số trong ngoặc từ `roles`. Trang không nối socket nên không tự cập nhật realtime. API ở `api/reputation.api.ts`.
 
 ### Khách rút ví về ngân hàng (PO 14/10/2026, nhánh `feat/customer-withdrawal-kyc`)
 
@@ -645,6 +645,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-28 18:26 (UTC+7) | ToanAltF4 | fix/strike-stats-318 | BUG 318: trang Điểm uy tín của SM có 5 thẻ thống kê bấm lọc và số theo vai trò lấy từ GET /reputation/stats.
 - 2026-11-28 17:06 (UTC+7) | hoangtruong01 | hoang_mac | Thiết kế lại trang hợp tác kỹ thuật viên (ForTechniciansPage.vue) với ảnh WebP /images/for-technicians-hero.webp, 3 quyền lợi và quy trình gia nhập 4 bước, giữ nguyên /register và API
 - 2026-11-28 16:49 (UTC+7) | hoangtruong01 | hoang_mac | Nâng cấp section FAQ (#questions) trên LandingPage.vue sang bố cục 2 cột với ảnh 3 thiết bị /images/faq-devices-showcase.webp và Accordion 6 câu hỏi, giữ nguyên nghiệp vụ/API
 - 2026-11-28 16:26 (UTC+7) | hoangtruong01 | hoang_mac | Nâng cấp section Vì sao chọn FixHome (LandingTrust.vue) sang bố cục 2 cột nền sáng với ảnh WebP /images/trust-technician-consult.webp và thanh CTA /for-technicians, giữ nguyên nghiệp vụ/API

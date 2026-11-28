@@ -2,6 +2,8 @@
 // Service Manager: customers' and technicians' reputation points (PO
 // 08/10/2026). Lowest scores first, why a score moved, and adding or removing
 // points with a reason. Raising a score to 70 or more lifts a running ban.
+// The stat cards and the role filter counts come from GET /reputation/stats,
+// counted over every account; a card filters the list by the same rule (BUG 318).
 import { computed, onMounted, ref } from 'vue';
 import { getActivePinia } from 'pinia';
 import { toast } from 'vue-sonner';
@@ -14,6 +16,8 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  TimerOff,
+  TrendingDown,
   TriangleAlert,
   User,
   Users,
@@ -22,7 +26,7 @@ import {
 import { FhButton } from '../../components';
 import ConsolePageHeader from '../../components/console/ConsolePageHeader.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
-import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
+import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleSearch from '../../components/console/ConsoleSearch.vue';
@@ -31,7 +35,7 @@ import ConsoleTable, { type ConsoleColumn } from '../../components/console/Conso
 import ReputationHistoryDrawer from '../../components/console/ReputationHistoryDrawer.vue';
 import ReputationAdjustModal from '../../components/console/ReputationAdjustModal.vue';
 import { CONSOLE_LOAD_ERROR, consoleField } from '../../components/console/console-ui';
-import { reputationApi, type ReputationEvent, type ReputationRow, type ReputationSummary } from '../../api/reputation.api';
+import { reputationApi, type ReputationEvent, type ReputationRow, type ReputationState, type ReputationStats } from '../../api/reputation.api';
 import { useAuthStore } from '../../stores/auth';
 import { activeBanUntil, REPUTATION_SUSPEND_THRESHOLD, reputationTierOf } from '../../utils/reputation-rules';
 import { vnDateTimeString } from '../../utils/vn-time';
@@ -43,8 +47,9 @@ const search = ref('');
 const page = ref(1);
 const totalPages = ref(0);
 const total = ref(0);
-const systemTotal = ref<number | null>(null);
-const summary = ref<ReputationSummary | null>(null);
+const state = ref<ReputationState | null>(null);
+const stats = ref<ReputationStats | null>(null);
+const statsLoading = ref(true);
 const rows = ref<ReputationRow[]>([]);
 const loading = ref(true);
 const loadError = ref('');
@@ -79,10 +84,10 @@ async function load() {
   loadError.value = '';
   try {
     const trimmedSearch = search.value.trim();
-    const isUnfiltered = !role.value && !trimmedSearch;
     const result = await reputationApi.list({
       role: role.value || undefined,
       search: trimmedSearch || undefined,
+      state: state.value ?? undefined,
       page: page.value,
       pageSize: PAGE_SIZE,
     });
@@ -90,12 +95,6 @@ async function load() {
     rows.value = result.data;
     total.value = result.meta.total;
     totalPages.value = result.meta.totalPages;
-    if (result.summary) {
-      summary.value = result.summary;
-      systemTotal.value = result.summary.totalAccounts;
-    } else if (isUnfiltered) {
-      systemTotal.value = result.meta.total;
-    }
   } catch (error) {
     if (requestId !== activeListRequest) return;
     loadError.value = extractApiErrorMessage(error, CONSOLE_LOAD_ERROR);
@@ -106,9 +105,37 @@ async function load() {
   }
 }
 
+let activeStatsRequest = 0;
+
+/** One call for the cards and the role counts; reloaded when the role changes or a score is adjusted, not per page. */
+async function loadStats() {
+  const requestId = ++activeStatsRequest;
+  statsLoading.value = true;
+  try {
+    const result = await reputationApi.stats(role.value || undefined);
+    if (requestId !== activeStatsRequest) return;
+    stats.value = result;
+  } catch {
+    if (requestId !== activeStatsRequest) return;
+    // The cards show a dash; the list below has its own retry.
+  } finally {
+    if (requestId === activeStatsRequest) statsLoading.value = false;
+  }
+}
+
 function applyFilters() {
   page.value = 1;
   void load();
+}
+
+function onRoleChange() {
+  applyFilters();
+  void loadStats();
+}
+
+function setState(next: ReputationState | null) {
+  state.value = next === null || state.value === next ? null : next;
+  applyFilters();
 }
 
 function goTo(next: number) {
@@ -117,12 +144,17 @@ function goTo(next: number) {
   void load();
 }
 
-const hasFilters = computed(() => Boolean(search.value.trim() || role.value));
+const hasFilters = computed(() => Boolean(search.value.trim() || role.value || state.value));
 function resetFilters() {
+  const roleChanged = Boolean(role.value);
   search.value = '';
   role.value = '';
+  state.value = null;
   applyFilters();
+  if (roleChanged) void loadStats();
 }
+
+const roleOptionLabel = (label: string, n: number | undefined) => (n === undefined ? label : `${label} (${n})`);
 
 // Right-side History Drawer (independent loading + race-condition protection)
 const historyFor = ref<ReputationRow | null>(null);
@@ -186,7 +218,7 @@ async function submitAdjust(payload: { delta: number; reason: string }) {
     target.reputationPoints = result.points;
     adjustFor.value = null;
     toast.success(`Đã cập nhật điểm uy tín cho ${target.fullName} (${result.points}/100).`);
-    await load();
+    await Promise.all([load(), loadStats()]);
     if (historyFor.value?.id === target.id) {
       const refreshed = rows.value.find((r) => r.id === target.id) ?? {
         ...historyFor.value,
@@ -201,41 +233,16 @@ async function submitAdjust(payload: { delta: number; reason: string }) {
   }
 }
 
-const statCards = computed<{ key: string; label: string; value: string | number; note: string | null; icon: typeof Users; tone: ConsoleStatTone }[]>(() => {
-  const totalDisplay = summary.value?.totalAccounts ?? systemTotal.value;
+// Same kind of row as the part requests page: compact cards that filter the list, "Tất cả" clears the filter.
+const statCards = computed<{ key: string; label: string; value: string | number; state: ReputationState | null; icon: typeof Users }[]>(() => {
+  const s = stats.value;
+  const value = (n: number | undefined) => (s && n !== undefined ? n : '—');
   return [
-    {
-      key: 'total',
-      label: 'Tổng tài khoản',
-      value: loadError.value && totalDisplay === null ? '—' : (totalDisplay ?? '—'),
-      note: null,
-      icon: Users,
-      tone: 'neutral',
-    },
-    {
-      key: 'low',
-      label: 'Điểm thấp (< 70)',
-      value: summary.value ? summary.value.lowScoreCount : '—',
-      note: summary.value ? null : 'Chưa có API thống kê',
-      icon: TriangleAlert,
-      tone: 'danger',
-    },
-    {
-      key: 'suspended',
-      label: 'Tạm khoá',
-      value: summary.value ? summary.value.suspendedCount : '—',
-      note: summary.value ? null : 'Chưa có API thống kê',
-      icon: Lock,
-      tone: 'warning',
-    },
-    {
-      key: 'average',
-      label: 'Điểm trung bình',
-      value: summary.value ? summary.value.averagePoints : '—',
-      note: summary.value ? null : 'Chưa có API thống kê',
-      icon: BadgeCheck,
-      tone: 'success',
-    },
+    { key: 'total', label: 'Tất cả tài khoản', value: value(s?.total), state: null, icon: Users },
+    { key: 'deducted', label: 'Bị trừ điểm', value: value(s?.deducted), state: 'deducted', icon: TrendingDown },
+    { key: 'low', label: 'Điểm thấp (< 70)', value: value(s?.low), state: 'low', icon: TriangleAlert },
+    { key: 'suspended', label: 'Đang tạm khoá', value: value(s?.suspended), state: 'suspended', icon: TimerOff },
+    { key: 'locked', label: 'Đã khoá tài khoản', value: value(s?.locked), state: 'locked', icon: Lock },
   ];
 });
 
@@ -251,7 +258,10 @@ function tierIcon(tone: 'success' | 'warning' | 'danger', key: string) {
   return TriangleAlert;
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  void loadStats();
+});
 </script>
 
 <template>
@@ -261,7 +271,7 @@ onMounted(load);
       class="animate-slide-up"
       title="Điểm uy tín"
       artwork-src="/images/ui/console-reputation-gauge.png"
-      :count="loading || loadError ? null : (systemTotal ?? total)"
+      :count="stats ? stats.roles.all : null"
     >
       <template #meta>
         <div class="mt-1.5">
@@ -297,19 +307,25 @@ onMounted(load);
       </template>
     </ConsolePageHeader>
 
-    <!-- 4 Compact Summary Cards -->
-    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê điểm uy tín">
+    <!-- 5 interactive stat cards (all accounts, not this page), same row as the part requests page -->
+    <section
+      class="animate-slide-up-delay-1 grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-5"
+      aria-label="Thống kê điểm uy tín"
+      title="Nhấn để lọc danh sách"
+      data-testid="reputation-stats"
+    >
       <ConsoleStatCard
         v-for="card in statCards"
         :key="card.key"
-        :featured="card.key === 'total'"
-        :loading="loading && !loadError && (card.key === 'total' ? summary === null && systemTotal === null : summary === null)"
+        interactive
+        compact
+        :active="state === card.state"
+        :loading="statsLoading && stats === null"
         :label="card.label"
         :value="card.value"
-        :sublabel="card.note ?? undefined"
         :icon="card.icon"
-        :tone="card.tone"
-        :title="card.note ?? undefined"
+        :data-testid="`reputation-stat-${card.key}`"
+        @click="setState(card.state)"
       />
     </section>
 
@@ -322,10 +338,10 @@ onMounted(load);
         label="Tìm kiếm"
         class="sm:w-80 lg:w-96"
       />
-      <select v-model="role" :class="consoleField" class="w-full sm:w-44" aria-label="Vai trò" @change="applyFilters">
-        <option value="">Tất cả vai trò</option>
-        <option value="customer">Khách hàng</option>
-        <option value="technician">Kỹ thuật viên</option>
+      <select v-model="role" :class="consoleField" class="w-full sm:w-56" aria-label="Vai trò" data-testid="reputation-role" @change="onRoleChange">
+        <option value="">{{ roleOptionLabel('Tất cả vai trò', stats?.roles.all) }}</option>
+        <option value="customer">{{ roleOptionLabel('Khách hàng', stats?.roles.customer) }}</option>
+        <option value="technician">{{ roleOptionLabel('Kỹ thuật viên', stats?.roles.technician) }}</option>
       </select>
       <FhButton type="submit" variant="primary" size="sm">
         <Search :size="15" aria-hidden="true" />
