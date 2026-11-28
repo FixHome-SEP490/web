@@ -402,4 +402,34 @@ describe('Public landing page', () => {
     expect(wrapper.findAll('img')).toHaveLength(0);
     wrapper.unmount();
   });
+
+  it('switches mobile showcase steps and floating badges cleanly and disables scroll-pinning under reduced motion', async () => {
+    const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('min-width: 1024px') || query.includes('min-height: 560px') || query.includes('prefers-reduced-motion'),
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    vi.stubGlobal('matchMedia', matchMediaMock);
+    try {
+      const context = await setup();
+      const wrapper = mount(LandingMobileApp, context);
+      expect(wrapper.get('#mobile-app').classes()).not.toContain('mobile-app-pinned');
+      expect(wrapper.text()).toContain('Đa dạng dịch vụ sửa chữa');
+
+      const stepCards = wrapper.findAll('.mobile-app-step');
+      expect(stepCards).toHaveLength(4);
+      await stepCards[1]!.trigger('click');
+      expect(wrapper.text()).toContain('AI hỗ trợ phân tích');
+      expect(wrapper.text()).toContain('Chi phí tham khảo');
+      expect(wrapper.get('.phone-frame').findAll('.phone-slide')[1]!.classes()).toContain('opacity-100');
+
+      const nextButton = wrapper.findAll('button').find((b) => b.text().includes('Bước tiếp'))!;
+      await nextButton.trigger('click');
+      expect(wrapper.text()).toContain('Lựa chọn lịch hẹn');
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

@@ -128,22 +128,25 @@ const steps: StepItem[] = [
 
 const activeStepIndex = ref(0);
 const sectionRef = ref<HTMLElement | null>(null);
-const isDesktop = ref(false);
+const isDesktopLayout = ref(false);
+const isPinnedStage = ref(false);
+let programmaticScrollUntil = 0;
 
 const activeStep = computed(() => steps[activeStepIndex.value]);
 
 function updateScrollProgress() {
-  if (!isDesktop.value || !sectionRef.value) return;
+  if (!isPinnedStage.value || !sectionRef.value) return;
+  if (performance.now() < programmaticScrollUntil) return;
 
   const rect = sectionRef.value.getBoundingClientRect();
   const windowHeight = window.innerHeight || 800;
-  const navbarHeight = 80;
+  const headerOffset = 72;
   const totalScrollable = rect.height - windowHeight;
 
   if (totalScrollable <= 0) return;
 
-  // The stage sticks at top: 80px (below header)
-  const currentScroll = navbarHeight - rect.top;
+  // The stage sticks below the public navbar
+  const currentScroll = headerOffset - rect.top;
   const progress = Math.max(0, Math.min(1, currentScroll / totalScrollable));
 
   let index = Math.floor(progress * steps.length);
@@ -157,16 +160,19 @@ function selectStep(index: number) {
   if (index < 0 || index >= steps.length) return;
   activeStepIndex.value = index;
 
-  if (isDesktop.value && sectionRef.value) {
+  if (isPinnedStage.value && sectionRef.value) {
     const rect = sectionRef.value.getBoundingClientRect();
     const sectionTop = window.pageYOffset + rect.top;
     const windowHeight = window.innerHeight || 800;
-    const navbarHeight = 80;
+    const headerOffset = 72;
     const totalScrollable = rect.height - windowHeight;
 
     if (totalScrollable > 0) {
-      const targetScroll = sectionTop - navbarHeight + ((index + 0.5) / steps.length) * totalScrollable;
-      window.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      const targetScroll =
+        sectionTop - headerOffset + ((index + 0.5) / steps.length) * totalScrollable;
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      programmaticScrollUntil = prefersReducedMotion ? 0 : performance.now() + 750;
+      window.scrollTo({ top: targetScroll, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
   }
 }
@@ -185,13 +191,23 @@ function prevStep() {
 
 let scrollListener: (() => void) | null = null;
 let resizeListener: (() => void) | null = null;
+let desktopMq: MediaQueryList | null = null;
+let heightMq: MediaQueryList | null = null;
+let motionMq: MediaQueryList | null = null;
+
+function syncViewportMode() {
+  if (typeof window === 'undefined') return;
+  const wideEnough = window.matchMedia('(min-width: 1024px)').matches;
+  const tallEnough = window.matchMedia('(min-height: 560px)').matches;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  isDesktopLayout.value = wideEnough;
+  isPinnedStage.value = wideEnough && tallEnough && !reducedMotion;
+}
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    const checkDesktop = () => {
-      isDesktop.value = window.matchMedia('(min-width: 1024px)').matches;
-    };
-    checkDesktop();
+    syncViewportMode();
 
     let ticking = false;
     scrollListener = () => {
@@ -205,9 +221,16 @@ onMounted(() => {
     };
 
     resizeListener = () => {
-      checkDesktop();
+      syncViewportMode();
       updateScrollProgress();
     };
+
+    desktopMq = window.matchMedia('(min-width: 1024px)');
+    heightMq = window.matchMedia('(min-height: 560px)');
+    motionMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    desktopMq.addEventListener?.('change', resizeListener);
+    heightMq.addEventListener?.('change', resizeListener);
+    motionMq.addEventListener?.('change', resizeListener);
 
     window.addEventListener('scroll', scrollListener, { passive: true });
     window.addEventListener('resize', resizeListener, { passive: true });
@@ -218,61 +241,66 @@ onMounted(() => {
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     if (scrollListener) window.removeEventListener('scroll', scrollListener);
-    if (resizeListener) window.removeEventListener('resize', resizeListener);
+    if (resizeListener) {
+      window.removeEventListener('resize', resizeListener);
+      desktopMq?.removeEventListener?.('change', resizeListener);
+      heightMq?.removeEventListener?.('change', resizeListener);
+      motionMq?.removeEventListener?.('change', resizeListener);
+    }
   }
 });
 </script>
 
 <template>
-  <!-- Outer Pinned Track: On Desktop, height is 360vh so users scroll through all 4 steps while stage remains pinned -->
+  <!-- Outer Pinned Track: On Desktop (with sufficient height & motion enabled), scrolls through all 4 steps while stage remains pinned -->
   <section
     id="mobile-app"
     ref="sectionRef"
-    class="relative bg-transparent"
-    :class="[isDesktop ? 'h-[360vh]' : 'h-auto py-12 sm:py-16']"
+    class="mobile-app-section relative bg-transparent"
+    :class="[isPinnedStage ? 'mobile-app-pinned' : 'h-auto py-12 sm:py-16 lg:py-20']"
     aria-labelledby="app-section-title"
   >
-    <!-- Inner Pinned Stage: On Desktop, sticky top-20 filling available viewport below header and centered -->
+    <!-- Inner Sticky Stage: Uses min-height (never clips vertically) and overflow-x-clip -->
     <div
-      class="w-full"
+      class="mobile-app-stage w-full"
       :class="[
-        isDesktop
-          ? 'sticky top-20 h-[calc(100vh-5rem)] flex items-center justify-center overflow-hidden py-2'
-          : 'relative',
+        isPinnedStage
+          ? 'sticky top-[72px] min-h-[calc(100dvh-72px)] flex items-center justify-center overflow-x-clip py-3 lg:py-4'
+          : 'relative overflow-x-clip',
       ]"
     >
       <div class="landing-container w-full">
-        <!-- Main Showcase 2-Column Grid (Desktop): Header is in the Left Column, Phone is centered in the Right Column -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-14 items-center">
-          
+        <!-- Main Showcase 2-Column Grid (Desktop): Header + Steps on Left, Phone Stage on Right -->
+        <div
+          class="mobile-app-grid grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-8 xl:gap-12 items-center"
+        >
           <!-- Left Column: Header + Compact 4 Timeline Steps -->
-          <div class="lg:col-span-6 xl:col-span-7 flex flex-col justify-center">
-            
-            <!-- Section Header (In Left Column for perfect balanced centering with Phone) -->
-            <div class="mb-5 xl:mb-6">
+          <div class="mobile-app-copy lg:col-span-6 xl:col-span-7 flex flex-col justify-center min-w-0">
+            <!-- Section Header -->
+            <div class="mobile-app-header mb-4 xl:mb-6">
               <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-50 border border-brand-100 text-brand-700 text-xs font-semibold mb-2.5">
-                <Sparkles class="w-3.5 h-3.5 text-brand-600" />
+                <Sparkles class="w-3.5 h-3.5 text-brand-600 shrink-0" aria-hidden="true" />
                 <span>TRẢI NGHIỆM ỨNG DỤNG FIXHOME</span>
               </div>
               <h2
                 id="app-section-title"
-                class="text-2xl sm:text-3xl lg:text-[30px] xl:text-[34px] font-bold text-ink-900 tracking-tight leading-[1.25]"
+                class="mobile-app-title font-bold text-ink-900 tracking-tight leading-[1.22]"
               >
                 Tìm dịch vụ, đặt lịch và theo dõi sửa chữa – <span class="text-brand-600">tất cả trên FixHome.</span>
               </h2>
-              <p class="mt-2 text-xs sm:text-sm lg:text-[14px] text-ink-600 leading-relaxed max-w-[58ch]">
+              <p class="mobile-app-subtitle mt-2 text-xs sm:text-sm text-ink-600 leading-relaxed max-w-[58ch]">
                 Chủ động gửi yêu cầu, nhận hỗ trợ từ AI, kết nối kỹ thuật viên phù hợp và theo dõi toàn bộ quá trình sửa chữa ngay trên ứng dụng FixHome.
               </p>
             </div>
 
             <!-- Mobile & Tablet Step Selector (Tabs) - Visible below 1024px -->
-            <div class="lg:hidden mb-6">
+            <div class="lg:hidden mb-5">
               <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x">
                 <button
                   v-for="(step, index) in steps"
                   :key="step.id"
                   type="button"
-                  class="snap-start shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200"
+                  class="snap-start shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors duration-200"
                   :class="[
                     activeStepIndex === index
                       ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
@@ -292,22 +320,22 @@ onUnmounted(() => {
             </div>
 
             <!-- 4 Steps List -->
-            <div class="space-y-2 xl:space-y-2.5">
+            <div class="mobile-app-steps space-y-2 xl:space-y-2.5">
               <div
                 v-for="(step, index) in steps"
                 :key="step.id"
-                class="relative rounded-2xl transition-all duration-300 cursor-pointer p-3 sm:p-3.5"
+                class="mobile-app-step relative rounded-2xl transition-all duration-300 cursor-pointer p-3 sm:p-3.5"
                 :class="[
                   activeStepIndex === index
                     ? 'bg-white/95 border-l-4 border-l-brand-600 border-y border-r border-slate-200/80 shadow-md shadow-brand-500/5 ring-1 ring-brand-500/10'
-                    : 'bg-white/40 hover:bg-white/70 border-l-4 border-l-transparent border-y border-r border-transparent hover:border-slate-200/60 opacity-70 hover:opacity-100',
+                    : 'bg-white/40 hover:bg-white/70 border-l-4 border-l-transparent border-y border-r border-transparent hover:border-slate-200/60 opacity-75 hover:opacity-100',
                 ]"
                 @click="selectStep(index)"
               >
                 <div class="flex items-start gap-3 sm:gap-3.5">
                   <!-- Step Number Bubble -->
                   <div
-                    class="shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-bold text-xs sm:text-sm transition-all duration-300"
+                    class="shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-bold text-xs sm:text-sm transition-transform duration-300"
                     :class="[
                       activeStepIndex === index
                         ? 'bg-brand-600 text-white shadow-sm shadow-brand-600/30 scale-105'
@@ -340,118 +368,157 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-
           </div>
 
-          <!-- Right Column: Smartphone Mockup Stage (Perfect Centering) -->
-          <div class="lg:col-span-6 xl:col-span-5 flex flex-col items-center justify-center my-auto">
-            
-            <!-- Outer Phone Stage Container -->
-            <div class="relative w-full max-w-[280px] sm:max-w-[310px] xl:max-w-[340px] flex items-center justify-center py-4">
-              
-              <!-- Soft Decorative Backdrop Ring / Card -->
-              <div
-                class="absolute inset-1 sm:inset-2 rounded-[36px] bg-gradient-to-tr from-brand-100/40 via-sky-50/50 to-blue-50/20 border border-brand-200/40 shadow-xl shadow-brand-600/10 -z-10 pointer-events-none backdrop-blur-sm"
-                aria-hidden="true"
-              ></div>
-
-              <!-- Soft Glowing Radial Orb -->
-              <div
-                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 bg-brand-400/15 rounded-full blur-3xl -z-20 pointer-events-none"
-                aria-hidden="true"
-              ></div>
-
-              <!-- Phone Frame Container -->
-              <div
-                class="relative w-[215px] sm:w-[235px] xl:w-[255px] h-[430px] sm:h-[470px] xl:h-[510px] drop-shadow-[0_18px_30px_rgba(37,99,235,0.12)] drop-shadow-[0_4px_10px_rgba(15,23,42,0.05)]"
-              >
-                <!-- 4 Step Screenshots with Smooth Fade & Scale Transition -->
+          <!-- Right Column: Unified Co-Scaling Smartphone Showcase Stage -->
+          <div class="lg:col-span-6 xl:col-span-5 flex flex-col items-center justify-center my-auto min-w-0">
+            <!-- Outer Phone Stage Container: anchors backdrop, phone, and floating badges proportionally -->
+            <div class="phone-stage relative w-full mx-auto flex flex-col items-center justify-center">
+              <!-- Phone + Backdrop Core Wrapper -->
+              <div class="phone-stage-visual relative w-full flex items-center justify-center">
+                <!-- Soft Decorative Backdrop Card (scales proportionally with phone stage) -->
                 <div
-                  v-for="(step, index) in steps"
-                  :key="step.id"
-                  class="absolute inset-0 w-full h-full transition-all duration-500 ease-out"
-                  :class="[
-                    activeStepIndex === index
-                      ? 'opacity-100 scale-100 translate-y-0 z-10'
-                      : 'opacity-0 scale-[0.96] translate-y-2 pointer-events-none z-0',
-                  ]"
-                >
-                  <img
-                    :src="step.image"
-                    :alt="step.imageAlt"
-                    class="w-full h-full object-contain pointer-events-none select-none"
-                    loading="lazy"
-                    draggable="false"
-                  />
+                  class="phone-backdrop-card absolute rounded-[32px] sm:rounded-[36px] bg-gradient-to-tr from-brand-100/40 via-sky-50/50 to-blue-50/20 border border-brand-200/40 shadow-xl shadow-brand-600/10 -z-10 pointer-events-none backdrop-blur-sm"
+                  aria-hidden="true"
+                ></div>
+
+                <!-- Soft Glowing Radial Orb -->
+                <div
+                  class="phone-glow-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-400/15 blur-3xl -z-20 pointer-events-none"
+                  aria-hidden="true"
+                ></div>
+
+                <!-- Phone Frame Container: locked 520:1050 aspect ratio, zero layout shift on slide switch -->
+                <div class="phone-frame relative">
+                  <!-- 4 Step Screenshots with GPU-composited Fade & Scale Transition -->
+                  <div
+                    v-for="(step, index) in steps"
+                    :key="step.id"
+                    class="phone-slide absolute inset-0 w-full h-full"
+                    :class="[
+                      activeStepIndex === index
+                        ? 'opacity-100 scale-100 translate-y-0 z-10'
+                        : 'opacity-0 scale-[0.96] translate-y-2 pointer-events-none z-0',
+                    ]"
+                  >
+                    <img
+                      :src="step.image"
+                      :alt="step.imageAlt"
+                      width="520"
+                      height="1050"
+                      loading="eager"
+                      decoding="async"
+                      class="w-full h-full object-contain pointer-events-none select-none"
+                      draggable="false"
+                    />
+                  </div>
                 </div>
 
-                <!-- Floating Card Top Right: Placed with minimal overlap (~25px) on outer bezel so phone screen is 100% visible -->
+                <!-- Floating Card Top Right (anchored to .phone-stage-visual from sm/640px upward) -->
                 <div
                   v-if="activeStep.floatingBadges[0]"
-                  :key="`badge-top-${activeStep.id}`"
-                  class="floating-card hidden lg:flex absolute top-4 -right-28 xl:-right-36 z-20 bg-white/95 backdrop-blur-md border border-slate-100/90 rounded-2xl p-2.5 sm:px-3 sm:py-2.5 shadow-xl shadow-slate-900/10 items-center gap-2.5 w-[190px] xl:w-[210px] transition-all duration-300 pointer-events-none"
+                  class="floating-badge-anchor floating-badge-anchor--top hidden sm:block pointer-events-none"
                 >
                   <div
-                    class="shrink-0 flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl"
-                    :class="[
-                      activeStep.floatingBadges[0].tone === 'brand' && 'bg-brand-50 text-brand-600',
-                      activeStep.floatingBadges[0].tone === 'purple' && 'bg-purple-50 text-purple-600',
-                      activeStep.floatingBadges[0].tone === 'emerald' && 'bg-emerald-50 text-emerald-600',
-                      activeStep.floatingBadges[0].tone === 'amber' && 'bg-amber-50 text-amber-600',
-                    ]"
+                    class="floating-card floating-card--top bg-white/95 backdrop-blur-md border border-slate-100/90 rounded-2xl px-3 py-2.5 shadow-xl shadow-slate-900/10"
                   >
-                    <component
-                      :is="activeStep.floatingBadges[0].icon"
-                      :size="16"
-                      :stroke-width="1.8"
-                    />
-                  </div>
-                  <div class="min-w-0">
-                    <p class="text-xs font-bold text-ink-900 truncate">
-                      {{ activeStep.floatingBadges[0].title }}
-                    </p>
-                    <p class="text-[10px] text-ink-500 truncate mt-0.5">
-                      {{ activeStep.floatingBadges[0].subtext }}
-                    </p>
+                    <Transition name="badge-swap">
+                      <div :key="`badge-top-${activeStep.id}`" class="flex items-center gap-2.5">
+                        <div
+                          class="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl"
+                          :class="[
+                            activeStep.floatingBadges[0].tone === 'brand' && 'bg-brand-50 text-brand-600',
+                            activeStep.floatingBadges[0].tone === 'purple' && 'bg-purple-50 text-purple-600',
+                            activeStep.floatingBadges[0].tone === 'emerald' && 'bg-emerald-50 text-emerald-600',
+                            activeStep.floatingBadges[0].tone === 'amber' && 'bg-amber-50 text-amber-600',
+                          ]"
+                        >
+                          <component
+                            :is="activeStep.floatingBadges[0].icon"
+                            :size="16"
+                            :stroke-width="1.8"
+                          />
+                        </div>
+                        <div class="min-w-0">
+                          <p class="text-xs font-bold text-ink-900 leading-snug">
+                            {{ activeStep.floatingBadges[0].title }}
+                          </p>
+                          <p class="text-[11px] text-ink-500 leading-tight mt-0.5">
+                            {{ activeStep.floatingBadges[0].subtext }}
+                          </p>
+                        </div>
+                      </div>
+                    </Transition>
                   </div>
                 </div>
 
-                <!-- Floating Card Bottom Left: Placed with minimal overlap (~25px) on outer bezel so phone buttons/screen are 100% visible -->
+                <!-- Floating Card Bottom Left (anchored to .phone-stage-visual from sm/640px upward) -->
                 <div
                   v-if="activeStep.floatingBadges[1]"
-                  :key="`badge-bottom-${activeStep.id}`"
-                  class="floating-card hidden lg:flex absolute bottom-8 -left-28 xl:-left-36 z-20 bg-white/95 backdrop-blur-md border border-slate-100/90 rounded-2xl p-2.5 sm:px-3 sm:py-2.5 shadow-xl shadow-slate-900/10 items-center gap-2.5 w-[190px] xl:w-[210px] transition-all duration-300 pointer-events-none"
+                  class="floating-badge-anchor floating-badge-anchor--bottom hidden sm:block pointer-events-none"
                 >
                   <div
-                    class="shrink-0 flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl"
-                    :class="[
-                      activeStep.floatingBadges[1].tone === 'brand' && 'bg-brand-50 text-brand-600',
-                      activeStep.floatingBadges[1].tone === 'purple' && 'bg-purple-50 text-purple-600',
-                      activeStep.floatingBadges[1].tone === 'emerald' && 'bg-emerald-50 text-emerald-600',
-                      activeStep.floatingBadges[1].tone === 'amber' && 'bg-amber-50 text-amber-600',
-                    ]"
+                    class="floating-card floating-card--bottom bg-white/95 backdrop-blur-md border border-slate-100/90 rounded-2xl px-3 py-2.5 shadow-xl shadow-slate-900/10"
                   >
-                    <component
-                      :is="activeStep.floatingBadges[1].icon"
-                      :size="16"
-                      :stroke-width="1.8"
-                    />
-                  </div>
-                  <div class="min-w-0">
-                    <p class="text-xs font-bold text-ink-900 truncate">
-                      {{ activeStep.floatingBadges[1].title }}
-                    </p>
-                    <p class="text-[10px] text-ink-500 truncate mt-0.5">
-                      {{ activeStep.floatingBadges[1].subtext }}
-                    </p>
+                    <Transition name="badge-swap">
+                      <div :key="`badge-bottom-${activeStep.id}`" class="flex items-center gap-2.5">
+                        <div
+                          class="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl"
+                          :class="[
+                            activeStep.floatingBadges[1].tone === 'brand' && 'bg-brand-50 text-brand-600',
+                            activeStep.floatingBadges[1].tone === 'purple' && 'bg-purple-50 text-purple-600',
+                            activeStep.floatingBadges[1].tone === 'emerald' && 'bg-emerald-50 text-emerald-600',
+                            activeStep.floatingBadges[1].tone === 'amber' && 'bg-amber-50 text-amber-600',
+                          ]"
+                        >
+                          <component
+                            :is="activeStep.floatingBadges[1].icon"
+                            :size="16"
+                            :stroke-width="1.8"
+                          />
+                        </div>
+                        <div class="min-w-0">
+                          <p class="text-xs font-bold text-ink-900 leading-snug">
+                            {{ activeStep.floatingBadges[1].title }}
+                          </p>
+                          <p class="text-[11px] text-ink-500 leading-tight mt-0.5">
+                            {{ activeStep.floatingBadges[1].subtext }}
+                          </p>
+                        </div>
+                      </div>
+                    </Transition>
                   </div>
                 </div>
+              </div>
 
+              <!-- Compact Mobile Annotation Cards (< 640px): keeps both floating notes visible without covering phone screen or overflowing 320px -->
+              <div class="sm:hidden grid grid-cols-1 gap-2 w-full max-w-[340px] mt-3">
+                <div
+                  v-for="(badge, bIdx) in activeStep.floatingBadges"
+                  :key="`mobile-badge-${activeStep.id}-${bIdx}`"
+                  class="floating-card-mobile flex items-center gap-2.5 bg-white/95 border border-slate-100/90 rounded-2xl px-3 py-2 shadow-sm shadow-slate-900/5"
+                >
+                  <div
+                    class="shrink-0 flex items-center justify-center w-8 h-8 rounded-xl"
+                    :class="[
+                      badge.tone === 'brand' && 'bg-brand-50 text-brand-600',
+                      badge.tone === 'purple' && 'bg-purple-50 text-purple-600',
+                      badge.tone === 'emerald' && 'bg-emerald-50 text-emerald-600',
+                      badge.tone === 'amber' && 'bg-amber-50 text-amber-600',
+                    ]"
+                  >
+                    <component :is="badge.icon" :size="16" :stroke-width="1.8" />
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-xs font-bold text-ink-900 leading-snug">{{ badge.title }}</p>
+                    <p class="text-[11px] text-ink-500 leading-tight mt-0.5">{{ badge.subtext }}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
             <!-- Mobile Controls (Prev / Next Buttons) -->
-            <div class="lg:hidden flex items-center justify-between w-full max-w-[280px] mt-2 pt-1">
+            <div class="lg:hidden flex items-center justify-between w-full max-w-[300px] mt-3 pt-1">
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-ink-600 hover:text-ink-900 hover:bg-white/80 transition-colors disabled:opacity-40 disabled:pointer-events-none"
@@ -474,9 +541,7 @@ onUnmounted(() => {
                 <ChevronRight class="w-4 h-4" />
               </button>
             </div>
-
           </div>
-
         </div>
       </div>
     </div>
@@ -484,18 +549,207 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* Keyframe animation for subtle floating effect */
+.mobile-app-section {
+  scroll-margin-top: 72px;
+}
+
+.mobile-app-pinned {
+  /* Capped scroll track so ultra-tall 1440p/4K screens don't get excessive vertical scroll */
+  height: clamp(1900px, 310vh, 2900px);
+}
+
+.mobile-app-title {
+  font-size: clamp(1.45rem, 2.35vw, 2.125rem);
+}
+
+/* Unified Phone Stage container: co-scales phone, backdrop, and floating badges inside column */
+.phone-stage {
+  --phone-w: clamp(185px, 52vw, 224px);
+  max-width: 100%;
+}
+
+.phone-stage-visual {
+  padding-block: 14px;
+  min-height: calc(var(--phone-w) * 2.02 + 28px);
+}
+
+.phone-backdrop-card {
+  width: min(calc(var(--phone-w) * 1.24), 100%);
+  height: calc(var(--phone-w) * 2.02 + 16px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.phone-glow-orb {
+  width: calc(var(--phone-w) * 0.92);
+  height: calc(var(--phone-w) * 0.92);
+}
+
+.phone-frame {
+  width: var(--phone-w);
+  aspect-ratio: 520 / 1050;
+  flex-shrink: 0;
+  contain: layout style;
+  filter: drop-shadow(0 18px 30px rgba(37, 99, 235, 0.12)) drop-shadow(0 4px 10px rgba(15, 23, 42, 0.05));
+}
+
+.phone-slide {
+  transition:
+    opacity 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+/* Floating badges: anchored relative to .phone-stage-visual, guaranteed inside stage width */
+.floating-badge-anchor {
+  position: absolute;
+  z-index: 20;
+  width: clamp(186px, 40%, 236px);
+}
+
+.floating-badge-anchor--top {
+  top: 7%;
+  right: 0;
+}
+
+.floating-badge-anchor--bottom {
+  bottom: 9%;
+  left: 0;
+}
+
+@media (min-width: 640px) {
+  .phone-stage {
+    --phone-w: clamp(205px, 31vw, 238px);
+    max-width: 480px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .phone-stage {
+    /* Bounded simultaneously by column width and available viewport height */
+    --phone-w: clamp(178px, min(22vw, calc((100dvh - 150px) * 0.45)), 248px);
+    max-width: 100%;
+  }
+
+  .floating-badge-anchor {
+    width: clamp(182px, 44%, 236px);
+  }
+
+  .floating-badge-anchor--top {
+    top: 6%;
+    right: 0;
+  }
+
+  .floating-badge-anchor--bottom {
+    bottom: 8%;
+    left: 0;
+  }
+}
+
+/* Compact vertical rhythm on shorter laptop viewports (e.g. 1366x640, 1280x600, Windows 125%-150% scaling) */
+@media (min-width: 1024px) and (max-height: 760px) {
+  .mobile-app-header {
+    margin-bottom: 0.75rem;
+  }
+
+  .mobile-app-title {
+    font-size: clamp(1.32rem, 2.05vw, 1.75rem);
+  }
+
+  .mobile-app-subtitle {
+    margin-top: 0.35rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .mobile-app-steps {
+    gap: 0.375rem;
+  }
+
+  .mobile-app-steps > :not(:first-child) {
+    margin-top: 0.375rem;
+  }
+
+  .mobile-app-step {
+    padding: 0.5625rem 0.75rem;
+  }
+
+  .phone-stage-visual {
+    padding-block: 8px;
+    min-height: calc(var(--phone-w) * 2.02 + 16px);
+  }
+
+  .phone-backdrop-card {
+    height: calc(var(--phone-w) * 2.02 + 10px);
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 650px) {
+  .mobile-app-stage {
+    padding-block: 0.35rem;
+  }
+
+  .mobile-app-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .mobile-app-header > div:first-child {
+    margin-bottom: 0.35rem;
+  }
+
+  .mobile-app-step {
+    padding: 0.45rem 0.7rem;
+  }
+
+  .mobile-app-step p {
+    margin-top: 0.125rem;
+    line-height: 1.35;
+  }
+}
+
+/* Separate float animation layer on inner card so it never collides with anchor positioning */
 @keyframes softFloat {
   0%, 100% {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-4px);
+    transform: translate3d(0, -4px, 0);
   }
 }
 
 .floating-card {
   animation: softFloat 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.floating-card--bottom {
+  animation-delay: 0.8s;
+}
+
+.badge-swap-enter-active {
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.badge-swap-leave-active {
+  display: none;
+}
+
+.badge-swap-enter-from {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-slide,
+  .badge-swap-enter-active,
+  .badge-swap-leave-active {
+    transition: none !important;
+  }
+
+  .floating-card {
+    animation: none !important;
+    transform: none !important;
+  }
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

@@ -143,15 +143,15 @@ onMounted(loadCategories);
           v-for="(category, index) in visibleCategories"
           :key="category.id"
           :to="{ name: 'services', query: { category: category.id } }"
-          class="service-card group relative flex min-w-0 flex-row items-center gap-3.5 sm:gap-4 lg:gap-5 rounded-[20px] p-4 sm:p-5 lg:p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_12px_28px_rgba(37,99,235,0.08)] cursor-pointer"
-          :class="cardAppearanceClass(index, category)"
+          class="service-card group relative flex min-w-0 flex-row items-center gap-3.5 sm:gap-4 lg:gap-4 xl:gap-5 rounded-[20px] p-4 sm:p-5 lg:p-5 xl:p-6 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_12px_28px_rgba(37,99,235,0.08)] cursor-pointer"
+          :class="[cardAppearanceClass(index, category), isFeaturedCategory(category) ? 'pt-11 sm:pt-11 lg:pt-11' : '']"
         >
           <!-- Featured Badge (Only shown if current data confirms it is popular / featured) -->
           <div
             v-if="isFeaturedCategory(category)"
             class="absolute top-3 left-4 sm:top-3.5 sm:left-5 z-10"
           >
-            <span class="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-2xs">
+            <span class="inline-flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-2xs whitespace-nowrap">
               <Crown :size="12" class="fill-current" aria-hidden="true" />
               Dịch vụ phổ biến
             </span>
@@ -159,8 +159,7 @@ onMounted(loadCategories);
 
           <!-- Left: Illustration Artwork -->
           <div
-            class="flex h-24 w-24 sm:h-28 sm:w-28 lg:h-32 lg:w-32 shrink-0 items-center justify-center transition-transform duration-300 ease-out group-hover:scale-105"
-            :class="{ 'mt-3 sm:mt-2': isFeaturedCategory(category) }"
+            class="flex h-20 w-20 sm:h-24 sm:w-24 xl:h-28 xl:w-28 shrink-0 items-center justify-center transition-transform duration-300 ease-out group-hover:scale-105"
           >
             <img
               :src="getCategoryArtworkUrl(category)"
@@ -174,7 +173,7 @@ onMounted(loadCategories);
           <!-- Right: Service Details & Action -->
           <div class="flex flex-1 min-w-0 flex-col justify-between self-stretch py-0.5">
             <div>
-              <h3 class="text-base sm:text-lg lg:text-[19px] font-bold text-ink-900 tracking-tight transition-colors duration-200 group-hover:text-brand-600 leading-snug">
+              <h3 class="text-base sm:text-lg lg:text-[18px] xl:text-[19px] font-bold text-ink-900 tracking-tight transition-colors duration-200 group-hover:text-brand-600 leading-snug">
                 {{ category.name }}
               </h3>
               <p class="mt-1 sm:mt-1.5 line-clamp-2 text-xs sm:text-[13px] lg:text-[13.5px] leading-relaxed text-ink-600">
@@ -184,11 +183,11 @@ onMounted(loadCategories);
 
             <div class="mt-3.5 sm:mt-4 pt-0.5">
               <span
-                class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-[13px] font-semibold transition-all duration-200"
+                class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-[13px] font-semibold transition-all duration-200"
                 :class="buttonAppearanceClass(index, category)"
               >
                 <span>Xem dịch vụ</span>
-                <ArrowRight :size="14" class="transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
+                <ArrowRight :size="14" class="shrink-0 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
               </span>
             </div>
           </div>
