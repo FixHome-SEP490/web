@@ -4,8 +4,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 // Reputation points (PO 08/10/2026): both profiles show the score, a running
 // ban and the history; the Service Manager lists, reads and adjusts scores.
-const { mine, list, events, adjust } = vi.hoisted(() => ({ mine: vi.fn(), list: vi.fn(), events: vi.fn(), adjust: vi.fn() }));
-vi.mock('../src/api/reputation.api', () => ({ reputationApi: { mine, list, events, adjust } }));
+const { mine, list, events, adjust, stats } = vi.hoisted(() => ({ mine: vi.fn(), list: vi.fn(), events: vi.fn(), adjust: vi.fn(), stats: vi.fn() }));
+vi.mock('../src/api/reputation.api', () => ({ reputationApi: { mine, list, events, adjust, stats } }));
 
 import ReputationCard from '../src/components/account/ReputationCard.vue';
 import ConsoleReputationPage from '../src/pages/console/ConsoleReputationPage.vue';
@@ -70,6 +70,7 @@ describe('Service Manager reputation page', () => {
     { id: 't1', fullName: 'Thợ Điện 1', email: 'tech1@fixhome.vn', phoneNumber: null, role: 'technician' as const, status: 'active', reputationPoints: 100, bookingSuspendedUntil: null, workSuspendedUntil: null },
   ];
 
+  const allStats = { roles: { all: 114, customer: 70, technician: 44 }, total: 114, deducted: 16, low: 9, suspended: 3, locked: 1 };
   let pinia: ReturnType<typeof createPinia>;
   const mountPage = () => mount(ConsoleReputationPage, { global: { plugins: [pinia], stubs: { teleport: true, 'router-link': true } } });
 
@@ -85,7 +86,8 @@ describe('Service Manager reputation page', () => {
       status: 'ACTIVE',
       permissions: ['strike:read_all', 'strike:waive'],
     });
-    list.mockResolvedValue({ data: rows.map((r) => ({ ...r })), meta: { page: 1, limit: 20, total: 2, totalPages: 1 }, summary: null });
+    list.mockResolvedValue({ data: rows.map((r) => ({ ...r })), meta: { page: 1, limit: 20, total: 2, totalPages: 1 } });
+    stats.mockResolvedValue(allStats);
   });
 
   it('lists names, roles in words, official rule tiers, points and running bans, and searches from page 1', async () => {
@@ -98,7 +100,7 @@ describe('Service Manager reputation page', () => {
     expect(text).toContain('Cần theo dõi');
     expect(text).toContain('Đạt ngưỡng');
     expect(text).toContain('Tới ');
-    expect(text).toContain('Chưa có API thống kê');
+    expect(text).not.toContain('Chưa có API thống kê');
 
     await button(w, 'Quy tắc điểm').trigger('click');
     expect(w.text()).toContain('Dưới 70 điểm tạm khoá 72 giờ');
@@ -106,7 +108,7 @@ describe('Service Manager reputation page', () => {
     await w.get('input[type="search"]').setValue('  0904  ');
     await w.get('form').trigger('submit');
     await flushPromises();
-    expect(list).toHaveBeenLastCalledWith({ role: undefined, search: '0904', page: 1, pageSize: 20 });
+    expect(list).toHaveBeenLastCalledWith({ role: undefined, search: '0904', state: undefined, page: 1, pageSize: 20 });
   });
 
   it('shows the history drawer for one account and prevents stale responses when switching quickly', async () => {
@@ -170,6 +172,8 @@ describe('Service Manager reputation page', () => {
     resolveAdjust({ points: 50 });
     await flushPromises();
     expect(list).toHaveBeenCalledTimes(2);
+    // The cards count the new score too.
+    expect(stats).toHaveBeenCalledTimes(2);
   });
 
   it('hides the adjust action when the account lacks strike:waive permission', async () => {
@@ -185,5 +189,73 @@ describe('Service Manager reputation page', () => {
     await flushPromises();
     expect(w.findAll('button').filter((b) => b.text() === 'Điều chỉnh')).toHaveLength(0);
     expect(w.findAll('button').filter((b) => b.text() === 'Lịch sử')).toHaveLength(2);
+  });
+  // BUG 318: the cards and the role counts come from GET /reputation/stats, not from the page on screen.
+  it('shows the stat cards and the role counts from the stats API, whatever the page holds', async () => {
+    const w = mountPage();
+    await flushPromises();
+    expect(stats).toHaveBeenCalledTimes(1);
+    expect(stats).toHaveBeenCalledWith(undefined);
+    const card = (key: string) => w.get(`[data-testid="reputation-stat-${key}"]`).text().replace(/\s+/g, ' ');
+    expect(card('total')).toContain('Tất cả tài khoản');
+    expect(card('total')).toContain('114');
+    expect(card('deducted')).toContain('Bị trừ điểm');
+    expect(card('deducted')).toContain('16');
+    expect(card('low')).toContain('9');
+    expect(card('suspended')).toContain('Đang tạm khoá');
+    expect(card('suspended')).toContain('3');
+    expect(card('locked')).toContain('Đã khoá tài khoản');
+    expect(card('locked')).toContain('1');
+    const options = w.get('[data-testid="reputation-role"]').findAll('option').map((o) => o.text());
+    expect(options).toEqual(['Tất cả vai trò (114)', 'Khách hàng (70)', 'Kỹ thuật viên (44)']);
+    // The list total of the page (2 rows) never replaces the card numbers.
+    expect(card('total')).not.toMatch(/\b2\b/);
+  });
+
+  it('filters the list by a card from page 1, clears it on a second click or on "Tất cả", and does not recount for it', async () => {
+    const w = mountPage();
+    await flushPromises();
+    await w.get('[data-testid="reputation-stat-suspended"]').trigger('click');
+    await flushPromises();
+    expect(list).toHaveBeenLastCalledWith({ role: undefined, search: undefined, state: 'suspended', page: 1, pageSize: 20 });
+    expect(w.get('[data-testid="reputation-stat-suspended"]').attributes('aria-pressed')).toBe('true');
+    expect(w.get('[data-testid="reputation-stat-total"]').attributes('aria-pressed')).toBe('false');
+    await w.get('[data-testid="reputation-stat-suspended"]').trigger('click');
+    await flushPromises();
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ state: undefined }));
+    await w.get('[data-testid="reputation-stat-locked"]').trigger('click');
+    await w.get('[data-testid="reputation-stat-total"]').trigger('click');
+    await flushPromises();
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ state: undefined }));
+    expect(w.get('[data-testid="reputation-stat-total"]').attributes('aria-pressed')).toBe('true');
+    expect(stats).toHaveBeenCalledTimes(1);
+  });
+
+  it('recounts the cards for the chosen role, keeps the card filter, and resets everything', async () => {
+    const w = mountPage();
+    await flushPromises();
+    stats.mockResolvedValueOnce({ ...allStats, total: 44, deducted: 5, low: 2, suspended: 1, locked: 0 });
+    await w.get('[data-testid="reputation-stat-deducted"]').trigger('click');
+    await w.get('[data-testid="reputation-role"]').setValue('technician');
+    await flushPromises();
+    expect(stats).toHaveBeenLastCalledWith('technician');
+    expect(list).toHaveBeenLastCalledWith({ role: 'technician', search: undefined, state: 'deducted', page: 1, pageSize: 20 });
+    expect(w.get('[data-testid="reputation-stat-total"]').text()).toContain('44');
+    // Role counts stay over every account.
+    expect(w.get('[data-testid="reputation-role"]').findAll('option').map((o) => o.text())[0]).toBe('Tất cả vai trò (114)');
+    await button(w, 'Đặt lại').trigger('click');
+    await flushPromises();
+    expect(list).toHaveBeenLastCalledWith({ role: undefined, search: undefined, state: undefined, page: 1, pageSize: 20 });
+    expect(stats).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('shows a dash on the cards and plain role names when the counts cannot load, and the list still works', async () => {
+    stats.mockRejectedValueOnce(new Error('network'));
+    const w = mountPage();
+    await flushPromises();
+    expect(w.get('[data-testid="reputation-stat-total"]').text()).toContain('—');
+    expect(w.get('[data-testid="reputation-role"]').findAll('option').map((o) => o.text())).toEqual(['Tất cả vai trò', 'Khách hàng', 'Kỹ thuật viên']);
+    expect(w.text()).toContain('Khách Hàng 2');
+    expect(w.text()).not.toMatch(/network|Error|\b[45]\d\d\b/);
   });
 });
