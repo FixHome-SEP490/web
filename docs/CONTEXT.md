@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-28 16:49 (UTC+7) · Người cập nhật (git): hoangtruong01 · Nhánh: hoang_mac
+> Cập nhật lần cuối: 2026-11-28 17:06 (UTC+7) · Người cập nhật (git): hoangtruong01 · Nhánh: hoang_mac
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -99,6 +99,7 @@ Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức c
 - `LandingDiagnosis.vue` (`#ai`) nâng cấp sang bố cục 3 cột (giới thiệu + CTA `Phân tích sự cố ngay` -> `/app/bookings/ai` + lưu ý tham khảo bên trái; mockup điện thoại `/images/steps/step-3-ai-result.png` nghiêng nhẹ trên nền bàn gỗ và cây xanh `/images/ai-showcase-backdrop.webp` ở giữa; 3 tính năng dọc `Nhận diện sự cố`, `Gợi ý giải pháp phù hợp`, `Đặt dịch vụ` bên phải với icon `lucide-vue-next` đồng bộ `stroke-width: 1.75`). Không thay đổi API/Backend.
 - `LandingTrust.vue` (`#trust`) chuyển sang bố cục 2 cột nền sáng (ảnh WebP `/images/trust-technician-consult.webp` kèm nền xanh nhạt nghiêng bên trái; pill `Vì sao chọn FixHome?`, tiêu đề, mô tả và 3 lợi ích phân tách mảnh với icon `ShieldCheck`/`Star`/`ShieldPlus` bên phải; thanh CTA ngang `Bạn là kỹ thuật viên?` dẫn tới `/for-technicians` bên dưới). Đã kiểm tra Chrome headless 320–1920 px và zoom 80%–150%; `LandingMobileApp.vue`, `LandingDiagnosis.vue`, `LandingHero.vue`, `LandingServices.vue` đã chuẩn hoá responsive và slide transition trên Chrome headless; trình duyệt khác CHƯA KIỂM CHỨNG. Không thay đổi Backend/API.
 - `LandingPage.vue` (`#questions` FAQ) nâng cấp sang bố cục 2 cột hiện đại (badge `Câu hỏi thường gặp`, tiêu đề `Bạn có thắc mắc? FixHome giải đáp.`, ảnh 3 thiết bị tách nền WebP `/images/faq-devices-showcase.webp`, nút `Xem chính sách giá` -> `/pricing-policy` bên trái; 6 câu hỏi Accordion bên phải giữ nguyên nội dung/luồng hiện có). Đã kiểm tra Chrome headless tại 390–1920 px; trình duyệt khác CHƯA KIỂM CHỨNG. Không thay đổi Backend/API.
+- `ForTechniciansPage.vue` (`/for-technicians`) thiết kế lại phần tuyển dụng kỹ thuật viên (lockup logo `/logo.png`, tiêu đề `Hợp tác cùng nền tảng FixHome`, ảnh kỹ thuật viên WebP `/images/for-technicians-hero.webp` bên phải, 3 thẻ quyền lợi và khối `Quy trình gia nhập` 4 bước kèm CTA `Đăng ký tài khoản kỹ thuật viên` -> `/register`). Đã kiểm tra Chrome headless tại 390–1440 px; trình duyệt khác CHƯA KIỂM CHỨNG. Không thay đổi Backend/API.
 
 ### Giao diện bảo hành của quản lý dịch vụ (27/11/2026)
 
@@ -644,6 +645,7 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-28 17:06 (UTC+7) | hoangtruong01 | hoang_mac | Thiết kế lại trang hợp tác kỹ thuật viên (ForTechniciansPage.vue) với ảnh WebP /images/for-technicians-hero.webp, 3 quyền lợi và quy trình gia nhập 4 bước, giữ nguyên /register và API
 - 2026-11-28 16:49 (UTC+7) | hoangtruong01 | hoang_mac | Nâng cấp section FAQ (#questions) trên LandingPage.vue sang bố cục 2 cột với ảnh 3 thiết bị /images/faq-devices-showcase.webp và Accordion 6 câu hỏi, giữ nguyên nghiệp vụ/API
 - 2026-11-28 16:26 (UTC+7) | hoangtruong01 | hoang_mac | Nâng cấp section Vì sao chọn FixHome (LandingTrust.vue) sang bố cục 2 cột nền sáng với ảnh WebP /images/trust-technician-consult.webp và thanh CTA /for-technicians, giữ nguyên nghiệp vụ/API
 - 2026-11-28 15:40 (UTC+7) | hoangtruong01 | main | Redesign section giới thiệu trợ lý AI (LandingDiagnosis.vue) sang bố cục 3 cột đồng bộ icon với mockup /images/steps/step-3-ai-result.png và nền /images/ai-showcase-backdrop.webp, giữ nguyên luồng /app/bookings/ai
@@ -682,4 +684,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-22 01:21 (UTC+7) | Hgnv11 | dev | Ghi hợp đồng mới của view bảo hành khách từ Backend (inspection, outcomeCode, refundAmount); web chưa hiển thị
 - 2026-11-22 00:27 (UTC+7) | ToanAltF4 | fix/part-request-counts-2111 | Ô đếm trạng thái SM đổi theo mọi thao tác trên hàng (chuẩn bị xong, giao hàng, huỷ), trước chỉ đổi khi lấy mã kho
 - 2026-11-22 00:06 (UTC+7) | ToanAltF4 | fix/console-parts-layout-2111 | BUG 242/243/250/255/258: trang yêu cầu linh kiện SM thành danh sách tóm tắt + khung chi tiết, hiện kho xuất; hoàn trả 3 cột thu gọn; làm mới không nhảy bố cục; xem trước giao hàng thu gọn; sửa test chọn buổi lệch tháng
-- 2026-11-21 23:46 (UTC+7) | ToanAltF4 | fix/booking-ai-visit-2111 | BUG 239-241: đặt nhiều máy từ chat AI có nút chính lưu máy này và sang máy kế tiếp, máy cuối lưu và tiếp tục mà không cần Thêm thiết bị; khách có 1 địa chỉ vẫn mở được Thêm địa chỉ mới ở bước 2
