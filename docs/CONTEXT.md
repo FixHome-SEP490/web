@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-27 22:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
+> Cập nhật lần cuối: 2026-11-28 15:40 (UTC+7) · Người cập nhật (git): hoangtruong01 · Nhánh: main
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,12 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Nâng cấp Hero Section trang Landing Page (28/11/2026)
+
+- `LandingHero.vue` chuyển sang banner toàn chiều ngang dùng ảnh WebP tối ưu `/images/hero-technician-bg.webp` (`fetchpriority="high"`, giữ nguyên logo FixHome trên áo kỹ thuật viên bên phải, lớp phủ gradient xanh đậm đọc chữ bên trái). Mobile tách vùng ảnh kỹ thuật viên phía trên mượt xuống nền xanh đậm để chữ không đè khuôn mặt.
+- Giữ nguyên cấu trúc phần còn lại của `LandingPage.vue`, header/footer `PublicLayout.vue`, route và guard của hai nút (`Đặt lịch sửa chữa` -> `/app/bookings/new`, `Nhờ AI gợi ý` -> `/app/bookings/ai`), bổ sung dải 3 lợi ích (`Thợ đã xác minh`, `Chi phí minh bạch`, `Đặt lịch thuận tiện`). Đã kiểm tra trực quan qua Chrome headless tại 375/768/1024/1440 px; không sửa Backend/API.
+- `LandingDiagnosis.vue` (`#ai`) nâng cấp sang bố cục 3 cột (giới thiệu + CTA `Phân tích sự cố ngay` -> `/app/bookings/ai` + lưu ý tham khảo bên trái; mockup điện thoại `/images/steps/step-3-ai-result.png` nghiêng nhẹ trên nền bàn gỗ và cây xanh `/images/ai-showcase-backdrop.webp` ở giữa; 3 tính năng dọc `Nhận diện sự cố`, `Gợi ý giải pháp phù hợp`, `Đặt dịch vụ` bên phải với icon `lucide-vue-next` đồng bộ `stroke-width: 1.75`). Không thay đổi API/Backend.
 
 ### Giao diện bảo hành của quản lý dịch vụ (27/11/2026)
 
@@ -636,6 +642,8 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 
 ## 9. Nhật ký cập nhật context
 
+- 2026-11-28 15:40 (UTC+7) | hoangtruong01 | main | Redesign section giới thiệu trợ lý AI (LandingDiagnosis.vue) sang bố cục 3 cột đồng bộ icon với mockup /images/steps/step-3-ai-result.png và nền /images/ai-showcase-backdrop.webp, giữ nguyên luồng /app/bookings/ai
+- 2026-11-28 14:54 (UTC+7) | hoangtruong01 | main | Nâng cấp giao diện Hero Section của Landing Page (LandingHero.vue) sang banner toàn chiều ngang với nền WebP mới và 3 lợi ích nổi bật, giữ nguyên route/auth guard
 - 2026-11-27 22:42 (UTC+7) | Lạc Vỹ | LacVy | Đồng bộ ConsoleStatCard trên Console Admin/SM (thêm active filter ở Đơn sửa chữa, Yêu cầu linh kiện, Hoàn trả linh kiện, Duyệt danh tính), thống nhất skeleton loading, thêm hiệu ứng đếm số và gộp 3 ConsoleStatCard sau conflict ở Bảo hành
 - 2026-11-27 22:23 (UTC+7) | Lạc Vỹ | LacVy | Sửa lớp z-index popover chọn ngày bị bảng đè ở Duyệt danh tính/Đơn sửa chữa, bỏ thanh lọc trùng ở Yêu cầu/Hoàn trả linh kiện, giữ tổng đếm allStatusTotalCount khi lọc và thêm skeleton bảng/drawer ở Duyệt hồ sơ
 - 2026-11-27 22:19 (UTC+7) | Lạc Vỹ | LacVy | Thêm bộ 12 ảnh 3D badge nền trong suốt (Wave 1) qua ConsoleTitleArtwork không viền ở đầu tiêu đề các trang Console Admin/SM (Chi hộ và rút tiền chưa tạo ảnh riêng do tạm hết quota model ảnh)
@@ -674,5 +682,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-21 18:35 (UTC+7) | Lạc Vỹ | LacVy | UX Khách hàng & Nháp gọn 1 cột, đồng bộ workStopped ("Đã dừng công việc") sang tab Đã huỷ; giữ nút Huỷ bản nháp ở đặt lịch/đơn/trang chủ.
 - 2026-11-21 16:30 (UTC+7) | ToanAltF4 | fix/web-kyc-no-withdraw | Bỏ nút Nộp lại ở hồ sơ KYC đang chờ duyệt: backend không có DELETE /technicians/me/verification (luôn 404)
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
-- 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
-- 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
