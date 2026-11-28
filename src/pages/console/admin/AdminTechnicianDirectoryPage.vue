@@ -79,7 +79,11 @@ function resetSearch() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Tra cứu kỹ thuật viên" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Tra cứu kỹ thuật viên"
+      artwork-src="/images/ui/console-tech-directory.png"
+    />
 
     <form class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)" @submit.prevent="run(1)">
       <div class="relative w-full min-w-0 sm:w-96">

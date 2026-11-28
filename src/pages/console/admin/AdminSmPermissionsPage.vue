@@ -120,7 +120,12 @@ onMounted(load);
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Phân quyền quản lý dịch vụ" :count="loading || error ? null : grantedCount" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Phân quyền quản lý dịch vụ"
+      artwork-src="/images/ui/console-sm-permissions.png"
+      :count="loading || error ? null : grantedCount"
+    />
     <div class="animate-slide-up-delay-1 flex flex-wrap items-end gap-3">
       <label class="flex min-w-0 flex-1 flex-col gap-1 text-sm text-ink-700 sm:max-w-md">
         Áp dụng cho

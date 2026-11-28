@@ -177,7 +177,12 @@ const actionPillClass = (action: string) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Nhật ký thao tác" :count="loading || error ? null : total">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Nhật ký thao tác"
+      artwork-src="/images/ui/console-audit-logs.png"
+      :count="loading || error ? null : total"
+    >
       <template #badges>
         <span class="whitespace-nowrap rounded bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600" title="Nhật ký chỉ ghi thêm, không sửa hay xoá được.">Chỉ đọc</span>
       </template>

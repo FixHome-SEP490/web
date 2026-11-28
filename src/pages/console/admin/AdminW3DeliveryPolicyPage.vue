@@ -351,7 +351,11 @@ onMounted(() => { load(); loadLifecycle(); });
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Chính sách giao linh kiện (Bản nháp)">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Chính sách giao linh kiện (Bản nháp)"
+      artwork-src="/images/ui/console-delivery-policy.png"
+    >
       <template #actions><FhButton data-testid="reload" variant="secondary" :disabled="busy" @click="load">Tải lại</FhButton></template>
     </ConsolePageHeader>
 
