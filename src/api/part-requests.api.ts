@@ -11,6 +11,10 @@ export type PartRequestStatus =
 
 export type PartRequestType = 'pre_repair' | 'additional' | 'quotation' | 'warranty';
 export type FaultyInspectionResult = 'manufacturer' | 'installation' | 'undetermined';
+
+/** Where one warranty part line's faulty units are: counted in by the manager, sent to the manufacturer, judged by it. */
+export type FaultyPartStatus = 'awaiting' | 'partial' | 'received' | 'sent_to_manufacturer' | 'manufacturer_accepted' | 'manufacturer_rejected';
+export type FaultyManufacturerResult = 'accepted' | 'rejected';
 export type FulfillmentMethod = 'pickup' | 'delivery';
 export type PartUsageStatus = 'pending' | 'used' | 'returned';
 export type PartSource = 'fixhome' | 'technician' | 'external';
@@ -25,6 +29,14 @@ export interface PartRequestItem {
   unitPriceSnapshot: number;
   usageStatus: PartUsageStatus;
   note?: string | null;
+  /** Warranty requests only. */
+  faultyStatus?: FaultyPartStatus | null;
+  faultyReceivedQty?: number;
+  faultyReceivedAt?: string | null;
+  faultySentAt?: string | null;
+  faultyResultNote?: string | null;
+  faultyResultEvidence?: string[] | null;
+  faultyResolvedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +47,8 @@ export interface PartRequest {
   warehouseAllocation?: WarehouseAllocation | null;
   serviceOrderId: string;
   technicianId: string;
+  /** Warranty requests only: the claim the free part belongs to. */
+  warrantyClaimId?: string | null;
   requestType: PartRequestType;
   fulfillmentMethod: FulfillmentMethod;
   status: PartRequestStatus;
@@ -622,12 +636,24 @@ export const partRequestsApi = {
     return res.data.data;
   },
 
-  /** SM records what the faulty part shows, once the technician brought it back; the result says who pays the new one. */
-  async recordFaultyInspection(
+  /** SM counts faulty units in at the warehouse, per line; may be repeated for the rest. */
+  async receiveFaultyParts(requestId: string, payload: { items: { itemId: string; quantity: number }[]; note?: string }): Promise<PartRequest> {
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-receipt`, payload);
+    return res.data.data;
+  },
+
+  /** SM sends counted-in lines to the manufacturer. */
+  async sendFaultyToManufacturer(requestId: string, payload: { itemIds: string[] }): Promise<PartRequest> {
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-shipment`, payload);
+    return res.data.data;
+  },
+
+  /** SM records the manufacturer's verdict; a rejection makes the technician pay the received units. */
+  async recordFaultyResult(
     requestId: string,
-    payload: { result: FaultyInspectionResult; note?: string; evidenceRefs?: string[] },
+    payload: { itemIds: string[]; result: FaultyManufacturerResult; note?: string; evidenceRefs?: string[] },
   ): Promise<PartRequest> {
-    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-inspection`, payload);
+    const res = await apiClient.post<{ data: PartRequest }>(`/part-requests/${requestId}/faulty-result`, payload);
     return res.data.data;
   },
 

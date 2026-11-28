@@ -34,7 +34,6 @@ import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api'
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
 import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
-import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import {
@@ -52,6 +51,7 @@ import { warehousesApi, type Warehouse } from '../../api/warehouses.api';
 import { vnDateString, vnDateTimeString, vnDayKey, vnKeyAndClockToDate, vnTimeString } from '../../utils/vn-time';
 import { userFacingError } from '../../utils/user-facing-error';
 import { partCustodyQuantities } from '../../utils/part-custody-quantities';
+import { faultyBucket } from '../../utils/warranty-claim';
 import { usePartReturnsRefresh } from '../../composables/usePartReturnsRefresh';
 import { canConfirmWarehouseHandover, warehouseIssuedTokenSlot, warehouseQrAction, warehouseQrOpen } from '../../utils/warehouse-fulfillment';
 
@@ -78,7 +78,6 @@ const warehousesList = ref<Warehouse[]>([]);
 const sortOrder = ref<'newest' | 'oldest'>('newest');
 
 const qrModalRequest = ref<PartRequest | null>(null);
-const inspectionRequest = ref<PartRequest | null>(null);
 const deliveryHasQuote = ref<Record<string, boolean>>({});
 
 const selectedId = ref<string | null>(null);
@@ -533,17 +532,17 @@ const hasQr = (req: PartRequest) => ['ready', 'delivering'].includes(req.status.
 const canDeliver = (req: PartRequest) => req.status.toLowerCase() === 'ready' && req.fulfillmentMethod === 'delivery';
 const canMarkLegacyPickupReady = (req: PartRequest) => req.fulfillmentMethod === 'pickup' && allocationFor(req)?.mode === 'legacy';
 const typeLabel = (type: string) => (type === 'pre_repair' ? 'Trước sửa chữa' : type === 'quotation' ? 'Báo giá tại chỗ' : type === 'warranty' ? 'Bảo hành' : 'Phát sinh');
-const needsInspection = (req: PartRequest) => req.requestType === 'warranty' && !!req.faultyReturnedAt && !req.faultyInspectionResult;
+const faultyBucketOf = (req: PartRequest) => faultyBucket(req.items);
+const needsFaultyAction = (req: PartRequest) => req.requestType === 'warranty' && !!req.items.some((i) => i.faultyStatus) && faultyBucketOf(req) !== 'done';
 const faultyReturnLabel = (req: PartRequest) => {
-  if (req.faultyReturnedAt) return 'Thợ đã nộp';
+  const bucket = faultyBucketOf(req);
+  if (bucket === 'partial') return 'Đã nhận một phần';
+  if (bucket === 'to_ship') return 'Đã nhận, chờ gửi hãng';
+  if (bucket === 'at_manufacturer') return 'Đã gửi hãng';
+  if (bucket === 'done') return req.items.some((i) => i.faultyStatus === 'manufacturer_rejected') ? 'Hãng từ chối, lỗi lắp đặt' : 'Hãng chấp nhận, lỗi nhà sản xuất';
+  if (req.faultyReturnedAt) return 'Thợ đã nộp, chờ kho xác nhận nhận';
   if (!req.faultyReturnDueAt) return 'Chờ thợ nhận linh kiện thay thế';
-  return `${new Date(req.faultyReturnDueAt).getTime() < Date.now() ? 'Quá hạn nộp' : 'Hạn nộp'} ${vnDateTimeString(req.faultyReturnDueAt)}${req.faultyReturnChargedAt ? ', đã trừ ví thợ' : ''}`;
-};
-const inspectionLabel = (result?: string | null) => (result === 'manufacturer' ? 'Lỗi nhà sản xuất, FixHome chịu' : result === 'installation' ? 'Do lắp đặt, thợ trả tiền' : result === 'undetermined' ? 'Không xác định, FixHome chịu' : 'Chưa kiểm tra');
-const onInspected = (updated: PartRequest) => {
-  replaceRow(updated);
-  inspectionRequest.value = null;
-  showToast('success', 'Đã lưu kết quả kiểm tra linh kiện hỏng.');
+  return `${new Date(req.faultyReturnDueAt).getTime() < Date.now() ? 'Quá hạn nộp' : 'Hạn nộp'} ${vnDateTimeString(req.faultyReturnDueAt)}${req.faultyReturnChargedAt ? ', đã trừ ví phần chưa nhận' : ''}`;
 };
 const methodLabel = (method: string) => (method === 'delivery' ? 'Giao tận nơi' : 'Lấy tại kho');
 
@@ -1164,8 +1163,8 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
                 <div v-if="selected.requestType === 'warranty'" class="flex justify-between items-baseline gap-2 pt-1 border-t border-slate-100">
                   <span class="text-slate-500 shrink-0">Linh kiện hỏng</span>
                   <span class="text-right text-slate-800">
-                    {{ selected.faultyInspectionResult ? inspectionLabel(selected.faultyInspectionResult) : faultyReturnLabel(selected) }}
-                    <router-link v-if="canOperate && needsInspection(selected)" to="/console/part-returns" class="ml-1 font-medium text-blue-600 hover:underline">Kiểm tra</router-link>
+                    {{ faultyReturnLabel(selected) }}
+                    <router-link v-if="canOperate && needsFaultyAction(selected)" to="/console/part-returns" class="ml-1 font-medium text-blue-600 hover:underline">Xử lý</router-link>
                   </span>
                 </div>
               </div>
@@ -1422,6 +1421,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
       />
 
       <!-- QR Modal -->
+      <Teleport to="body">
       <Transition name="fh-modal">
         <div
           v-if="qrModalRequest"
@@ -1473,8 +1473,8 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
           </div>
         </div>
       </Transition>
+      </Teleport>
 
-      <FaultyPartInspectionModal :request="inspectionRequest" @close="inspectionRequest = null" @done="onInspected" />
     </div>
   </div>
 </template>

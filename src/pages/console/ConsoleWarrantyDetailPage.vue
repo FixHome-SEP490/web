@@ -46,6 +46,10 @@ import {
   claimOutcomeLabels,
   declineReasonLabels,
   faultyInspectionLabels,
+  faultyPartStatusLabels,
+  faultyPartStatusTones,
+  faultyReceivedText,
+  faultyToneClasses,
   inspectionResultLabels,
   invoiceLineTypeLabels,
   notCoveredReasonLabels,
@@ -749,25 +753,30 @@ onMounted(load);
               <h2 class="text-sm font-bold text-ink-900">Linh kiện bảo hành</h2>
             </div>
             <div class="space-y-2 text-sm text-ink-600">
-              <div class="flex justify-between gap-2">
-                <span class="text-ink-500">Kiểm tra linh kiện hỏng</span>
-                <span class="text-right font-medium text-ink-900">
-                  {{ detail.partRequest.faultyInspectionResult ? faultyInspectionLabels[detail.partRequest.faultyInspectionResult] : 'Chưa kiểm tra' }}
-                </span>
+              <div v-if="detail.partRequest.faultyInspectionResult" class="flex justify-between gap-2">
+                <span class="text-ink-500">Kết quả kiểm tra (cách cũ)</span>
+                <span class="text-right font-medium text-ink-900">{{ faultyInspectionLabels[detail.partRequest.faultyInspectionResult] }}</span>
               </div>
               <div class="flex justify-between gap-2" data-testid="faulty-return-state">
                 <span class="inline-flex items-center gap-1 text-ink-500"><PackageCheck :size="13" /> Kỹ thuật viên nộp linh kiện hỏng</span>
                 <span class="text-right font-medium text-ink-900">{{ faultyReturnLabel }}</span>
               </div>
-              <div v-if="detail.partRequest.faultyInspectionResult" class="flex justify-between gap-2">
+              <div v-if="detail.partRequest.faultyInspectionResult || detail.partRequest.items.some((item) => item.faultyStatus === 'manufacturer_accepted' || item.faultyStatus === 'manufacturer_rejected')" class="flex justify-between gap-2">
                 <span class="text-ink-500">Người trả tiền</span>
                 <span class="font-medium text-ink-900">{{ detail.partRequest.chargeTechnician ? 'Kỹ thuật viên' : 'FixHome' }}</span>
               </div>
               <p v-if="detail.partRequest.faultyInspectionNote" class="text-ink-700 text-pretty">{{ detail.partRequest.faultyInspectionNote }}</p>
               <ul v-if="detail.partRequest.items.length" class="divide-y divide-ink-100 border-t border-ink-100 pt-2">
-                <li v-for="item in detail.partRequest.items" :key="item.id" class="flex justify-between py-1">
-                  <span>{{ item.name }} <span class="font-num text-ink-500">× {{ item.quantity }}</span></span>
-                  <span class="font-num"><FhMoney :amount="item.unitPrice * item.quantity" /></span>
+                <li v-for="item in detail.partRequest.items" :key="item.id" class="space-y-1 py-1.5">
+                  <div class="flex justify-between">
+                    <span>{{ item.name }} <span class="font-num text-ink-500">× {{ item.quantity }}</span></span>
+                    <span class="font-num"><FhMoney :amount="item.unitPrice * item.quantity" /></span>
+                  </div>
+                  <div v-if="item.faultyStatus" class="flex flex-wrap items-center gap-2 text-xs">
+                    <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-0.5 font-medium" :class="faultyToneClasses[faultyPartStatusTones[item.faultyStatus]]">{{ faultyPartStatusLabels[item.faultyStatus] }}</span>
+                    <span class="font-num text-ink-600">{{ faultyReceivedText(item) }}</span>
+                  </div>
+                  <p v-if="item.faultyResultNote" class="text-xs text-ink-700 text-pretty">{{ item.faultyResultNote }}</p>
                 </li>
               </ul>
               <div v-if="detail.partRequest.items.length" class="flex justify-between border-t border-ink-100 pt-2 font-semibold text-ink-900">

@@ -29,6 +29,7 @@ import CallOverlay from '../components/chat/CallOverlay.vue';
 import { useCallStore } from '../stores/call.store';
 import NotificationBellDropdown from '../components/notifications/NotificationBellDropdown.vue';
 import { ordersApi } from '../api/orders.api';
+import { warrantyClaimsApi } from '../api/warranty-claims.api';
 import { technicianProfileApi } from '../api/technician-profile.api';
 import type { WalletSummary } from '../api/wallet.api';
 import { toast } from 'vue-sonner';
@@ -62,6 +63,8 @@ const isAvailable = ref(true);
 const togglingAvailability = ref(false);
 const avatarMenuOpen = ref(false);
 const activeJobs = ref<number>(0);
+/** Warranty claims waiting for this technician to take them. */
+const pendingClaims = ref<number>(0);
 /** Jobs being worked on; the server leaves out orders the technician no longer holds. */
 const ACTIVE_JOB_STATUSES = ['accepted', 'en_route', 'under_repair'] as const;
 
@@ -81,6 +84,17 @@ async function countActiveJobs() {
     // ignore
   }
 }
+
+async function countPendingClaims() {
+  try {
+    pendingClaims.value = (await warrantyClaimsApi.listMine({ page: 1, pageSize: 1, status: 'submitted' })).total;
+  } catch {
+    // ignore
+  }
+}
+
+// Taking or handing back a claim on the warranty pages changes the badge: read it again when the page changes.
+watch(() => route.name, () => void countPendingClaims());
 
 const profileQuery = useCachedQuery(sharedQueries.technicianProfile);
 watch(
@@ -139,8 +153,12 @@ onMounted(async () => {
   // A technician must be reachable by voice from any screen, not only the chat.
   callStore.initCallSignalling();
   await countActiveJobs();
+  void countPendingClaims();
   // The count follows a job that starts, finishes or changes hands, as it happens.
-  stopJobCount = onOrderListsChange(() => void countActiveJobs());
+  stopJobCount = onOrderListsChange(() => {
+    void countActiveJobs();
+    void countPendingClaims();
+  });
   invitationPoll = whileOffline(() => void refreshInvitationCount(), 30000);
   // Location is reported only while taking jobs: wait for the switch's state.
   await profileQuery.query.suspense();
@@ -227,7 +245,12 @@ const sidebarNavigation = computed<SidebarNavGroup[]>(() => [
         icon: Wrench,
         badge: () => (activeJobs.value > 0 ? String(activeJobs.value) : null),
       },
-      { path: '/tech/warranty', label: 'Bảo hành', icon: ShieldCheck },
+      {
+        path: '/tech/warranty',
+        label: 'Bảo hành',
+        icon: ShieldCheck,
+        badge: () => (pendingClaims.value > 0 ? String(pendingClaims.value) : null),
+      },
       { path: '/tech/part-returns', label: 'Linh kiện cần trả', icon: PackageCheck },
     ],
   },

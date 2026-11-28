@@ -6,6 +6,7 @@ import { FhButton, FhSkeleton } from '../../components';
 import TechnicianWarrantyActionModal, {
   type WarrantyActionMode,
 } from '../../components/technician/TechnicianWarrantyActionModal.vue';
+import WarrantyPartReceive from '../../components/technician/WarrantyPartReceive.vue';
 import WarrantyContactActions from '../../components/technician/WarrantyContactActions.vue';
 import { warrantyClaimsApi, type StaffWarrantyClaim } from '../../api/warranty-claims.api';
 import { partRequestsApi } from '../../api/part-requests.api';
@@ -18,9 +19,15 @@ import { affectedBy } from '../../lib/query-keys';
 import { formatDateTimeVN } from '../../utils/formatters';
 import { vnDateString } from '../../utils/vn-time';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
+import WarrantyNextStep from '../../components/WarrantyNextStep.vue';
 import {
+  claimPartsPending,
   technicianClaimDisplayMeta,
-  faultyInspectionLabels,
+  technicianNextStep,
+  faultyPartStatusLabels,
+  faultyPartStatusTones,
+  faultyReceivedText,
+  faultyToneClasses,
   inspectionResultLabels,
   notCoveredReasonLabels,
   warrantyClaimToneClasses,
@@ -52,22 +59,28 @@ const part = computed(() => {
 const partToCollect = computed(() => {
   const status = String(claim.value?.partRequest?.status ?? '').toLowerCase();
   if (status === 'requested') return 'Kho đang chuẩn bị linh kiện thay thế.';
-  if (status === 'ready') return 'Linh kiện thay thế đã sẵn sàng. Mở mục linh kiện của đơn để nhận.';
-  if (status === 'delivering') return 'Linh kiện thay thế đang được giao tới bạn. Mở mục linh kiện của đơn để nhận.';
+  if (status === 'ready') return 'Linh kiện thay thế đã sẵn sàng. Nhập mã bàn giao để nhận.';
+  if (status === 'delivering') return 'Linh kiện thay thế đang được giao tới bạn. Nhập mã bàn giao khi nhận được.';
   return '';
 });
-const partOverdue = computed(() => !!part.value && !part.value.faultyReturnedAt && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
+// Only the manager counting units in stops the clock, so a reported hand-in is still overdue until then.
+const partMissing = computed(() => !part.value?.items?.length || part.value.items.some((item) => ['awaiting', 'partial'].includes(item.faultyStatus ?? 'awaiting')));
+const partOverdue = computed(() => !!part.value && partMissing.value && !!part.value.faultyReturnDueAt && new Date(part.value.faultyReturnDueAt).getTime() < Date.now());
 
 // The free replacement part: received with the code, then declared fitted or returned before the warranty can be reported done.
 // The faulty part may still be handed in afterwards.
-const partsPending = computed(() => {
-  const request = claim.value?.partRequest;
-  if (!request || String(request.status).toLowerCase() === 'cancelled') return false;
-  return !part.value || !!part.value.items?.some((item) => item.usageStatus === 'pending');
-});
+const partsPending = computed(() => !!claim.value && claimPartsPending(claim.value));
 
 async function reloadClaim() {
   claim.value = await warrantyClaimsApi.get(claimId.value);
+}
+async function onPartReceived() {
+  notice.value = { type: 'success', text: 'Đã xác nhận nhận linh kiện thay thế. Hãy khai đã lắp hoặc trả lại khi xong.' };
+  try {
+    await reloadClaim();
+  } catch {
+    /* the next event, reconnect or poll reads again */
+  }
 }
 async function markUsage(itemId: string, usageStatus: 'used' | 'returned') {
   if (!part.value || busy.value) return;
@@ -354,7 +367,7 @@ onBeforeUnmount(() => {
               v-if="['submitted', 'accepted', 'in_progress', 'inspected', 'awaiting_customer'].includes(claim.status)"
               class="space-y-2.5"
             >
-              <h2 class="text-xs font-semibold uppercase tracking-wider text-ink-400">Thao tác tiếp theo</h2>
+              <WarrantyNextStep :step="technicianNextStep(claim)" />
               <div v-if="claim.status === 'submitted'" class="flex flex-col gap-2">
                 <FhButton variant="primary" size="md" block @click="modalMode = 'accept'"><Check :size="16" aria-hidden="true" /> Nhận yêu cầu</FhButton>              </div>
               <div v-else-if="claim.status === 'accepted'" class="flex flex-col gap-2">
@@ -384,14 +397,11 @@ onBeforeUnmount(() => {
           >
             <h2 class="text-base font-semibold text-ink-900">Linh kiện bảo hành</h2>
             <p class="text-sm text-ink-700 leading-relaxed">{{ partToCollect }}</p>
-            <router-link
-              :to="{ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } }"
-              class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700"
-              :class="focusRing"
-              data-testid="warranty-part-pickup-link"
-            >
-              <PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành
-            </router-link>
+            <WarrantyPartReceive
+              :order-id="claim.order.id"
+              :request-id="claim.partRequest!.id"
+              @received="onPartReceived"
+            />
           </section>
 
           <!-- Replacement part in hand: declare it fitted or returned -->
@@ -417,18 +427,32 @@ onBeforeUnmount(() => {
           <section
             v-if="part"
             class="rounded-2xl border p-5 shadow-2xs space-y-3"
-            :class="partOverdue && !part.faultyReturnedAt ? 'bg-danger-50/40 border-danger-200' : 'bg-white border-ink-200/90'"
+            :class="partOverdue ? 'bg-danger-50/40 border-danger-200' : 'bg-white border-ink-200/90'"
             data-testid="faulty-part-return"
           >
             <h2 class="text-base font-semibold text-ink-900">Nộp linh kiện hỏng về kho</h2>
-            <p v-if="part.faultyReturnedAt" class="text-ink-700 leading-relaxed">
+            <template v-if="part.faultyReturnedAt">
+            <p class="text-ink-700 leading-relaxed">
               Đã nộp lúc <span class="font-num font-medium text-ink-900">{{ formatDateTimeVN(part.faultyReturnedAt) }}</span>.
-              <template v-if="part.faultyInspectionResult">Quản lý dịch vụ đã kiểm tra: {{ faultyInspectionLabels[part.faultyInspectionResult] }}.</template>
-              <template v-else>Chờ quản lý dịch vụ kiểm tra.</template>
+              <template v-if="partMissing">Chờ kho xác nhận đã nhận linh kiện hỏng.</template>
+              <template v-else>Kho đã nhận đủ linh kiện hỏng.</template>
             </p>
+            <p v-if="part.faultyReturnChargedAt && partMissing" class="text-danger-700 font-medium leading-relaxed">
+              Quá hạn nộp nên giá phần chưa được kho nhận đã bị trừ vào ví. Kho nhận linh kiện sẽ hoàn lại phần tương ứng.
+            </p>
+            <ul v-if="part.items?.some((item) => item.faultyStatus)" class="divide-y divide-ink-100 rounded-xl border border-ink-200" data-testid="faulty-line-status">
+              <li v-for="item in part.items" :key="item.id" class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                <span class="min-w-0 break-words font-medium text-ink-900">{{ item.name }}</span>
+                <span v-if="item.faultyStatus" class="flex flex-wrap items-center gap-2">
+                  <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-medium" :class="faultyToneClasses[faultyPartStatusTones[item.faultyStatus]]">{{ faultyPartStatusLabels[item.faultyStatus] }}</span>
+                  <span class="font-num text-xs text-ink-600">{{ faultyReceivedText(item) }}</span>
+                </span>
+              </li>
+            </ul>
+            </template>
             <template v-else>
               <p :class="partOverdue ? 'text-danger-700 font-medium' : 'text-ink-700'" class="leading-relaxed">
-                <template v-if="part.faultyReturnChargedAt">Quá hạn nộp nên giá linh kiện thay thế đã bị trừ vào ví. Nộp về kho và được kiểm tra không do lắp đặt sẽ được hoàn lại.</template>
+                <template v-if="part.faultyReturnChargedAt">Quá hạn nộp nên giá linh kiện chưa được kho nhận đã bị trừ vào ví. Kho nhận linh kiện sẽ hoàn lại phần tương ứng.</template>
                 <template v-else-if="partOverdue">Đã quá hạn nộp. Giá linh kiện thay thế sẽ bị trừ vào ví.</template>
                 <template v-else>Hạn nộp: <span class="font-num font-semibold text-ink-900">{{ part.faultyReturnDueAt ? formatDateTimeVN(part.faultyReturnDueAt) : '' }}</span>. Quá hạn, giá linh kiện thay thế sẽ bị trừ vào ví.</template>
               </p>

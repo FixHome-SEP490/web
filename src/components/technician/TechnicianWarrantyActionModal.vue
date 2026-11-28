@@ -288,19 +288,20 @@ async function submit() {
             v-model="note"
             rows="4"
             maxlength="2000"
-            placeholder="Mô tả việc đã xử lý để khắc phục lỗi"
+            placeholder="Ghi chú hoàn tất (ít nhất 10 ký tự: đã làm gì, thay gì)"
             class="w-full p-2.5 bg-white border border-ink-300 rounded-[var(--radius-sm)] text-sm"
           ></textarea>
         </div>
+        <p class="text-xs text-ink-500">Chỉ gửi khi đã sửa xong. Ảnh sau khi sửa không bắt buộc, nhưng giúp tránh tranh cãi nếu khách phản đối.</p>
       </template>
 
-      <div v-if="showPhotos" class="space-y-2">
+      <div v-if="showPhotos" class="space-y-2" data-testid="warranty-photos">
         <span class="text-xs font-medium text-ink-700">
           Ảnh đính kèm ({{ mode === 'propose' && evidenceRequired ? 'bắt buộc' : 'không bắt buộc' }}, tối đa {{ evidence.maxPhotos }} ảnh)
         </span>
-        <div v-if="evidence.photos.value.length" class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <div v-for="(photo, index) in evidence.photos.value" :key="photo.url" class="relative">
-            <img :src="photo.url" :alt="photo.name" class="w-16 h-16 object-cover rounded-[var(--radius-sm)] border border-ink-200" />
+            <img :src="photo.url" :alt="photo.name" class="w-20 h-20 object-cover rounded-xl border border-ink-200" />
             <button
               type="button"
               class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-white border border-ink-300 flex items-center justify-center"
@@ -310,15 +311,16 @@ async function submit() {
               <X :size="12" />
             </button>
           </div>
+          <label
+            v-if="evidence.photos.value.length < evidence.maxPhotos"
+            class="inline-flex flex-col items-center justify-center w-20 h-20 rounded-xl border border-dashed border-ink-300 hover:border-brand-500 hover:bg-brand-50/30 text-ink-500 hover:text-brand-600 cursor-pointer transition-colors"
+            :class="{ 'opacity-60 pointer-events-none': evidence.uploading.value }"
+          >
+            <Camera :size="20" />
+            <span class="text-xs mt-1">{{ evidence.uploading.value ? 'Đang tải…' : 'Thêm ảnh' }}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="evidence.pick" />
+          </label>
         </div>
-        <label
-          class="inline-flex items-center gap-1.5 h-[36px] px-3 text-sm rounded-[var(--radius-sm)] border border-ink-300 cursor-pointer hover:bg-ink-50"
-          :class="{ 'opacity-60 pointer-events-none': evidence.uploading.value || evidence.photos.value.length >= evidence.maxPhotos }"
-        >
-          <Camera :size="14" />
-          {{ evidence.uploading.value ? 'Đang tải ảnh…' : 'Thêm ảnh' }}
-          <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="evidence.pick" />
-        </label>
       </div>
 
       <p v-if="error || evidence.error.value" role="alert" class="text-xs text-danger-700">

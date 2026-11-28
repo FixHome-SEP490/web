@@ -33,4 +33,11 @@ describe('customer warranty claim card', () => {
   it('shows no result block while the claim has none', () => {
     expect(mount(WarrantyClaimCard, { props: { claim: claim({ status: 'inspected', resolvedAt: null }) } }).find('[data-testid="claim-inspection"]').exists()).toBe(false);
   });
+
+  it('puts what the customer has to do first, and the inspection time while the technician is coming', () => {
+    const waiting = mount(WarrantyClaimCard, { props: { claim: claim({ status: 'awaiting_customer', awaitingPrompt: 'conclusion', resolvedAt: null }) } });
+    expect(waiting.get('[data-testid="warranty-next-step"]').text()).toContain('Cần bạn phản hồi kết luận');
+    const coming = mount(WarrantyClaimCard, { props: { claim: claim({ status: 'accepted', resolvedAt: null, inspectionScheduledAt: '2026-10-01T03:00:00.000Z' }) } });
+    expect(coming.get('[data-testid="warranty-next-step"]').text()).toContain('Lịch kiểm tra');
+  });
 });

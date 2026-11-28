@@ -2067,7 +2067,7 @@ const parsedReview = computed(() => {
           <div class="flex flex-wrap items-center gap-2.5">
             <h2 class="text-base sm:text-lg font-semibold text-ink-900">Bảo hành</h2>
             <span
-              class="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+              class="px-3 py-1 rounded-full text-sm font-semibold whitespace-nowrap"
               :class="
                 activeWarrantyClaim
                   ? 'bg-warning-50 text-warning-800 border border-warning-200'
@@ -2079,7 +2079,7 @@ const parsedReview = computed(() => {
               {{ activeWarrantyClaim ? 'Đang xử lý bảo hành' : isOrderWarrantyActive ? 'Còn hiệu lực' : 'Đã hết hạn' }}
             </span>
           </div>
-          <div class="flex items-center gap-2 text-xs font-medium text-ink-500">
+          <div class="flex items-center gap-2 text-sm font-medium text-ink-500">
             <span class="hidden sm:inline">{{ isWarrantyExpanded ? 'Thu gọn' : 'Xem chi tiết' }}</span>
             <div
               class="flex h-7 w-7 items-center justify-center rounded-lg text-ink-400 transition-transform duration-300 ease-out"
@@ -2096,27 +2096,25 @@ const parsedReview = computed(() => {
         >
           <div class="min-h-0 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6 pt-0 border-t border-ink-100/60">
             <div class="pt-4 space-y-4">
-              <ul class="divide-y divide-ink-100">
-                <li v-for="w in orderWarranties" :key="w.id" class="py-2.5 flex items-start justify-between gap-3">
-                  <span class="min-w-0">
-                    <span class="block font-medium text-ink-900">
-                      <span v-if="coverageKindLabel(describeCoverage(w).kind)" class="font-normal text-ink-500">{{ coverageKindLabel(describeCoverage(w).kind) }} · </span>{{ describeCoverage(w).itemDescription }}
+              <ul class="divide-y divide-ink-100 rounded-xl border border-ink-100">
+                <li v-for="w in orderWarranties" :key="w.id" class="px-4 py-3 space-y-1">
+                  <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold text-ink-900">
+                    <span v-if="coverageKindLabel(describeCoverage(w).kind)" class="inline-flex h-6 items-center rounded-md bg-ink-100 px-2 text-xs font-medium text-ink-600">{{ coverageKindLabel(describeCoverage(w).kind) }}</span>
+                    <span>{{ describeCoverage(w).itemDescription }}</span>
+                    <span
+                      class="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+                      :class="new Date(w.expiresAt) > new Date() ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-600'"
+                    >
+                      {{ new Date(w.expiresAt) > new Date() ? 'Còn hạn' : 'Hết hạn' }}
                     </span>
-                    <span class="block text-ink-500 font-num">
-                      {{ (w.warrantyDaysSnapshot ?? 0) > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'Theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
-                    </span>
-                  </span>
-                  <span
-                    class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0"
-                    :class="new Date(w.expiresAt) > new Date() ? 'bg-success-50 text-success-700' : 'bg-ink-100 text-ink-600'"
-                  >
-                    {{ new Date(w.expiresAt) > new Date() ? 'Còn hạn' : 'Hết hạn' }}
-                  </span>
+                  </p>
+                  <p class="text-sm text-ink-600 font-num">
+                    Bảo hành {{ (w.warrantyDaysSnapshot ?? 0) > 0 ? `${w.warrantyDaysSnapshot} ngày` : 'theo chính sách' }} · hết hạn {{ formatDate(w.expiresAt) }}
+                  </p>
                 </li>
               </ul>
-              <p class="flex items-center justify-between gap-3">
-                <span class="text-ink-500">Hết hạn muộn nhất</span>
-                <span class="font-semibold text-ink-900 font-num whitespace-nowrap">{{ formatDate(maxWarrantyExpiresAt) }}</span>
+              <p class="text-sm text-ink-700">
+                Hết hạn muộn nhất: <span class="font-semibold text-ink-900 font-num">{{ formatDate(maxWarrantyExpiresAt) }}</span>
               </p>
 
               <div v-if="warrantyClaims.length" class="space-y-2">
@@ -2130,7 +2128,7 @@ const parsedReview = computed(() => {
               </div>
 
               <div v-if="hasClaimableCoverage" class="flex justify-end pt-1">
-                <FhButton :variant="reviewPending ? 'secondary' : 'primary'" size="sm" @click="showWarrantyClaimModal = true">
+                <FhButton :variant="reviewPending ? 'secondary' : 'primary'" size="md" @click="showWarrantyClaimModal = true">
                   Yêu cầu bảo hành
                 </FhButton>
               </div>

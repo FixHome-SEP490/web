@@ -15,7 +15,7 @@ import { ordersApi, type OrderWarrantyGroup, type WarrantyClaimView } from '../.
 import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
-import { claimDisplayMeta, isOpenClaim, warrantyClaimToneClasses } from '../../utils/warranty-claim';
+import { claimDisplayMeta, customerNextStep, isOpenClaim, warrantyClaimToneClasses } from '../../utils/warranty-claim';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
 import { vnDateString } from '../../utils/vn-time';
 
@@ -38,7 +38,7 @@ const {
 });
 
 // Filter and search state
-type WarrantyTab = 'ALL' | 'ACTIVE' | 'PROCESSING' | 'EXPIRED';
+type WarrantyTab = 'ALL' | 'NEEDS_REPLY' | 'ACTIVE' | 'PROCESSING' | 'EXPIRED';
 const activeTab = ref<WarrantyTab>('ALL');
 const searchQuery = ref('');
 
@@ -136,6 +136,7 @@ const claimSummary = (order: OrderWarrantyGroup) => {
     primaryLabel: meta.label,
     primaryToneClass: warrantyClaimToneClasses[meta.tone],
     needsAction: waitingCount > 0,
+    nextStepTitle: customerNextStep(primary).title,
   };
 };
 
@@ -151,30 +152,25 @@ const allCoveragesBusy = (order: OrderWarrantyGroup) =>
 const coverageLabel = (order: OrderWarrantyGroup, claim: WarrantyClaimView) =>
   order.coverages.find((coverage) => coverage.id === claim.warrantyCoverageId)?.itemDescription;
 
+const needsReply = (order: OrderWarrantyGroup) => order.claims.some(claimNeedsCustomerResponse);
+
+// No counts: the list is paged by order, so a count would only cover the orders on this page.
 const tabs = computed(() => [
-  { key: 'ALL' as const, label: 'Tất cả', count: warrantyOrders.value.length },
-  {
-    key: 'ACTIVE' as const,
-    label: 'Còn hiệu lực',
-    count: warrantyOrders.value.filter((o) => o.hasActiveCoverage && !hasOpenClaim(o)).length,
-  },
-  {
-    key: 'PROCESSING' as const,
-    label: 'Đang xử lý',
-    count: warrantyOrders.value.filter((o) => hasOpenClaim(o)).length,
-  },
-  {
-    key: 'EXPIRED' as const,
-    label: 'Đã hết hạn',
-    count: warrantyOrders.value.filter((o) => !o.hasActiveCoverage && !hasOpenClaim(o)).length,
-  },
+  { key: 'ALL' as const, label: 'Tất cả' },
+  ...(warrantyOrders.value.some(needsReply) ? [{ key: 'NEEDS_REPLY' as const, label: 'Cần bạn phản hồi' }] : []),
+  { key: 'ACTIVE' as const, label: 'Còn hiệu lực' },
+  { key: 'PROCESSING' as const, label: 'Đang xử lý' },
+  { key: 'EXPIRED' as const, label: 'Đã hết hạn' },
 ]);
 
 const filteredWarrantyOrders = computed(() => {
-  let list = warrantyOrders.value;
+  // Orders waiting for the customer come first.
+  let list = [...warrantyOrders.value].sort((a, b) => Number(needsReply(b)) - Number(needsReply(a)));
 
-  if (activeTab.value === 'ACTIVE') {
-    list = list.filter((o) => o.hasActiveCoverage && !hasOpenClaim(o));
+  if (activeTab.value === 'NEEDS_REPLY') {
+    list = list.filter(needsReply);
+  } else if (activeTab.value === 'ACTIVE') {
+    list = list.filter((o) => o.hasActiveCoverage);
   } else if (activeTab.value === 'PROCESSING') {
     list = list.filter((o) => hasOpenClaim(o));
   } else if (activeTab.value === 'EXPIRED') {
@@ -299,17 +295,11 @@ onUnmounted(() => {
             type="button"
             role="tab"
             :aria-selected="activeTab === t.key"
-            class="relative z-10 flex h-9 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs sm:text-sm font-medium transition-colors"
+            class="relative z-10 flex h-10 shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
             :class="activeTab === t.key ? 'font-semibold text-ink-900' : 'text-ink-600 hover:text-ink-900'"
             @click="selectTab(t.key)"
           >
             <span>{{ t.label }}</span>
-            <span
-              class="inline-flex items-center rounded-full px-1.5 py-0.2 font-num text-xs transition-colors"
-              :class="activeTab === t.key ? 'bg-brand-50 text-brand-700 font-semibold' : 'bg-ink-200/60 text-ink-600'"
-            >
-              {{ t.count }}
-            </span>
           </button>
         </div>
 
@@ -449,7 +439,7 @@ onUnmounted(() => {
                   class="min-w-0 flex-1 group block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                   :title="`Xem đơn ${order.orderCode}`"
                 >
-                  <h2 class="font-bold text-base sm:text-[17px] leading-snug text-ink-900 group-hover:text-brand-600 transition-colors text-pretty line-clamp-2">
+                  <h2 class="font-bold text-lg leading-snug text-ink-900 group-hover:text-brand-600 transition-colors text-pretty line-clamp-2">
                     {{ order.serviceName }}
                   </h2>
                 </router-link>
@@ -477,7 +467,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Flat Metadata Line -->
-              <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-500 font-num">
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-ink-600 font-num">
                 <router-link
                   :to="`/app/orders/${order.orderId}`"
                   class="font-medium text-ink-700 hover:text-brand-600 transition-colors"
@@ -492,11 +482,11 @@ onUnmounted(() => {
 
           <!-- Covered Items Breakdown -->
           <div class="space-y-1.5 flex-1 flex flex-col justify-start pt-1">
-            <p class="text-xs font-medium text-ink-500">
+            <p class="text-sm font-medium text-ink-600">
               Hạng mục ({{ order.coverages.length }})
             </p>
 
-            <ul class="divide-y divide-ink-100 border-t border-b border-ink-100 text-xs">
+            <ul class="divide-y divide-ink-100 border-t border-b border-ink-100 text-sm">
               <li
                 v-for="item in visibleCoverages(order)"
                 :key="item.id"
@@ -540,18 +530,18 @@ onUnmounted(() => {
             >
               <div class="min-w-0 flex-1 space-y-1">
                 <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-xs font-semibold text-ink-800 whitespace-nowrap">
+                  <span class="text-sm font-semibold text-ink-800 whitespace-nowrap">
                     {{ claimSummary(order).total }} yêu cầu bảo hành
                   </span>
                   <span
-                    class="inline-flex items-center h-5 px-2 rounded-full text-[11px] font-medium whitespace-nowrap"
+                    class="inline-flex items-center h-6 px-2.5 rounded-full text-xs font-medium whitespace-nowrap"
                     :class="claimSummary(order).primaryToneClass"
                   >
                     {{ claimSummary(order).primaryLabel }}
                   </span>
                 </div>
-                <p class="text-[11px] text-ink-500 truncate">
-                  {{ claimSummary(order).needsAction ? 'Cần bạn xác nhận kết quả xử lý' : 'Nhấn để xem chi tiết & phản hồi kỹ thuật viên' }}
+                <p class="text-sm text-ink-600 truncate">
+                  {{ claimSummary(order).nextStepTitle }}
                 </p>
               </div>
               <span class="shrink-0 inline-flex items-center gap-0.5 text-xs font-semibold text-brand-700 whitespace-nowrap">
@@ -593,7 +583,7 @@ onUnmounted(() => {
             :title="allCoveragesBusy(order) ? 'Mọi hạng mục đang có yêu cầu chưa xử lý xong' : 'Gửi yêu cầu bảo hành'"
             @click="openClaimModal(order)"
           >
-            Yêu cầu bảo hành
+            {{ order.hasActiveCoverage ? 'Yêu cầu bảo hành' : 'Gửi yêu cầu (sau hạn)' }}
           </FhButton>
         </div>
       </section>

@@ -116,9 +116,12 @@ describe('what each coverage covers', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="coverage-kind"]').exists()).toBe(false);
     expect(wrapper.find('input[type="radio"]').exists()).toBe(false);
-    // Only the active item is still covered, so the claim is filed on it.
-    expect(wrapper.get('[data-testid="coverage-term"]').text()).toMatch(/^Bảo hành 30 ngày · đến \d{2}\/\d{2}\/\d{4} · còn 10 ngày$/);
+    // Every item says its own days and expiry; only the active one is still covered, so the claim is filed on it.
+    const terms = wrapper.findAll('[data-testid="coverage-term"]').map((el) => el.text());
+    expect(terms[0]).toMatch(/^Bảo hành 30 ngày · đến \d{2}\/\d{2}\/\d{4} · còn 10 ngày$/);
+    expect(terms[1]).toMatch(/^Bảo hành 90 ngày · hết hạn \d{2}\/\d{2}\/\d{4}$/);
     expect(wrapper.get('[data-testid="coverage-scope"]').text()).toContain('Ổ cắm Panasonic');
+    expect(wrapper.get('[data-testid="coverage-scope"]').text()).toContain('Công sửa');
     wrapper.unmount();
   });
 });
@@ -159,7 +162,7 @@ describe('WarrantyClaimModal', () => {
     wrapper.unmount();
   });
 
-  it('keeps a long order to one short line: two names and a count', async () => {
+  it('keeps a long order short: three items, the rest on request', async () => {
     const many = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, itemDescription: `Linh kiện ${i + 1}`, expiresAt: FUTURE, status: 'ACTIVE' as const }));
     const wrapper = mount(WarrantyClaimModal, {
       props: { open: true, orderId: 'order-1', orderCode: 'SO-1', serviceName: 'Sửa', technicianName: 'A', coverages: many, busyCoverageIds: [] },
@@ -167,8 +170,13 @@ describe('WarrantyClaimModal', () => {
     });
     await flushPromises();
     const scope = wrapper.get('[data-testid="coverage-scope"]').text();
-    expect(scope).toContain('Linh kiện 1, Linh kiện 2 và 8 hạng mục khác');
-    expect(scope).not.toContain('Linh kiện 3');
+    expect(wrapper.findAll('[data-testid="coverage-item"]')).toHaveLength(3);
+    expect(scope).toContain('Linh kiện 3');
+    expect(scope).not.toContain('Linh kiện 4');
+    expect(scope).toContain('Xem đầy đủ (+7 hạng mục)');
+    await wrapper.get('[data-testid="coverage-toggle"]').trigger('click');
+    expect(wrapper.findAll('[data-testid="coverage-item"]')).toHaveLength(10);
+    expect(wrapper.get('[data-testid="coverage-toggle"]').text()).toBe('Thu gọn');
     wrapper.unmount();
   });
 
@@ -185,7 +193,9 @@ describe('WarrantyClaimModal', () => {
   it('blocks a short description without calling the API', async () => {
     const wrapper = await mountModal();
     await wrapper.get('#warranty-claim-description').setValue('lỗi');
-    await wrapper.findAll('button').find((b) => b.text().includes('Gửi yêu cầu bảo hành'))!.trigger('click');
+    const send = wrapper.findAll('button').find((b) => b.text().includes('Gửi yêu cầu bảo hành'))!;
+    expect(send.attributes('disabled')).toBeDefined();
+    await send.trigger('click');
     expect(apiClientMock.post).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('ít nhất 10 ký tự');
     wrapper.unmount();
@@ -284,5 +294,29 @@ describe('WarrantyClaimCard', () => {
   it('flags a claim that was submitted after the coverage expired', () => {
     const wrapper = mount(WarrantyClaimCard, { props: { claim: claim({ submittedAfterExpiry: true }) } });
     expect(wrapper.text()).toContain('sau khi hạng mục hết hạn bảo hành');
+  });
+});
+
+describe('next step helpers', () => {
+  it('tells the customer what to do only when the claim waits for them', async () => {
+    const { customerNextStep } = await import('../src/utils/warranty-claim');
+    expect(customerNextStep({ status: 'awaiting_customer', awaitingPrompt: 'conclusion' })).toMatchObject({ urgent: true, title: 'Cần bạn phản hồi kết luận' });
+    expect(customerNextStep({ status: 'awaiting_customer', awaitingPrompt: 'completion' }).title).toContain('khắc phục');
+    expect(customerNextStep({ status: 'awaiting_customer', customerResponse: 'agreed' }).urgent).toBe(false);
+    expect(customerNextStep({ status: 'accepted', inspectionScheduledAt: '2026-10-01T03:00:00.000Z' }).text).toContain('Lịch kiểm tra');
+    expect(customerNextStep({ status: 'resolved' }).tone).toBe('success');
+  });
+
+  it('says whether the replacement part still blocks the technician', async () => {
+    const { claimPartsPending, technicianNextStep } = await import('../src/utils/warranty-claim');
+    const request = (status: string, usageStatus: string) => ({ partRequest: { status, items: [{ usageStatus }] } });
+    expect(claimPartsPending({})).toBe(false);
+    expect(claimPartsPending(request('cancelled', 'pending'))).toBe(false);
+    expect(claimPartsPending(request('ready', 'pending'))).toBe(true);
+    expect(claimPartsPending(request('received', 'pending'))).toBe(true);
+    expect(claimPartsPending(request('received', 'used'))).toBe(false);
+    expect(technicianNextStep({ status: 'in_progress', ...request('received', 'pending') }).title).toBe('Nhận linh kiện thay thế');
+    expect(technicianNextStep({ status: 'in_progress', ...request('received', 'used') }).title).toBe('Báo đã bảo hành xong');
+    expect(technicianNextStep({ status: 'inspected' }).urgent).toBe(false);
   });
 });

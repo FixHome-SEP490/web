@@ -14,8 +14,11 @@ import { usePagedList } from '../../composables/usePagedList';
 import { useCacheUpdates } from '../../composables/useCachedQuery';
 import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { vnDateString } from '../../utils/vn-time';
+import WarrantyNextStep from '../../components/WarrantyNextStep.vue';
 import {
+  claimPartsPending,
   technicianClaimDisplayMeta,
+  technicianNextStep,
   warrantyClaimToneClasses,
 } from '../../utils/warranty-claim';
 
@@ -43,11 +46,17 @@ const busyId = ref('');
 const modalClaim = ref<StaffWarrantyClaim | null>(null);
 const modalMode = ref<WarrantyActionMode | null>(null);
 
+// Waiting to be taken first, then the nearest inspection, then the repairs under way.
+const todoRank = { submitted: 0, accepted: 1, in_progress: 2 } as Record<string, number>;
+const todoOrder = (a: StaffWarrantyClaim, b: StaffWarrantyClaim) =>
+  todoRank[a.status] - todoRank[b.status] ||
+  String(a.visit?.scheduledAt ?? a.submittedAt).localeCompare(String(b.visit?.scheduledAt ?? b.submittedAt));
+
 const groups = computed(() => [
   {
     key: 'todo' as const,
     title: 'Cần xử lý',
-    items: claims.value.filter((c) => ['submitted', 'accepted', 'in_progress'].includes(c.status)),
+    items: claims.value.filter((c) => ['submitted', 'accepted', 'in_progress'].includes(c.status)).sort(todoOrder),
   },
   {
     key: 'waiting' as const,
@@ -62,10 +71,11 @@ const groups = computed(() => [
 ]);
 
 // Same pills as the jobs page: everything, or one group. Groups keep their order inside "all".
+// No counts: the list is paged by the server, so a count would only cover this page (the menu badge counts the claims to take).
 const activeTab = ref<'all' | 'todo' | 'waiting' | 'closed'>('all');
 const tabs = computed(() => [
-  { key: 'all' as const, label: 'Tất cả', count: claims.value.length },
-  ...groups.value.map((group) => ({ key: group.key, label: group.title, count: group.items.length })),
+  { key: 'all' as const, label: 'Tất cả' },
+  ...groups.value.map((group) => ({ key: group.key, label: group.title })),
 ]);
 const rows = computed(() =>
   groups.value.filter((group) => activeTab.value === 'all' || group.key === activeTab.value).flatMap((group) => group.items),
@@ -212,7 +222,6 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
         :tabs="tabs.map((tab) => ({
           key: tab.key,
           label: tab.label,
-          count: tab.key === 'all' || tab.count > 0 ? tab.count : null,
           testId: `warranty-tab-${tab.key}`,
         }))"
       />
@@ -256,6 +265,7 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                   <span class="text-pretty">{{ claim.order.addressSummary }}</span>
                 </p>
               </div>
+              <WarrantyNextStep :step="technicianNextStep(claim)" />
               <!-- What the customer reported, set apart cleanly without thick left border -->
               <div class="rounded-xl bg-ink-50/80 border border-ink-200/70 px-3.5 py-2.5">
                 <p class="text-xs font-medium text-ink-500">Khách mô tả</p>
@@ -297,13 +307,19 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
                 size="sm"
                 class="h-10"
                 :data-testid="`warranty-part-pickup-${claim.id}`"
-                @click.stop="router.push({ path: `/tech/jobs/${claim.order.id}`, query: { focus: 'parts' } })"
+                @click.stop="openDetail(claim)"
               ><PackageCheck :size="16" aria-hidden="true" /> Nhận linh kiện bảo hành</FhButton>
-              <FhButton v-if="claim.status === 'in_progress'" variant="primary" size="sm" class="h-10" @click.stop="openModal(claim, 'complete')">
+              <FhButton
+                v-if="claim.status === 'in_progress'"
+                variant="primary"
+                size="sm"
+                class="h-10"
+                :disabled="claimPartsPending(claim)"
+                :title="claimPartsPending(claim) ? 'Hãy nhận linh kiện thay thế và khai đã lắp hoặc trả lại trước' : undefined"
+                @click.stop="openModal(claim, 'complete')"
+              >
                 <CircleCheck :size="16" aria-hidden="true" /> Báo đã bảo hành xong
               </FhButton>
-              <p v-else-if="claim.status === 'inspected'" class="text-ink-500">Chờ quản lý duyệt kết luận</p>
-              <p v-else-if="claim.status === 'awaiting_customer'" class="text-ink-500">Chờ khách phản hồi</p>
             </div>
             <WarrantyContactActions :claim="claim" class="ml-auto" />
           </div>

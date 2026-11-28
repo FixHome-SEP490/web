@@ -285,6 +285,22 @@ describe('TechnicianWarrantyPage', () => {
     expect(wrapper.find('[data-testid="warranty-part-pickup-x"]').exists()).toBe(false);
   });
 
+  it('blocks "report done" while the replacement part is not declared, and lists the todo group by urgency', async () => {
+    const part = (status: string, usageStatus = 'pending') => ({ id: `pr-${status}`, status, faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false, items: [{ id: 'i', name: 'Van', quantity: 1, usageStatus }] });
+    const wrapper = await mountPage([
+      claim({ id: 'late', status: 'accepted', visit: visit({ scheduledAt: '2026-10-05T03:00:00.000Z' }) }),
+      claim({ id: 'soon', status: 'accepted', visit: visit({ scheduledAt: '2026-10-01T03:00:00.000Z' }) }),
+      claim({ id: 'new', status: 'submitted' }),
+      claim({ id: 'wait', status: 'in_progress', partRequest: part('received') } as Partial<StaffWarrantyClaim>),
+      claim({ id: 'free', status: 'in_progress', partRequest: part('received', 'used') } as Partial<StaffWarrantyClaim>),
+    ]);
+    const ids = wrapper.findAll('li[data-testid^="warranty-claim-"]').map((row) => row.attributes('data-testid'));
+    expect(ids).toEqual(['warranty-claim-new', 'warranty-claim-soon', 'warranty-claim-late', 'warranty-claim-wait', 'warranty-claim-free']);
+    const done = (id: string) => wrapper.get(`[data-testid="warranty-claim-${id}"]`).findAll('button').find((b) => b.text().includes('Báo đã bảo hành xong'))!;
+    expect(done('wait').attributes('disabled')).toBeDefined();
+    expect(done('free').attributes('disabled')).toBeUndefined();
+  });
+
   it('groups claims and offers the next step for each status', async () => {
     const wrapper = await mountPage([
       claim({ id: 'a', status: 'submitted' }),
@@ -296,12 +312,11 @@ describe('TechnicianWarrantyPage', () => {
     ]);
 
     const text = wrapper.text();
-    const count = (key: string) => wrapper.get(`[data-testid="warranty-tab-${key}"]`).text();
-    expect(count('all')).toContain('6');
-    expect(count('todo')).toContain('Cần xử lý');
-    expect(count('todo')).toContain('4');
-    expect(count('waiting')).toContain('1');
-    expect(count('closed')).toContain('1');
+    const tab = (key: string) => wrapper.get(`[data-testid="warranty-tab-${key}"]`).text();
+    // No counts: the list is paged by the server, so a count would only cover this page.
+    expect(tab('todo')).toBe('Cần xử lý');
+    expect(tab('waiting')).toBe('Đang chờ phản hồi');
+    expect(tab('closed')).toBe('Đã đóng');
     expect(text).not.toContain('Không nhận được');
     for (const label of ['Nhận yêu cầu', 'Đã đến nơi', 'Gửi kết luận kiểm tra', 'Báo đã bảo hành xong']) {
       expect(text).toContain(label);
@@ -358,7 +373,8 @@ describe('TechnicianWarrantyPage', () => {
     expect(label('a')).toContain('Chờ bạn nhận');
     expect(label('a')).not.toContain('Đã gửi yêu cầu');
     expect(label('b')).toContain('Bạn đã nhận');
-    expect(label('e')).toContain('Chờ quản lý duyệt');
+    expect(label('e')).toContain('Chờ quản lý dịch vụ duyệt');
+    expect(label('b')).toContain('Đến kiểm tra đúng lịch');
     expect(label('w')).toContain('Chờ khách phản hồi');
     expect(label('g')).toContain('Đã đồng ý, chờ quản lý dịch vụ đóng');
   });
@@ -461,7 +477,6 @@ describe('TechnicianWarrantyPage', () => {
     await flushPromises();
     expect(apiClientMock.get).toHaveBeenLastCalledWith('/warranty-claims/mine', { params: { page: 2, pageSize: 20 } });
     expect(wrapper.find('[data-testid="warranty-claim-p1-0"]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="warranty-tab-closed"]').text()).toContain('1');
     expect(wrapper.get('[data-testid="pagination-summary"]').text()).toBe('21–23 / 23');
   });
 });

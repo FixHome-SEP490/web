@@ -30,7 +30,6 @@ import ConsolePagination from './ConsolePagination.vue';
 import ConsoleStatCard from './ConsoleStatCard.vue';
 import ConsoleTitleArtwork from './ConsoleTitleArtwork.vue';
 import LegacyManualReviewForm from './LegacyManualReviewForm.vue';
-import FaultyPartInspectionModal from './FaultyPartInspectionModal.vue';
 import PartReturnProcessModal from './PartReturnProcessModal.vue';
 import { consoleField } from './console-ui';
 import { useAuthStore } from '../../stores/auth';
@@ -40,7 +39,6 @@ import {
   isPartReturnsUnavailableError,
   type LegacyManualReviewRecord,
   type PartCustodyReturnRecord,
-  type PartRequest,
 } from '../../api/part-requests.api';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { userFacingError } from '../../utils/user-facing-error';
@@ -82,11 +80,6 @@ const legacyPageSize = 20;
 const legacyTotal = ref(0);
 const legacyTotalPages = computed(() => Math.max(1, Math.ceil(legacyTotal.value / legacyPageSize)));
 let legacyLoadVersion = 0;
-
-// Faulty parts warranty state
-const faultyRows = ref<PartRequest[]>([]);
-const faultyDone = ref<PartRequest[]>([]);
-const inspectionRequest = ref<PartRequest | null>(null);
 
 // Filter and Pagination state
 const activeTab = ref<'all' | 'awaiting' | 'in_use' | 'returned'>('all');
@@ -130,44 +123,6 @@ const showToast = (type: 'success' | 'error', text: string) => {
   }, 4000);
 };
 
-// Faulty Parts methods
-const resultLabel = (v?: string | null) =>
-  v === 'manufacturer'
-    ? 'Lỗi nhà sản xuất, FixHome chịu'
-    : v === 'installation'
-      ? 'Do lắp đặt, thợ trả tiền'
-      : 'Không xác định, FixHome chịu';
-
-const loadFaulty = async () => {
-  try {
-    const result = await partRequestsApi.getAll({ requestType: 'warranty', pageSize: 50 });
-    const returned = result.data.filter((r) => ['received', 'completed'].includes(r.status.toLowerCase()));
-    faultyRows.value = returned.filter((r) => !r.faultyInspectionResult);
-    faultyDone.value = returned.filter((r) => !!r.faultyInspectionResult);
-  } catch {
-    faultyRows.value = [];
-    faultyDone.value = [];
-  }
-};
-
-const faultyTone = (r: PartRequest) =>
-  r.faultyReturnedAt
-    ? 'bg-warning-50 text-warning-800'
-    : r.faultyReturnDueAt && new Date(r.faultyReturnDueAt).getTime() < Date.now()
-      ? 'bg-danger-50 text-danger-800'
-      : 'bg-ink-100 text-ink-700';
-
-const faultyStatus = (r: PartRequest) => {
-  if (r.faultyReturnedAt) return 'Thợ đã nộp, chờ kiểm tra';
-  if (!r.faultyReturnDueAt) return 'Chờ thợ nhận linh kiện thay thế';
-  return `${new Date(r.faultyReturnDueAt).getTime() < Date.now() ? 'Quá hạn nộp' : 'Hạn nộp'} ${vnDateTimeString(r.faultyReturnDueAt)}${r.faultyReturnChargedAt ? ', đã trừ ví thợ' : ''}`;
-};
-
-const onInspected = () => {
-  inspectionRequest.value = null;
-  showToast('success', 'Đã lưu kết quả kiểm tra linh kiện hỏng.');
-  void loadFaulty();
-};
 
 // Legacy Review methods
 const loadLegacyReview = async () => {
@@ -442,11 +397,9 @@ const handleModalSuccess = async (payload: { quantity: number; message: string }
 onMounted(() => {
   void loadReturns();
   void loadLegacyReview();
-  void loadFaulty();
 });
 
 usePartReturnsRefresh(() => {
-  void loadFaulty();
   return loadReturns();
 });
 
@@ -579,6 +532,12 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
         <p class="mt-1 text-xs text-ink-500">Hàng chờ này chỉ gồm các dòng có sổ custody; trống không có nghĩa là mọi linh kiện đã được trả đủ.</p>
       </div>
 
+      <!-- Orders exist, but none match the tab, search or filters -->
+      <div v-else-if="totalFiltered === 0" class="p-8 text-center bg-white rounded-xl border border-ink-200">
+        <Package :size="36" class="mx-auto text-ink-300 mb-2" />
+        <p class="text-sm font-medium text-ink-700">Không có đơn nào khớp bộ lọc hiện tại.</p>
+      </div>
+
       <!-- 2 Columns Layout: Orders Table (Left) + Quick View Panel (Right) -->
       <div v-else class="animate-slide-up-delay-3 relative z-10 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <!-- Left Orders Table (8 Columns) -->
@@ -586,8 +545,8 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
           <div class="border-b border-ink-100 bg-ink-50/70 px-5 py-3.5 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="text-sm font-semibold text-ink-900">Chờ nhận linh kiện hoàn trả</h2>
-              <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-700" data-testid="part-returns-count">
-                {{ awaiting.length }}
+              <span v-if="!returnsLoading && !returnsLoadError" class="font-num text-xs font-semibold px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-ink-100 text-ink-700" data-testid="part-returns-count">
+                {{ totalFiltered }}
               </span>
             </div>
             <span class="text-xs text-ink-500 font-num">
@@ -597,16 +556,14 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-ink-50/50 border-b border-ink-100 text-ink-600 font-semibold uppercase text-[11px] tracking-wider">
+              <thead class="bg-ink-50/50 border-b border-ink-100 text-ink-600 font-semibold uppercase text-[11px] tracking-wider whitespace-nowrap">
                 <tr>
                   <th class="py-3 pl-4 pr-3">Mã đơn hàng</th>
                   <th class="py-3 px-3">Khách hàng</th>
                   <th class="py-3 px-3">Kỹ thuật viên</th>
-                  <th class="py-3 px-2 text-center">Số linh kiện</th>
-                  <th class="py-3 px-3">Ngày lấy</th>
-                  <th class="py-3 px-3">Hạn hoàn trả</th>
+                  <th class="py-3 px-2 text-center"><abbr title="Số loại linh kiện" class="no-underline">SL</abbr></th>
+                  <th class="py-3 px-3">Ngày lấy / Hạn trả</th>
                   <th class="py-3 px-3">Trạng thái</th>
-                  <th class="py-3 pr-4 pl-3 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
@@ -617,21 +574,20 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                     <td class="py-3.5 px-3"><div class="h-4 w-24 rounded bg-ink-200/75" /></td>
                     <td class="py-3.5 px-3">
                       <div class="flex items-center gap-2">
-                        <div class="h-6 w-6 rounded-full bg-ink-200/75 shrink-0" />
+                        <div class="h-6 w-6 rounded-[var(--radius-sm)] bg-ink-200/75 shrink-0" />
                         <div class="h-4 w-20 rounded bg-ink-200/75" />
                       </div>
                     </td>
-                    <td class="py-3.5 px-2"><div class="mx-auto h-5 w-8 rounded-full bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-2"><div class="mx-auto h-5 w-8 rounded-[var(--radius-sm)] bg-ink-200/75" /></td>
                     <td class="py-3.5 px-3"><div class="h-4 w-16 rounded bg-ink-200/75" /></td>
                     <td class="py-3.5 px-3"><div class="h-4 w-16 rounded bg-ink-200/75" /></td>
-                    <td class="py-3.5 px-3"><div class="h-5 w-20 rounded-full bg-ink-200/75" /></td>
-                    <td class="py-3.5 pr-4 pl-3 text-right"><div class="ml-auto h-7 w-16 rounded-lg bg-ink-200/75" /></td>
+                    <td class="py-3.5 px-3"><div class="h-5 w-20 rounded-[var(--radius-sm)] bg-ink-200/75" /></td>
                   </tr>
                 </template>
 
                 <!-- Filtered empty state -->
                 <tr v-else-if="!paginatedOrders.length">
-                  <td colspan="8" class="px-5 py-12 text-center text-sm text-ink-500">
+                  <td colspan="7" class="px-5 py-12 text-center text-sm text-ink-500">
                     Không có đơn hoàn trả linh kiện nào phù hợp.
                   </td>
                 </tr>
@@ -640,13 +596,16 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                 <tr
                   v-for="order in paginatedOrders"
                   :key="order.orderId"
-                  class="hover:bg-brand-50/40 transition-colors cursor-pointer group"
+                  class="hover:bg-brand-50/40 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                   :class="selectedOrderId === order.orderId ? 'bg-brand-50/60 ring-1 ring-inset ring-brand-200' : ''"
                   data-testid="part-return-group"
+                  tabindex="0"
                   @click="handleSelectOrder(order.orderId)"
+                  @keydown.enter.prevent="handleSelectOrder(order.orderId)"
+                  @keydown.space.prevent="handleSelectOrder(order.orderId)"
                 >
                   <!-- Order Code with File icon -->
-                  <td class="py-3.5 pl-4 pr-3 font-num font-semibold text-brand-600 group-hover:underline">
+                  <td class="py-3.5 pl-4 pr-3 font-num font-semibold text-brand-600 group-hover:underline whitespace-nowrap">
                     <div class="flex items-center gap-1.5">
                       <FileText :size="14" class="text-brand-500 shrink-0" />
                       <span class="truncate">{{ order.orderCode }}</span>
@@ -655,13 +614,13 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 
                   <!-- Customer -->
                   <td class="py-3.5 px-3 font-medium text-ink-900">
-                    <span class="truncate block max-w-[130px]">{{ order.customerName }}</span>
+                    <span class="truncate block max-w-[120px]" :title="order.customerName">{{ order.customerName }}</span>
                   </td>
 
                   <!-- Technician with Avatar -->
                   <td class="py-3.5 px-3">
                     <div class="flex items-center gap-2">
-                      <div class="h-6 w-6 shrink-0 rounded-full bg-ink-100 border border-ink-200 flex items-center justify-center text-[10px] font-bold text-ink-700 overflow-hidden">
+                      <div class="h-6 w-6 shrink-0 rounded-[var(--radius-sm)] bg-ink-100 flex items-center justify-center text-[10px] font-bold text-ink-700 overflow-hidden">
                         <img
                           v-if="order.technicianAvatar"
                           :src="order.technicianAvatar"
@@ -670,48 +629,33 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
                         />
                         <span v-else>{{ order.technicianName.charAt(0) }}</span>
                       </div>
-                      <span class="text-xs text-ink-800 truncate block max-w-[120px]">{{ order.technicianName }}</span>
+                      <span class="text-xs text-ink-800 truncate block max-w-[120px]" :title="order.technicianName">{{ order.technicianName }}</span>
                     </div>
                   </td>
 
                   <!-- Number of Parts (badge pill) -->
                   <td class="py-3.5 px-2 text-center">
-                    <span class="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-100/80 px-1.5 text-[11px] font-num font-bold text-brand-800">
+                    <span class="font-num text-xs font-semibold text-ink-800">
                       {{ order.partTypesCount }}
                     </span>
                   </td>
 
-                  <!-- Pickup Date -->
-                  <td class="py-3.5 px-3 font-num text-ink-600">
-                    {{ order.pickupDate }}
-                  </td>
-
-                  <!-- Due Date -->
-                  <td class="py-3.5 px-3 font-num text-ink-600">
-                    {{ order.dueDate }}
+                  <!-- Pickup and due date, stacked so the table does not need a sideways scroll -->
+                  <td class="py-3.5 px-3 font-num whitespace-nowrap">
+                    <div class="text-ink-800">{{ order.pickupDate }}</div>
+                    <div class="text-[11px] text-ink-500">Hạn {{ order.dueDate }}</div>
                   </td>
 
                   <!-- Status Badge -->
-                  <td class="py-3.5 px-3">
+                  <td class="py-3.5 px-3 whitespace-nowrap">
                     <span
-                      class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                      class="inline-flex items-center rounded-[var(--radius-sm)] border px-2 py-1 text-xs font-medium"
                       :class="order.returnStatusTone"
                     >
                       {{ order.returnStatusLabel }}
                     </span>
                   </td>
 
-                  <!-- Actions: Chi tiết -->
-                  <td class="py-3.5 pr-4 pl-3 text-right">
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-700 shadow-2xs hover:bg-ink-50 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
-                      @click.stop="handleSelectOrder(order.orderId)"
-                    >
-                      <Eye :size="13" class="text-ink-500" />
-                      Chi tiết
-                    </button>
-                  </td>
                 </tr>
                 </template>
               </tbody>
@@ -1018,59 +962,6 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </div>
     </section>
 
-    <!-- Faulty Parts Warranty Section (Rendered when faulty parts exist) -->
-    <section
-      v-if="faultyRows.length || faultyDone.length"
-      class="overflow-hidden rounded-xl border border-ink-200/90 bg-white shadow-(--shadow-e1)"
-      data-testid="faulty-part-returns"
-      aria-label="Linh kiện hỏng bảo hành"
-    >
-      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 bg-ink-50/70 px-5 py-3.5">
-        <div class="flex items-center gap-2">
-          <h2 class="text-base font-semibold text-ink-900">Linh kiện hỏng bảo hành</h2>
-          <span class="font-num text-sm font-medium text-ink-500">{{ faultyRows.length }}</span>
-        </div>
-        <p class="text-xs text-ink-500">Thợ nhận linh kiện thay thế trước, rồi nộp linh kiện hỏng về kho trong hạn.</p>
-      </header>
-
-      <p v-if="!faultyRows.length" class="px-5 py-4 text-sm text-ink-500">Không có linh kiện hỏng nào đang chờ nộp hoặc kiểm tra.</p>
-      <ul v-else class="divide-y divide-ink-100">
-        <li v-for="r in faultyRows" :key="r.id" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
-          <div class="min-w-0 flex-1 space-y-1">
-            <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
-              <span class="font-num font-semibold text-ink-700">PR-{{ r.id.substring(0, 8).toUpperCase() }}</span>
-              <router-link :to="`/console/orders/${r.serviceOrderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
-            </div>
-            <div class="break-words text-sm font-semibold text-ink-900">{{ r.items.map((i) => i.partNameSnapshot).join(', ') }}</div>
-            <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium" :class="faultyTone(r)">{{ faultyStatus(r) }}</span>
-          </div>
-          <FhButton v-if="canOperate && r.faultyReturnedAt" variant="primary" size="md" class="w-full sm:w-auto" @click="inspectionRequest = r">
-            Kiểm tra linh kiện hỏng
-          </FhButton>
-        </li>
-      </ul>
-
-      <details v-if="faultyDone.length" class="border-t border-ink-100 px-5 py-3 text-sm" data-testid="faulty-part-history">
-        <summary class="flex min-h-11 cursor-pointer items-center rounded-lg font-medium text-ink-700">
-          Lịch sử đã kiểm tra (<span class="font-num">{{ faultyDone.length }}</span>)
-        </summary>
-        <ul class="mt-2 divide-y divide-ink-100">
-          <li v-for="r in faultyDone" :key="r.id" class="space-y-1 py-3">
-            <div class="flex flex-wrap items-center gap-x-3 text-xs text-ink-500">
-              <span class="font-num font-semibold text-ink-700">PR-{{ r.id.substring(0, 8).toUpperCase() }}</span>
-              <router-link :to="`/console/orders/${r.serviceOrderId}`" class="text-brand-700 hover:underline">Xem đơn</router-link>
-              <span v-if="r.faultyInspectedAt" class="font-num">{{ vnDateTimeString(r.faultyInspectedAt) }}</span>
-            </div>
-            <div class="text-ink-900">{{ r.items.map((i) => i.partNameSnapshot).join(', ') }}</div>
-            <span class="inline-flex rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium" :class="r.faultyInspectionResult === 'installation' ? 'bg-warning-50 text-warning-800' : 'bg-success-50 text-success-800'">
-              {{ resultLabel(r.faultyInspectionResult) }}
-            </span>
-            <p v-if="r.faultyInspectionNote" class="text-xs text-ink-600">{{ r.faultyInspectionNote }}</p>
-          </li>
-        </ul>
-      </details>
-    </section>
-
     <!-- Legacy Review Section (Rendered when canOperate and !legacyUnavailable) -->
     <section
       v-if="canOperate && !legacyUnavailable"
@@ -1155,13 +1046,6 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
         </div>
       </template>
     </section>
-
-    <!-- Inspection Modal for Warranty Faulty parts -->
-    <FaultyPartInspectionModal
-      :request="inspectionRequest"
-      @close="inspectionRequest = null"
-      @done="onInspected"
-    />
 
     <!-- Process Return Modal -->
     <PartReturnProcessModal

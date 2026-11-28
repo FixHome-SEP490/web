@@ -136,7 +136,7 @@ describe('technician warranty claim page', () => {
     expect(wrapper.find('[data-testid="warranty-claim-detail"]').exists()).toBe(true);
   });
 
-  it('shows the deadline for the faulty part and reports it back, then waits for the manager to inspect it', async () => {
+  it('shows the deadline for the faulty part and reports it back, then waits for the warehouse to count it in', async () => {
     const received = { id: 'pr-1', status: 'received', faultyReturnDueAt: '2099-01-01T00:00:00.000Z', faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false };
     const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: received }));
     expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('Hạn nộp');
@@ -147,7 +147,7 @@ describe('technician warranty claim page', () => {
     await flushPromises();
 
     expect(apiClientMock.post).toHaveBeenCalledWith('/part-requests/pr-1/faulty-return', {});
-    expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('Chờ quản lý dịch vụ kiểm tra');
+    expect(wrapper.get('[data-testid="faulty-part-return"]').text()).toContain('Chờ kho xác nhận đã nhận');
     expect(button(wrapper, 'Đã nộp linh kiện hỏng')).toBeUndefined();
   });
 
@@ -160,11 +160,34 @@ describe('technician warranty claim page', () => {
     expect(waiting.find('[data-testid="faulty-part-return"]').exists()).toBe(false);
   });
 
+  it('receives the replacement part with the handover code on this page', async () => {
+    const part = (status: string) => ({ id: 'pr-1', status, faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false, items: [{ id: 'i1', name: 'Van', quantity: 1, usageStatus: 'pending' }] });
+    let received = false;
+    apiClientMock.get.mockImplementation(async (url: string) => {
+      if (url === '/warranty-claims/claim-1') return { data: { data: claim({ status: 'in_progress', partRequest: part(received ? 'received' : 'ready') }) } };
+      if (url === '/service-orders/order-1/part-requests') return { data: { data: [{ id: 'pr-1', status: 'ready', fulfillmentMethod: 'pickup', items: [] }] } };
+      if (url === '/part-requests/pr-1/warehouse-allocation') return { data: { data: { mode: 'warehouse', status: 'handed_over' } } };
+      throw new Error(url);
+    });
+    apiClientMock.post.mockImplementationOnce(async () => { received = true; return { data: { data: {} } }; });
+    const wrapper = mount(TechnicianWarrantyDetailPage, { global: { stubs: routerStub } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="warranty-part-pickup-link"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="warranty-part-code"]').setValue(' CODE-123 ');
+    await wrapper.get('[data-testid="warranty-part-receive"]').trigger('submit');
+    await flushPromises();
+    expect(apiClientMock.post).toHaveBeenCalledWith('/part-requests/pr-1/receive', { qrToken: 'CODE-123' });
+    expect(wrapper.find('[data-testid="warranty-part-pickup"]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="replacement-part"]').text()).toContain('Đã lắp');
+    apiClientMock.get.mockReset();
+  });
+
   it('links straight to the order parts section while the replacement part is still to collect', async () => {
     const ready = { id: 'pr-1', status: 'ready', faultyReturnDueAt: null, faultyReturnedAt: null, faultyReturnChargedAt: null, faultyInspectionResult: null, chargeTechnician: false };
     const wrapper = await mountPage(claim({ status: 'in_progress', partRequest: ready }));
     const card = wrapper.get('[data-testid="warranty-part-pickup"]');
-    expect(card.text()).toContain('Nhận linh kiện bảo hành');
+    expect(card.text()).toContain('Linh kiện bảo hành');
+    // The handover state cannot be read here, so the card falls back to the order's parts section.
     expect(card.find('[data-testid="warranty-part-pickup-link"]').exists()).toBe(true);
 
     const received = await mountPage(claim({ status: 'in_progress', partRequest: { ...ready, status: 'received' } }));

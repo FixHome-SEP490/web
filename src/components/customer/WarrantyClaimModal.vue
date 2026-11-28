@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Camera, X, ShieldAlert, AlertTriangle, AlertCircle } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
-import { ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/orders.api';
+import { coverageKindLabel, ordersApi, type CoverageKind, type WarrantyClaimView } from '../../api/orders.api';
 import { getSupportErrorMessage } from '../../pages/console/support-cases.utils';
 import { useEvidencePhotos } from '../../composables/useEvidencePhotos';
 import { formatDateVN } from '../../utils/formatters';
@@ -24,10 +24,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** "Bảo hành 30 ngày · đến 15/11/2026 · còn 29 ngày", or when it ended. */
 function coverageTerm(coverage: ClaimableCoverage): string {
   const until = formatDateVN(coverage.expiresAt);
-  if (coverage.status !== 'ACTIVE') return `Hết hạn ${until}`;
-  const days = coverage.warrantyDaysSnapshot ? `Bảo hành ${coverage.warrantyDaysSnapshot} ngày · ` : '';
+  const days = coverage.warrantyDaysSnapshot ? `Bảo hành ${coverage.warrantyDaysSnapshot} ngày` : 'Bảo hành theo chính sách';
+  if (coverage.status !== 'ACTIVE') return `${days} · hết hạn ${until}`;
   const left = Math.max(0, Math.ceil((new Date(coverage.expiresAt).getTime() - Date.now()) / DAY_MS));
-  return `${days}đến ${until} · còn ${left} ngày`;
+  return `${days} · đến ${until} · còn ${left} ngày`;
 }
 
 const props = defineProps<{
@@ -64,18 +64,20 @@ function bestCoverageId(): string {
   return [...selectable.value].sort((a, b) => rank(b) - rank(a))[0]?.id ?? '';
 }
 
-/** "Tụ khởi động và 8 hạng mục khác": a long order never turns into a long line. */
-const scopeSummary = computed(() => {
-  const names = props.coverages.map((c) => c.itemDescription).filter(Boolean);
-  if (names.length <= 2) return names.join(' · ');
-  return `${names[0]}, ${names[1]} và ${names.length - 2} hạng mục khác`;
-});
+/** A long order shows its first items; the rest open on request. */
+const VISIBLE_COVERAGES = 3;
+const showAllCoverages = ref(false);
+const listedCoverages = computed(() => props.coverages.filter((c) => !c.voided));
+const visibleCoverages = computed(() =>
+  showAllCoverages.value ? listedCoverages.value : listedCoverages.value.slice(0, VISIBLE_COVERAGES),
+);
 
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
     selectedId.value = bestCoverageId();
+    showAllCoverages.value = false;
     description.value = '';
     evidence.reset();
     error.value = '';
@@ -162,8 +164,8 @@ async function submit() {
         </button>
       </div>
 
-      <!-- Order Context Card -->
-      <div class="rounded-2xl bg-ink-50/80 border border-ink-100 p-3.5 space-y-2 text-xs">
+      <!-- Order and scope in one card: one claim for the whole order, the technician decides what failed -->
+      <div class="rounded-2xl bg-ink-50/80 border border-ink-100 p-4 space-y-2 text-sm">
         <div class="flex items-center justify-between gap-2">
           <span class="text-ink-500">Đơn hàng:</span>
           <span class="font-bold text-ink-900 font-num">#{{ orderCode }}</span>
@@ -172,19 +174,31 @@ async function submit() {
           <span class="text-ink-500">Dịch vụ:</span>
           <span class="font-semibold text-ink-800 text-right truncate max-w-[240px]">{{ serviceName }}</span>
         </div>
-        <div class="flex items-center justify-between gap-2 pt-1 border-t border-ink-100/70">
+        <div class="flex items-center justify-between gap-2">
           <span class="text-ink-500">Kỹ thuật viên:</span>
           <span class="font-medium text-ink-800">{{ technicianName }}</span>
         </div>
-      </div>
-
-      <!-- One claim for the whole order: the technician decides what failed -->
-      <div class="rounded-2xl border border-ink-100 p-3.5 space-y-1 text-xs" data-testid="coverage-scope">
-        <div class="flex items-start justify-between gap-3">
-          <span class="text-ink-500 shrink-0">Phạm vi:</span>
-          <span class="font-semibold text-ink-900 text-right text-pretty">{{ scopeSummary }}</span>
+        <div class="pt-2 border-t border-ink-100 space-y-2" data-testid="coverage-scope">
+          <p class="text-ink-500">Hạng mục bảo hành ({{ listedCoverages.length }}):</p>
+          <ul class="divide-y divide-ink-100 rounded-xl border border-ink-100 bg-white">
+            <li v-for="item in visibleCoverages" :key="item.id" class="px-3 py-2 space-y-0.5" data-testid="coverage-item">
+              <p class="font-semibold text-ink-900 text-pretty">
+                <span v-if="coverageKindLabel(item.kind)" class="mr-1.5 inline-flex h-5 items-center rounded bg-ink-100 px-1.5 text-xs font-medium text-ink-600">{{ coverageKindLabel(item.kind) }}</span>{{ item.itemDescription }}
+              </p>
+              <p class="text-xs font-num" :class="item.status === 'ACTIVE' ? 'text-ink-600' : 'text-ink-500'" data-testid="coverage-term">{{ coverageTerm(item) }}</p>
+            </li>
+          </ul>
+          <button
+            v-if="listedCoverages.length > VISIBLE_COVERAGES"
+            type="button"
+            class="text-xs font-semibold text-brand-600 hover:text-brand-700"
+            data-testid="coverage-toggle"
+            @click="showAllCoverages = !showAllCoverages"
+          >
+            {{ showAllCoverages ? 'Thu gọn' : `Xem đầy đủ (+${listedCoverages.length - VISIBLE_COVERAGES} hạng mục)` }}
+          </button>
+          <p class="text-xs text-ink-500 text-pretty">Một yêu cầu áp dụng cho cả đơn. Kỹ thuật viên sẽ xác định hạng mục nào bị lỗi khi kiểm tra.</p>
         </div>
-        <p v-if="selected" class="text-right text-ink-500 font-num" data-testid="coverage-term">{{ coverageTerm(selected) }}</p>
       </div>
 
       <!-- Expired coverage note -->
@@ -208,10 +222,10 @@ async function submit() {
             Mô tả sự cố bạn gặp phải <span class="text-danger-500">*</span>
           </label>
           <span
-            class="text-[11px] font-num"
-            :class="description.trim().length < MIN_LENGTH ? 'text-ink-400' : 'text-success-600 font-medium'"
+            class="text-xs font-num"
+            :class="description.trim().length < MIN_LENGTH ? 'text-ink-500' : 'text-success-600 font-medium'"
           >
-            {{ description.trim().length }}/{{ MIN_LENGTH }} ký tự tối thiểu
+            {{ description.trim().length < MIN_LENGTH ? `${description.trim().length}/${MIN_LENGTH} · cần ít nhất ${MIN_LENGTH} ký tự` : `${description.trim().length} ký tự` }}
           </span>
         </div>
         <textarea
@@ -227,15 +241,15 @@ async function submit() {
       <!-- Evidence Photos Upload -->
       <div class="space-y-2">
         <div class="flex items-center justify-between text-xs">
-          <span class="font-semibold text-ink-800">Ảnh hiện trường sự cố (tối đa {{ evidence.maxPhotos }} ảnh)</span>
-          <span class="text-ink-400">Không bắt buộc</span>
+          <span class="font-semibold text-ink-800">Ảnh sự cố (tối đa {{ evidence.maxPhotos }} ảnh)</span>
+          <span class="text-ink-500">Không bắt buộc</span>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
           <div
             v-for="(photo, index) in evidence.photos.value"
             :key="photo.url"
-            class="relative w-16 h-16 rounded-xl overflow-hidden border border-ink-200 group"
+            class="relative w-20 h-20 rounded-xl overflow-hidden border border-ink-200 group"
           >
             <img :src="photo.url" :alt="photo.name" class="w-full h-full object-cover" />
             <button
@@ -250,14 +264,15 @@ async function submit() {
 
           <label
             v-if="evidence.photos.value.length < evidence.maxPhotos"
-            class="inline-flex flex-col items-center justify-center w-16 h-16 rounded-xl border border-dashed border-ink-300 hover:border-brand-500 hover:bg-brand-50/30 text-ink-500 hover:text-brand-600 cursor-pointer transition-colors"
+            class="inline-flex flex-col items-center justify-center w-20 h-20 rounded-xl border border-dashed border-ink-300 hover:border-brand-500 hover:bg-brand-50/30 text-ink-500 hover:text-brand-600 cursor-pointer transition-colors"
             :class="{ 'opacity-60 pointer-events-none': evidence.uploading.value }"
           >
             <Camera :size="18" />
-            <span class="text-[10px] mt-1">{{ evidence.uploading.value ? 'Đang tải...' : 'Thêm ảnh' }}</span>
+            <span class="text-xs mt-1">{{ evidence.uploading.value ? 'Đang tải...' : 'Thêm ảnh' }}</span>
             <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="sr-only" @change="evidence.pick" />
           </label>
         </div>
+        <p class="text-xs text-ink-500 text-pretty">Chụp rõ chỗ bị lỗi, ảnh gần và ảnh toàn cảnh giúp thợ chuẩn bị đúng đồ nghề.</p>
       </div>
 
       <!-- Error message -->
@@ -288,7 +303,7 @@ async function submit() {
           size="md"
           class="flex-1"
           :loading="submitting"
-          :disabled="submitting || evidence.uploading.value || !selectable.length"
+          :disabled="submitting || evidence.uploading.value || !selectable.length || description.trim().length < MIN_LENGTH"
           @click="submit"
         >
           Gửi yêu cầu bảo hành

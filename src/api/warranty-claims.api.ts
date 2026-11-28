@@ -2,6 +2,7 @@ import apiClient, { getHttpStatus } from './client';
 import { readPage, type PageResult } from './paging';
 import type { PaginationMeta } from '../types';
 import type { WarrantyClaimView } from './orders.api';
+import type { FaultyPartStatus } from './part-requests.api';
 import type {
   ClaimOutcome,
   DeclineReason,
@@ -53,7 +54,7 @@ export interface StaffWarrantyClaim extends WarrantyClaimView {
     faultyReturnChargedAt: string | null;
     faultyInspectionResult: 'manufacturer' | 'installation' | 'undetermined' | null;
     chargeTechnician: boolean;
-    items?: { id: string; name: string; quantity: number; usageStatus: string }[];
+    items?: { id: string; name: string; quantity: number; usageStatus: string; faultyStatus?: FaultyPartStatus | null; faultyReceivedQty?: number }[];
   } | null;
   /** A decline or missed response waiting for a manager, or the verdict. */
   declineReview?: DeclineReview | null;
@@ -123,7 +124,10 @@ export interface WarrantyClaimDetail extends StaffWarrantyClaim {
       faultyReturnNote?: string | null;
       faultyReturnEvidence?: string[] | null;
       faultyReturnChargedAt?: string | null;
-      items: { id: string; name: string; quantity: number; unitPrice: number; usageStatus: string }[];
+      items: {
+        id: string; name: string; quantity: number; unitPrice: number; usageStatus: string;
+        faultyStatus: FaultyPartStatus | null; faultyReceivedQty: number; faultyResultNote: string | null; faultyResultEvidence: string[] | null;
+      }[];
     } | null;
     otherClaims: { id: string; status: string; submittedAt: string; itemDescription: string }[];
   };
