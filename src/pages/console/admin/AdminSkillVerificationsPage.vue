@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import {
-  Award,
   Calendar,
   Check,
   CheckCircle2,
@@ -16,6 +15,8 @@ import {
 } from 'lucide-vue-next';
 import { FhConfirmDialog, FhSkeleton } from '../../../components';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleMoreMenu from '../../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../../components/console/ConsoleMenuItem.vue';
 import ConsolePagination from '../../../components/console/ConsolePagination.vue';
@@ -309,10 +310,8 @@ const confirmReject = async () => {
   <div class="space-y-6">
     <!-- Header section matching Image 2 -->
     <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-start gap-3.5">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-xs">
-          <Award :size="24" :stroke-width="2" />
-        </div>
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-skill-badge.png" />
         <div>
           <div class="flex items-center gap-2.5">
             <h1 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
@@ -332,83 +331,51 @@ const confirmReject = async () => {
       </div>
     </header>
 
-    <!-- 4 Stats Cards matching Image 2 -->
-    <section class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-      <!-- 1. Tổng yêu cầu -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-brand-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'ALL' && !dateFilter && !searchQuery ? 'ring-2 ring-brand-500/20' : ''"
+    <!-- 4 Stats Cards -->
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'ALL'"
+        :loading="loadingStats"
+        label="Tổng yêu cầu"
+        :value="stats.total"
+        :icon="FileText"
+        tone="brand"
         @click="statusFilter = 'ALL'; dateFilter = ''; searchQuery = '';"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-          <FileText :size="22" :stroke-width="2" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tổng yêu cầu</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loadingStats" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.total }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 2. Đang chờ duyệt -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-amber-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'PENDING' ? 'ring-2 ring-amber-500/20' : ''"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'PENDING'"
+        :loading="loadingStats"
+        label="Đang chờ duyệt"
+        :value="stats.pending"
+        :icon="Clock"
+        tone="warning"
         @click="statusFilter = statusFilter === 'PENDING' ? 'ALL' : 'PENDING'"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-          <Clock :size="22" :stroke-width="2" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đang chờ duyệt</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loadingStats" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.pending }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 3. Đã duyệt -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-emerald-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'VERIFIED' ? 'ring-2 ring-emerald-500/20' : ''"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'VERIFIED'"
+        :loading="loadingStats"
+        label="Đã duyệt"
+        :value="stats.verified"
+        :icon="Check"
+        tone="success"
         @click="statusFilter = statusFilter === 'VERIFIED' ? 'ALL' : 'VERIFIED'"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-          <Check :size="22" :stroke-width="2.5" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đã duyệt</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loadingStats" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.verified }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 4. Từ chối -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-ink-300 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'REJECTED' ? 'ring-2 ring-ink-400/20' : ''"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'REJECTED'"
+        :loading="loadingStats"
+        label="Từ chối"
+        :value="stats.rejected"
+        :icon="X"
+        tone="neutral"
         @click="statusFilter = statusFilter === 'REJECTED' ? 'ALL' : 'REJECTED'"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-ink-100 text-ink-600">
-          <X :size="22" :stroke-width="2.5" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Từ chối</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loadingStats" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.rejected }}</span>
-          </div>
-        </div>
-      </button>
+      />
     </section>
 
     <!-- Notification banners -->
@@ -583,13 +550,14 @@ const confirmReject = async () => {
             </tr>
 
             <!-- Data rows -->
-            <tr
-              v-for="row in filteredVerifications"
-              :key="row.id"
-              class="group cursor-pointer transition-colors"
-              :class="selectedVerification?.id === row.id && showDrawer ? 'bg-brand-50/50 ring-1 ring-inset ring-brand-300' : 'hover:bg-ink-50/60'"
-              @click="openDrawer(row)"
-            >
+            <template v-else>
+              <tr
+                v-for="row in filteredVerifications"
+                :key="row.id"
+                class="group cursor-pointer transition-colors"
+                :class="selectedVerification?.id === row.id && showDrawer ? 'bg-brand-50/50 ring-1 ring-inset ring-brand-300' : 'hover:bg-ink-50/60'"
+                @click="openDrawer(row)"
+              >
               <!-- Kỹ thuật viên -->
               <td class="pl-4 pr-2 sm:pl-5 sm:pr-3 py-3.5">
                 <div class="flex items-center gap-3">
@@ -719,7 +687,8 @@ const confirmReject = async () => {
                   </ConsoleMoreMenu>
                 </div>
               </td>
-            </tr>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>

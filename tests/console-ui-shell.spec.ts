@@ -159,6 +159,22 @@ describe('Console building blocks', () => {
     expect(w.get('h1').text()).toBe('Đơn sửa chữa');
     expect(w.get('[data-testid="page-count"]').text()).toBe('12');
     expect(w.text()).toContain('Thêm');
+    expect(w.find('img').exists()).toBe(false);
+  });
+
+  it('renders a decorative 3D artwork badge at the start of the title when artworkSrc is provided', () => {
+    const w = mount(ConsolePageHeader, {
+      props: {
+        title: 'Kho và tồn linh kiện',
+        subtitle: 'Theo dõi tồn kho và phiếu xuất nhập.',
+        artworkSrc: '/images/ui/console-warehouse.png',
+      },
+      global: { stubs: { 'router-link': RouterLinkStub } },
+    });
+    const img = w.get('img');
+    expect(img.attributes('src')).toBe('/images/ui/console-warehouse.png');
+    expect(img.attributes('alt')).toBe('');
+    expect(w.text()).toContain('Theo dõi tồn kho và phiếu xuất nhập.');
   });
 });
 

@@ -45,22 +45,22 @@ const slices = computed<StatusSlice[]>(() => {
     {
       key: 'completed',
       label: 'Hoàn thành',
-      color: '#22c55e', // Green
-      dotClass: 'bg-[#22c55e]',
+      color: '#059669', // success-600 (.fh-console)
+      dotClass: 'bg-success-600',
       count: props.completed,
     },
     {
       key: 'active',
       label: 'Đang thực hiện',
-      color: '#3b82f6', // Blue
-      dotClass: 'bg-[#3b82f6]',
+      color: '#2563EB', // brand-600
+      dotClass: 'bg-brand-600',
       count: props.active,
     },
     {
       key: 'cancelled',
       label: 'Đã hủy',
-      color: '#a855f7', // Purple
-      dotClass: 'bg-[#a855f7]',
+      color: '#D92D20', // danger-600
+      dotClass: 'bg-danger-600',
       count: props.cancelled,
     },
   ];

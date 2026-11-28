@@ -23,6 +23,7 @@ import {
 } from '../../api/wallet.api';
 import { FhButton, FhSkeleton } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
@@ -85,6 +86,7 @@ const configSuccessMsg = ref<string | null>(null);
 // 30/09/2026). Managers track the money leaving; there is nothing to approve.
 // What has left, what is moving, and what the payout source holds:
 const payoutOverview = ref<PayoutOverview | null>(null);
+const payoutOverviewLoading = ref(false);
 /** Id of the withdrawal whose payout is being re-checked with payOS. */
 const reconcilingId = ref<string | null>(null);
 
@@ -188,10 +190,13 @@ const loadWithdrawals = async () => {
 };
 
 const loadPayoutOverview = async () => {
+  payoutOverviewLoading.value = true;
   try {
     payoutOverview.value = await walletApi.getPayoutOverview();
   } catch {
     payoutOverview.value = null;
+  } finally {
+    payoutOverviewLoading.value = false;
   }
 };
 
@@ -600,79 +605,6 @@ onMounted(() => {
 
     <!-- TAB 2: Withdrawals (Yêu cầu rút tiền) -->
     <div v-else-if="activeTab === 'withdrawals'" class="animate-slide-up-delay-2 space-y-4">
-      <!-- Top 4 KPI Summary Cards (When in Technician Withdrawals tab) -->
-      <div
-        v-if="payoutOverview && payoutTab === 'technicians'"
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-        aria-label="Tổng quan chi tiền"
-      >
-        <!-- 1. Tổng số yêu cầu -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-brand-600">
-            <Coins :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div class="min-w-0">
-            <div class="text-xs font-medium text-ink-500">Tổng số yêu cầu</div>
-            <div class="font-num text-2xl font-bold tracking-tight text-ink-900">
-              {{ wdTotal.toLocaleString('vi-VN') }}
-            </div>
-            <div class="text-[11px] font-medium text-ink-400">
-              Yêu cầu trên hệ thống
-            </div>
-          </div>
-        </div>
-
-        <!-- 2. Đã chi trả (Đã chuyển cho kỹ thuật viên) -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
-            <CheckCircle2 :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div class="min-w-0">
-            <div class="text-xs font-medium text-ink-500">Đã chi trả</div>
-            <div class="font-num text-xl font-bold tracking-tight text-emerald-600">
-              {{ formatCurrencyVND(payoutOverview.paidOut.amount) }}
-            </div>
-            <div class="text-[11px] font-medium text-emerald-700">
-              <span class="sr-only">Đã chuyển cho kỹ thuật viên </span>
-              <span class="font-num font-semibold">{{ payoutOverview.paidOut.count }}</span> lệnh thành công
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. Đang xử lý (Đang chuyển) -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-500">
-            <Clock :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div class="min-w-0">
-            <div class="text-xs font-medium text-ink-500">Đang xử lý</div>
-            <div class="font-num text-xl font-bold tracking-tight text-amber-500">
-              {{ formatCurrencyVND(payoutOverview.processing.amount) }}
-            </div>
-            <div class="text-[11px] font-medium text-amber-700">
-              <span class="sr-only">Đang chuyển </span>
-              <span class="font-num font-semibold">{{ payoutOverview.processing.count }}</span> lệnh chờ payOS xác nhận
-            </div>
-          </div>
-        </div>
-
-        <!-- 4. Chuyển thất bại (Từ chối) -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-100 bg-rose-50 text-rose-500">
-            <X :size="20" :stroke-width="2" aria-hidden="true" />
-          </div>
-          <div class="min-w-0">
-            <div class="text-xs font-medium text-ink-500">Chuyển thất bại</div>
-            <div class="font-num text-xl font-bold tracking-tight text-rose-500">
-              {{ formatCurrencyVND(payoutOverview.failed.amount) }}
-            </div>
-            <div class="text-[11px] font-medium text-rose-600">
-              <span class="font-num font-semibold">{{ payoutOverview.failed.count }}</span> lệnh, tiền đã hoàn về ví kỹ thuật viên
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Shared Payout Source (Ví nguồn chi hộ payOS) -->
       <template v-if="sourceOverview">
         <Transition name="fh-fade-slide">
@@ -720,7 +652,62 @@ onMounted(() => {
       />
 
       <!-- Technician Withdrawals Section -->
-      <template v-else>
+      <div v-else class="space-y-4">
+        <!-- Top 4 KPI Summary Cards (When in Technician Withdrawals tab) -->
+        <section
+          v-if="payoutOverview || payoutOverviewLoading"
+          class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          aria-label="Tổng quan chi tiền"
+        >
+          <ConsoleStatCard
+            featured
+            :loading="!payoutOverview && payoutOverviewLoading"
+            label="Tổng số yêu cầu"
+            :value="wdTotal.toLocaleString('vi-VN')"
+            sublabel="Yêu cầu trên hệ thống"
+            :icon="Coins"
+            tone="neutral"
+          />
+
+          <ConsoleStatCard
+            :loading="!payoutOverview && payoutOverviewLoading"
+            label="Đã chi trả"
+            :value="payoutOverview ? formatCurrencyVND(payoutOverview.paidOut.amount) : 0"
+            :icon="CheckCircle2"
+            tone="success"
+          >
+            <template v-if="payoutOverview" #sub>
+              <span class="sr-only">Đã chuyển cho kỹ thuật viên </span>
+              <span class="font-num font-semibold text-ink-700">{{ payoutOverview.paidOut.count }}</span> lệnh thành công
+            </template>
+          </ConsoleStatCard>
+
+          <ConsoleStatCard
+            :loading="!payoutOverview && payoutOverviewLoading"
+            label="Đang xử lý"
+            :value="payoutOverview ? formatCurrencyVND(payoutOverview.processing.amount) : 0"
+            :icon="Clock"
+            tone="warning"
+          >
+            <template v-if="payoutOverview" #sub>
+              <span class="sr-only">Đang chuyển </span>
+              <span class="font-num font-semibold text-ink-700">{{ payoutOverview.processing.count }}</span> lệnh chờ payOS xác nhận
+            </template>
+          </ConsoleStatCard>
+
+          <ConsoleStatCard
+            :loading="!payoutOverview && payoutOverviewLoading"
+            label="Chuyển thất bại"
+            :value="payoutOverview ? formatCurrencyVND(payoutOverview.failed.amount) : 0"
+            :icon="X"
+            tone="danger"
+          >
+            <template v-if="payoutOverview" #sub>
+              <span class="font-num font-semibold text-ink-700">{{ payoutOverview.failed.count }}</span> lệnh, tiền đã hoàn về ví kỹ thuật viên
+            </template>
+          </ConsoleStatCard>
+        </section>
+
         <!-- Filter Status Bar -->
         <div class="flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
           <select
@@ -920,7 +907,7 @@ onMounted(() => {
             />
           </div>
         </div>
-      </template>
+      </div>
     </div>
 
     <!-- TAB 3: Config (Cấu hình ví kỹ thuật viên - Admin) -->

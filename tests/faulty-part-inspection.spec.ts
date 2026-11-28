@@ -152,7 +152,7 @@ describe('faulty part inspection on the manager page', () => {
 
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
     await flushPromises();
-    const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
+    const card = (label: string) => wrapper.findAll('[data-stat-card]').find((d) => d.text().startsWith(label))!.text();
     expect(card('Chờ chuẩn bị')).toContain('9');
     await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị mã kho')!.trigger('click');
     await flushPromises();
@@ -171,7 +171,7 @@ describe('faulty part inspection on the manager page', () => {
     const draw = vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,AA==');
     const wrapper = mount(ConsolePartRequestsPage, { global: { stubs: { ...stubs, teleport: true } } });
     await flushPromises();
-    const card = (label: string) => wrapper.findAll('div').find((d) => d.classes().includes('shadow-(--shadow-e1)') && d.text().startsWith(label))!.text();
+    const card = (label: string) => wrapper.findAll('[data-stat-card]').find((d) => d.text().startsWith(label))!.text();
     await wrapper.findAll('button').find((b) => b.text() === 'Chuẩn bị xong')!.trigger('click');
     await flushPromises();
     expect(card('Chờ chuẩn bị')).toBe('Chờ chuẩn bị2');

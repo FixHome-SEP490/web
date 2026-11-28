@@ -20,6 +20,8 @@ import {
 } from 'lucide-vue-next';
 import { FhConfirmDialog, FhSkeleton } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import { CONSOLE_LOAD_ERROR, consoleTextarea } from '../../components/console/console-ui';
@@ -63,12 +65,33 @@ interface VerificationStats {
 
 const techStats = ref<VerificationStats>({ total: 0, pending: 0, verified: 0, rejected: 0 });
 const custStats = ref<VerificationStats>({ total: 0, pending: 0, verified: 0, rejected: 0 });
+const techStatsLoading = ref(true);
+const custStatsLoading = ref(true);
 
 const currentStats = computed<VerificationStats>(() => {
   return activeTab.value === 'technicians' ? techStats.value : custStats.value;
 });
+const currentStatsLoading = computed(() =>
+  activeTab.value === 'technicians' ? techStatsLoading.value : custStatsLoading.value,
+);
 
 const statusFilter = ref<VerificationStatus | 'ALL'>('ALL');
+type CustomerStatusKey = 'all' | 'pending' | 'verified' | 'rejected';
+const customerStatusFilter = ref<CustomerStatusKey>('pending');
+
+const isStatCardActive = (key: 'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED') => {
+  if (activeTab.value === 'technicians') return statusFilter.value === key;
+  return customerStatusFilter.value === key.toLowerCase();
+};
+
+const selectStatCardFilter = (key: 'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED') => {
+  if (activeTab.value === 'technicians') {
+    statusFilter.value = key !== 'ALL' && statusFilter.value === key ? 'ALL' : key;
+  } else {
+    const mapped = key.toLowerCase() as CustomerStatusKey;
+    customerStatusFilter.value = mapped !== 'all' && customerStatusFilter.value === mapped ? 'all' : mapped;
+  }
+};
 const searchQuery = ref('');
 const page = ref(1);
 const pageSize = ref(10);
@@ -166,6 +189,7 @@ const loadVerifications = async () => {
 };
 
 const loadTechStats = async () => {
+  techStatsLoading.value = true;
   try {
     const [allRes, pendingRes, verifiedRes, rejectedRes] = await Promise.all([
       adminVerificationsApi.getVerifications({ limit: 1 }),
@@ -186,10 +210,13 @@ const loadTechStats = async () => {
       verified: verifications.value.filter((v) => v.status === 'VERIFIED').length,
       rejected: verifications.value.filter((v) => v.status === 'REJECTED').length,
     };
+  } finally {
+    techStatsLoading.value = false;
   }
 };
 
 const loadCustStats = async () => {
+  custStatsLoading.value = true;
   try {
     const [allRes, pendingRes, verifiedRes, rejectedRes] = await Promise.all([
       adminCustomerVerificationsApi.list({ page: 1, limit: 1 }),
@@ -205,6 +232,8 @@ const loadCustStats = async () => {
     };
   } catch {
     // Keep defaults
+  } finally {
+    custStatsLoading.value = false;
   }
 };
 
@@ -430,11 +459,14 @@ function getInitials(name?: string | null): string {
 <template>
   <div class="space-y-4 sm:space-y-5">
     <!-- Header: Title + count badge -->
-    <div class="animate-slide-up flex flex-wrap items-baseline gap-2.5">
-      <h1 class="text-2xl font-bold tracking-tight text-ink-900">Duyệt xác minh danh tính</h1>
-      <span v-if="currentStats.total > 0 || total > 0" class="font-num text-sm text-ink-400">
-        {{ currentStats.total || total }}
-      </span>
+    <div class="animate-slide-up flex items-center gap-3.5">
+      <ConsoleTitleArtwork src="/images/ui/console-identity-kyc.png" />
+      <div class="flex flex-wrap items-baseline gap-2.5">
+        <h1 class="text-2xl font-bold tracking-tight text-ink-900">Duyệt xác minh danh tính</h1>
+        <span v-if="currentStats.total > 0 || total > 0" class="font-num text-sm text-ink-400">
+          {{ currentStats.total || total }}
+        </span>
+      </div>
     </div>
 
     <!-- Navigation Tabs -->
@@ -461,46 +493,53 @@ function getInitials(name?: string | null): string {
       </button>
     </div>
 
-    <!-- Horizontal Statistics Bar -->
-    <div class="animate-slide-up-delay-1 inline-flex flex-wrap items-center gap-4 sm:gap-6 rounded-2xl border border-ink-100 bg-white px-5 py-3 shadow-xs">
-      <!-- Tổng -->
-      <div class="flex items-center gap-2">
-        <Users :size="16" class="text-brand-600 shrink-0" aria-hidden="true" />
-        <span class="text-xs sm:text-sm text-ink-600">Tổng:</span>
-        <span class="font-bold text-ink-900 font-num text-xs sm:text-sm">{{ currentStats.total }}</span>
-      </div>
-
-      <div class="h-4 w-px bg-ink-200 hidden sm:block" aria-hidden="true"></div>
-
-      <!-- Chờ duyệt -->
-      <div class="flex items-center gap-2">
-        <Clock :size="16" class="text-warning-500 shrink-0" aria-hidden="true" />
-        <span class="text-xs sm:text-sm text-ink-600">Chờ duyệt:</span>
-        <span class="font-bold text-ink-900 font-num text-xs sm:text-sm">{{ currentStats.pending }}</span>
-      </div>
-
-      <div class="h-4 w-px bg-ink-200 hidden sm:block" aria-hidden="true"></div>
-
-      <!-- Đã xác nhận -->
-      <div class="flex items-center gap-2">
-        <CheckCircle2 :size="16" class="text-success-600 shrink-0" aria-hidden="true" />
-        <span class="text-xs sm:text-sm text-ink-600">Đã xác nhận:</span>
-        <span class="font-bold text-ink-900 font-num text-xs sm:text-sm">{{ currentStats.verified }}</span>
-      </div>
-
-      <div class="h-4 w-px bg-ink-200 hidden sm:block" aria-hidden="true"></div>
-
-      <!-- Đã từ chối -->
-      <div class="flex items-center gap-2">
-        <XCircle :size="16" class="text-danger-600 shrink-0" aria-hidden="true" />
-        <span class="text-xs sm:text-sm text-ink-600">Đã từ chối:</span>
-        <span class="font-bold text-ink-900 font-num text-xs sm:text-sm">{{ currentStats.rejected }}</span>
-      </div>
-    </div>
+    <!-- 4 Summary Stats Cards -->
+    <section
+      class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      aria-label="Thống kê hồ sơ xác minh"
+    >
+      <ConsoleStatCard
+        interactive
+        :active="isStatCardActive('ALL')"
+        :loading="currentStatsLoading"
+        label="Tổng hồ sơ"
+        :value="currentStats.total"
+        :icon="Users"
+        @click="selectStatCardFilter('ALL')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="isStatCardActive('PENDING')"
+        :loading="currentStatsLoading"
+        label="Chờ duyệt"
+        :value="currentStats.pending"
+        :icon="Clock"
+        @click="selectStatCardFilter('PENDING')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="isStatCardActive('VERIFIED')"
+        :loading="currentStatsLoading"
+        label="Đã xác nhận"
+        :value="currentStats.verified"
+        :icon="CheckCircle2"
+        @click="selectStatCardFilter('VERIFIED')"
+      />
+      <ConsoleStatCard
+        interactive
+        :active="isStatCardActive('REJECTED')"
+        :loading="currentStatsLoading"
+        label="Đã từ chối"
+        :value="currentStats.rejected"
+        :icon="XCircle"
+        @click="selectStatCardFilter('REJECTED')"
+      />
+    </section>
 
     <!-- Customer tab content -->
     <CustomerVerificationsTab
       v-if="activeTab === 'customers'"
+      v-model:status-filter="customerStatusFilter"
       class="animate-slide-up-delay-2"
       @updated="loadCustStats"
     />
@@ -508,7 +547,7 @@ function getInitials(name?: string | null): string {
     <!-- Technician tab content -->
     <template v-else>
       <!-- Filter Bar -->
-      <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-3">
+      <div class="animate-slide-up-delay-1 relative z-20 flex flex-wrap items-center gap-3">
         <!-- 1. Search input -->
         <div class="relative flex-1 min-w-[240px] max-w-md">
           <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
@@ -558,7 +597,7 @@ function getInitials(name?: string | null): string {
           <!-- Date picker popover -->
           <div
             v-if="isDatePickerOpen"
-            class="absolute left-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-2 shadow-lg"
+            class="absolute left-0 top-full z-40 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-2 shadow-lg"
             @click.stop
           >
             <div class="px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-ink-400">Khoảng thời gian</div>
@@ -599,7 +638,7 @@ function getInitials(name?: string | null): string {
       </Transition>
 
       <!-- Table Section -->
-      <div class="animate-slide-up-delay-2 space-y-4">
+      <div class="animate-slide-up-delay-2 relative z-10 space-y-4">
         <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadVerifications" />
 
         <div v-else class="overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-xs">

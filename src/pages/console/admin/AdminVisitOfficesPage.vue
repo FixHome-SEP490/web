@@ -21,6 +21,7 @@ import VisitOfficeModal from '../../../components/console/VisitOfficeModal.vue';
 import VisitOfficeDrawer from '../../../components/console/VisitOfficeDrawer.vue';
 import FhConfirmDialog from '../../../components/FhConfirmDialog.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../../components/console/ConsoleStatCard.vue';
 import { CONSOLE_LOAD_ERROR } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
 import {
@@ -318,78 +319,48 @@ watch(successMessage, (msg) => {
       </div>
     </header>
 
-    <!-- 4 Stats Cards matching Image 3 -->
-    <section class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-      <!-- 1. Tổng trụ sở -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-brand-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'all' && !dateFilter && !searchQuery ? 'ring-2 ring-brand-500/20' : ''"
+    <!-- 4 Stats Cards -->
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'all'"
+        :loading="loading"
+        label="Tổng trụ sở"
+        :value="stats.total"
+        :icon="Building2"
+        tone="brand"
         @click="statusFilter = 'all'; dateFilter = ''; searchQuery = '';"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-          <Building2 :size="22" :stroke-width="2" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tổng trụ sở</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.total }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 2. Đang hoạt động -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-emerald-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'active' ? 'ring-2 ring-emerald-500/20' : ''"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'active'"
+        :loading="loading"
+        label="Đang hoạt động"
+        :value="stats.active"
+        :icon="Check"
+        tone="success"
         @click="statusFilter = statusFilter === 'active' ? 'all' : 'active'"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-          <Check :size="22" :stroke-width="2.5" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đang hoạt động</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.active }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 3. Tạm ngưng -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-amber-200 hover:shadow-sm cursor-pointer"
-        :class="statusFilter === 'inactive' ? 'ring-2 ring-amber-500/20' : ''"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'inactive'"
+        :loading="loading"
+        label="Tạm ngưng"
+        :value="stats.inactive"
+        :icon="Clock"
+        tone="warning"
         @click="statusFilter = statusFilter === 'inactive' ? 'all' : 'inactive'"
-      >
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-          <Clock :size="22" :stroke-width="2" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tạm ngưng</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loading" class="inline-block h-7 w-8 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.inactive }}</span>
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- 4. Tổng lượt tiếp nhận (tháng) -->
-      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-200/80 bg-white p-4.5 text-left shadow-xs transition-all hover:border-purple-200 hover:shadow-sm">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-          <Users :size="22" :stroke-width="2" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tổng lượt tiếp nhận (tháng)</div>
-          <div class="text-2xl font-bold font-num text-ink-900 tracking-tight">
-            <span v-if="loading || stats.monthlyVisits === null" class="inline-block h-7 w-12 animate-pulse rounded bg-ink-100"></span>
-            <span v-else>{{ stats.monthlyVisits }}</span>
-          </div>
-        </div>
-      </div>
+      <ConsoleStatCard
+        :loading="loading || stats.monthlyVisits === null"
+        label="Tổng lượt tiếp nhận (tháng)"
+        :value="stats.monthlyVisits ?? 0"
+        :icon="Users"
+        tone="neutral"
+      />
     </section>
 
     <!-- Notification banners -->

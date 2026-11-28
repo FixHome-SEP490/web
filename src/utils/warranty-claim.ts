@@ -65,7 +65,7 @@ export function claimDisplayMeta(claim: {
 const technicianLabels: Partial<Record<WarrantyClaimStatus, { label: string; tone: ClaimTone }>> = {
   submitted: { label: 'Chờ bạn nhận', tone: 'warning' },
   accepted: { label: 'Bạn đã nhận', tone: 'info' },
-  inspected: { label: 'Chờ quản lý duyệt', tone: 'warning' },
+  inspected: { label: 'Chờ quản lý dịch vụ duyệt', tone: 'warning' },
   awaiting_customer: { label: 'Chờ khách phản hồi', tone: 'warning' },
 };
 
@@ -90,11 +90,11 @@ export function managerClaimDisplayMeta(claim: {
   noShowFlaggedAt?: string | null;
   outcomeCode?: 'fixed' | 'unfixed' | 'rejected' | null;
 }): { label: string; tone: ClaimTone } {
-  if (claim.declineReview === 'pending') return { label: claim.noShowFlaggedAt ? 'Chờ xét không đến' : 'Chờ xét từ chối', tone: 'warning' };
+  if (claim.declineReview === 'pending') return { label: claim.noShowFlaggedAt ? 'Chờ xét không đến' : 'Chờ xét không phản hồi', tone: 'warning' };
   if (claim.outcomeCode === 'unfixed') return { label: 'Không khắc phục được, đã hoàn tiền', tone: 'neutral' };
   switch (claim.status) {
-    case 'submitted': return claim.technician ? { label: 'Chờ thợ nhận', tone: 'info' } : { label: 'Chờ phân công', tone: 'warning' };
-    case 'accepted': return { label: 'Thợ đã nhận', tone: 'info' };
+    case 'submitted': return claim.technician ? { label: 'Chờ kỹ thuật viên nhận', tone: 'info' } : { label: 'Kỹ thuật viên không còn hoạt động', tone: 'warning' };
+    case 'accepted': return { label: 'Kỹ thuật viên đã nhận', tone: 'info' };
     case 'inspected': return { label: 'Chờ duyệt kết luận', tone: 'warning' };
     case 'awaiting_customer':
       return claim.customerResponse === 'agreed' ? { label: 'Khách đồng ý, chờ đóng', tone: 'info' } : { label: 'Chờ khách phản hồi', tone: 'warning' };
@@ -141,15 +141,15 @@ export const notCoveredReasonLabels: Record<NotCoveredReason, string> = {
 export type DeclineReason = 'busy' | 'on_leave' | 'out_of_area' | 'other';
 
 export const declineReasonLabels: Record<DeclineReason, string> = {
-  busy: 'Đang bận (quản lý xác nhận)',
+  busy: 'Đang bận (quản lý dịch vụ xác nhận)',
   on_leave: 'Đang nghỉ (hệ thống kiểm tra)',
   out_of_area: 'Ngoài khu vực nhận việc (hệ thống kiểm tra)',
-  other: 'Lý do khác (quản lý xác nhận)',
+  other: 'Lý do khác (quản lý dịch vụ xác nhận)',
 };
 
 export const faultyInspectionLabels = {
   manufacturer: 'Lỗi nhà sản xuất, FixHome chịu',
-  installation: 'Do lắp đặt, thợ trả tiền',
+  installation: 'Do lắp đặt, kỹ thuật viên trả tiền',
   undetermined: 'Không xác định, FixHome chịu',
 } as const;
 
@@ -164,7 +164,7 @@ export const visitStatusLabels: Record<string, string> = {
 export type DeclineReview = 'pending' | 'valid' | 'invalid';
 
 export const declineReviewLabels: Record<DeclineReview, string> = {
-  pending: 'Chờ quản lý xét',
+  pending: 'Chờ quản lý dịch vụ xét',
   valid: 'Đã xét: hợp lệ',
   invalid: 'Đã xét: không hợp lệ',
 };

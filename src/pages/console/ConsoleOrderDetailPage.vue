@@ -523,7 +523,7 @@ function scrollToAudit() {
                 />
                 <div
                   v-else
-                  class="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-blue-500 to-indigo-600 font-bold text-white text-sm shadow-xs"
+                  class="flex h-12 w-12 items-center justify-center rounded-full border border-brand-200/70 bg-brand-50 font-bold text-brand-700 text-sm"
                 >
                   {{ details.customerLetters }}
                 </div>
@@ -585,7 +585,7 @@ function scrollToAudit() {
                 />
                 <div
                   v-else
-                  class="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-amber-500 to-orange-600 font-bold text-white text-sm shadow-xs"
+                  class="flex h-12 w-12 items-center justify-center rounded-full border border-ink-200 bg-ink-100 font-bold text-ink-700 text-sm"
                 >
                   {{ details.technicianLetters }}
                 </div>

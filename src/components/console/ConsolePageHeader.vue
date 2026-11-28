@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft } from 'lucide-vue-next';
+import ConsoleTitleArtwork from './ConsoleTitleArtwork.vue';
 
 // One header for every console page: title on the left, at most one primary
 // action and the "⋯" menu on the right (PO 10/10/2026).
@@ -8,10 +9,14 @@ withDefaults(defineProps<{
   count?: number | string | null;
   backTo?: string;
   backLabel?: string;
+  artworkSrc?: string;
+  subtitle?: string;
 }>(), {
   count: null,
   backTo: '',
   backLabel: 'Quay lại',
+  artworkSrc: '',
+  subtitle: '',
 });
 </script>
 
@@ -26,14 +31,20 @@ withDefaults(defineProps<{
         <ChevronLeft :size="16" aria-hidden="true" />
         {{ backLabel }}
       </router-link>
-      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 class="text-2xl font-bold tracking-tight text-ink-900 text-balance">{{ title }}</h1>
-        <span
-          v-if="count !== null && count !== ''"
-          class="whitespace-nowrap font-num text-base font-medium text-ink-500"
-          data-testid="page-count"
-        >{{ count }}</span>
-        <slot name="badges" />
+      <div class="flex min-w-0 items-center gap-3.5">
+        <ConsoleTitleArtwork v-if="artworkSrc" :src="artworkSrc" />
+        <div class="min-w-0">
+          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 class="text-2xl font-bold tracking-tight text-ink-900 text-balance">{{ title }}</h1>
+            <span
+              v-if="count !== null && count !== ''"
+              class="whitespace-nowrap font-num text-base font-medium text-ink-500"
+              data-testid="page-count"
+            >{{ count }}</span>
+            <slot name="badges" />
+          </div>
+          <p v-if="subtitle" class="mt-0.5 text-xs text-ink-500 sm:text-sm text-pretty">{{ subtitle }}</p>
+        </div>
       </div>
       <slot name="meta" />
     </div>

@@ -5,14 +5,15 @@
 // so there is nothing to approve: staff watch the money leave and ask payOS
 // again about a payout that has not settled. The page shows the payOS source
 // balance (shared by both tabs) once, above the tabs.
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { CheckCircle2, Clock, Coins, X } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 import FhButton from '../FhButton.vue';
-import FhSkeleton from '../FhSkeleton.vue';
 import FhStatusPill from '../FhStatusPill.vue';
 import ConsoleLoadError from './ConsoleLoadError.vue';
 import ConsolePagination from './ConsolePagination.vue';
 import ConsoleSearch from './ConsoleSearch.vue';
+import ConsoleStatCard from './ConsoleStatCard.vue';
 import ConsoleTable, { type ConsoleColumn } from './ConsoleTable.vue';
 import { CONSOLE_LOAD_ERROR, consoleField } from './console-ui';
 import {
@@ -29,11 +30,20 @@ import { affectedBy, queryKeys } from '../../lib/query-keys';
 import { formatCurrencyVND, formatDateTimeVN, formatWithdrawalStatus } from '../../utils/formatters';
 import { userFacingError } from '../../utils/user-facing-error';
 
-defineProps<{
+const props = defineProps<{
   /** Customer totals; null until read (or when the read failed). */
   overview: PayoutOverview | null;
   overviewLoading?: boolean;
 }>();
+const customerTotalCount = computed(() => {
+  if (!props.overview) return 0;
+  return (
+    props.overview.paidOut.count +
+    props.overview.processing.count +
+    (props.overview.pending?.count ?? 0) +
+    props.overview.failed.count
+  );
+});
 const emit = defineEmits<{ (e: 'total', value: number): void }>();
 
 type StatusFilter = CustomerWithdrawalStatus | 'ALL';
@@ -110,33 +120,48 @@ const contactOf = (row: CustomerStaffWithdrawal) =>
   <div class="space-y-4" data-testid="customer-withdrawals">
     <section
       v-if="overview"
-      class="grid grid-cols-2 gap-3 sm:grid-cols-3"
+      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       aria-label="Tổng quan chi tiền cho khách hàng"
       data-testid="cw-overview"
     >
-      <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
-        <div class="whitespace-nowrap text-sm text-ink-500">Đã chuyển cho khách hàng</div>
-        <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-success-600">{{ formatCurrencyVND(overview.paidOut.amount) }}</div>
-        <div class="mt-0.5 text-xs text-ink-500">{{ overview.paidOut.count }} lệnh thành công</div>
-      </div>
-      <div class="rounded-[var(--radius-md)] border border-ink-200 bg-white p-4">
-        <div class="whitespace-nowrap text-sm text-ink-500">Đang chuyển</div>
-        <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-info-600">{{ formatCurrencyVND(overview.processing.amount) }}</div>
-        <div class="mt-0.5 text-xs text-ink-500">{{ overview.processing.count }} lệnh chờ payOS xác nhận</div>
-      </div>
-      <div class="col-span-2 rounded-[var(--radius-md)] border border-ink-200 bg-white p-4 sm:col-span-1">
-        <div class="whitespace-nowrap text-sm text-ink-500">Chuyển thất bại</div>
-        <div class="mt-1 whitespace-nowrap font-num text-xl font-semibold text-danger-600">{{ formatCurrencyVND(overview.failed.amount) }}</div>
-        <div class="mt-0.5 text-xs text-ink-500">{{ overview.failed.count }} lệnh, tiền đã hoàn về ví khách hàng</div>
-      </div>
+      <ConsoleStatCard
+        featured
+        label="Tổng số yêu cầu"
+        :value="customerTotalCount.toLocaleString('vi-VN')"
+        sublabel="Yêu cầu trên hệ thống"
+        :icon="Coins"
+        tone="neutral"
+      />
+      <ConsoleStatCard
+        label="Đã chuyển cho khách hàng"
+        :value="formatCurrencyVND(overview.paidOut.amount)"
+        :sublabel="`${overview.paidOut.count} lệnh thành công`"
+        :icon="CheckCircle2"
+        tone="success"
+      />
+      <ConsoleStatCard
+        label="Đang chuyển"
+        :value="formatCurrencyVND(overview.processing.amount)"
+        :sublabel="`${overview.processing.count} lệnh chờ payOS xác nhận`"
+        :icon="Clock"
+        tone="info"
+      />
+      <ConsoleStatCard
+        label="Chuyển thất bại"
+        :value="formatCurrencyVND(overview.failed.amount)"
+        :sublabel="`${overview.failed.count} lệnh, tiền đã hoàn về ví khách hàng`"
+        :icon="X"
+        tone="danger"
+      />
     </section>
-    <div v-else-if="overviewLoading" class="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-hidden="true">
-      <FhSkeleton height="92px" />
-      <FhSkeleton height="92px" />
-      <FhSkeleton height="92px" class="col-span-2 sm:col-span-1" />
+    <div v-else-if="overviewLoading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden="true">
+      <ConsoleStatCard featured loading label="Tổng số yêu cầu" sublabel="Yêu cầu trên hệ thống" :icon="Coins" />
+      <ConsoleStatCard loading label="Đã chuyển cho khách hàng" :icon="CheckCircle2" />
+      <ConsoleStatCard loading label="Đang chuyển" :icon="Clock" />
+      <ConsoleStatCard loading label="Chuyển thất bại" :icon="X" />
     </div>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
       <ConsoleSearch v-model="searchInput" placeholder="Tìm tên, email, số điện thoại" label="Tìm lệnh rút của khách hàng" :maxlength="100" />
       <select v-model="status" :class="consoleField" aria-label="Trạng thái rút tiền của khách hàng" data-testid="cw-status">
         <option value="ALL">Tất cả trạng thái</option>

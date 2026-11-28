@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-27 01:41 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-27 22:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -91,6 +91,14 @@ Ba điều không đổi giữa các repo:
 Luật nghiệp vụ gốc nằm ở tài liệu dự án (bản chính thức của nhóm). Mâu thuẫn giữa code và tài liệu thì ghi vào mục 8 và hỏi PO, không tự quyết.
 
 ## 3. Trạng thái hiện tại
+
+### Giao diện bảo hành của quản lý dịch vụ (27/11/2026)
+
+- Chi tiết `/console/warranty/:id` có khối "Bước tiếp theo" (ai phải làm gì, đã chờ bao lâu), danh sách tiến trình và các thẻ: yêu cầu của khách, kỹ thuật viên bảo hành, đề xuất kỹ thuật viên, quyết định quản lý dịch vụ, kết quả và phản hồi của khách, linh kiện bảo hành. Mọi dòng chỉ hiện khi server trả dữ liệu; không còn giá trị mặc định tự bịa.
+- Tab Lịch sử dùng `FhTimeline` và chỉ dựng từ mốc giờ server đã ghi (`submittedAt`, `visit.*`, `decision.*`, `resolvedAt`). Tab Nhật ký và bước "Xác minh" tự suy ra đã bị bỏ. Ảnh mở bằng `WarrantyPhotoStrip.vue` (phóng to, đổi ảnh bằng phím mũi tên).
+- Thẻ "Thông tin bảo hành" liệt kê mọi dòng công và linh kiện có bảo hành của đơn (hạn = ngày hoàn thành đơn + số ngày bảo hành, tính ở web). Thẻ "Đề xuất của kỹ thuật viên" chia 2 cột. Khách không chọn linh kiện: yêu cầu gắn tạm vào hạng mục có hạn dài nhất, kỹ thuật viên xác định linh kiện hỏng. Tiến trình hiện dạng stepper.
+- Phạm vi hiện tại: kỹ thuật viên làm đơn nào bảo hành đơn đó. Web quản lý dịch vụ không còn thao tác phân công lại (`warrantyManagerApi.assign`, `eligibleTechnicians`, chế độ `assign` của `WarrantyDecisionModal` đã xóa). Backend vẫn giữ API phân công/từ chối; chưa gỡ.
+- Hàng đợi: bỏ bộ lọc thời gian (chỉ lọc trên 10 dòng đã tải), bỏ thẻ "Đang xử lý" đếm theo trang, bỏ "+6%" và mã kỹ thuật viên tự đặt; lọc theo kỹ thuật viên gửi `technicianId` lên server. Ô tìm kiếm chỉ tìm trong trang đang xem. Nhãn dùng "kỹ thuật viên", "quản lý dịch vụ". `npm test` các file bảo hành PASS; kiểm tra giao diện trên trình duyệt CHƯA KIỂM CHỨNG.
 
 ### Nâng cấp trải nghiệm Khách hàng & Lightbox ảnh chat (14/11/2026)
 
@@ -627,6 +635,12 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+
+- 2026-11-27 22:42 (UTC+7) | Lạc Vỹ | LacVy | Đồng bộ ConsoleStatCard trên Console Admin/SM (thêm active filter ở Đơn sửa chữa, Yêu cầu linh kiện, Hoàn trả linh kiện, Duyệt danh tính), thống nhất skeleton loading, thêm hiệu ứng đếm số và gộp 3 ConsoleStatCard sau conflict ở Bảo hành
+- 2026-11-27 22:23 (UTC+7) | Lạc Vỹ | LacVy | Sửa lớp z-index popover chọn ngày bị bảng đè ở Duyệt danh tính/Đơn sửa chữa, bỏ thanh lọc trùng ở Yêu cầu/Hoàn trả linh kiện, giữ tổng đếm allStatusTotalCount khi lọc và thêm skeleton bảng/drawer ở Duyệt hồ sơ
+- 2026-11-27 22:19 (UTC+7) | Lạc Vỹ | LacVy | Thêm bộ 12 ảnh 3D badge nền trong suốt (Wave 1) qua ConsoleTitleArtwork không viền ở đầu tiêu đề các trang Console Admin/SM (Chi hộ và rút tiền chưa tạo ảnh riêng do tạm hết quota model ảnh)
+- 2026-11-27 18:25 (UTC+7) | Hgnv11 | dev | Chi tiết bảo hành web: liệt kê mọi bảo hành của đơn, thẻ đề xuất 2 cột, stepper tiến trình.
+- 2026-11-27 17:25 (UTC+7) | Hgnv11 | dev | Giao diện bảo hành của quản lý dịch vụ làm lại: bước tiếp theo, thẻ đề xuất/quyết định/kết quả, lịch sử từ giờ thật, gỡ phân công lại và số liệu tự bịa.
 - 2026-11-27 01:41 (UTC+7) | Hgnv11 | dev | Trang lượt sửa của khách bỏ máy đã đặt lại (cờ rebooked của checkout, cần backend mới) khỏi bảng chọn đặt lịch máy dừng và khỏi nút đặt lại máy không sửa được, thay bằng nút Đã đặt lịch mới · Xem tới lượt/đơn mới (rebookedTo); CHƯA KIỂM CHỨNG trên trình duyệt
 - 2026-11-26 19:46 (UTC+7) | Hgnv11 | dev | Duyệt kỹ năng từng phiếu không còn bắt tải chứng chỉ FixHome cấp: hộp thoại Duyệt và cấp chứng chỉ đổi thành xác nhận Duyệt kỹ năng, api approve gửi body rỗng (chứng chỉ chỉ còn tuỳ chọn cho luồng cũ); cần backend có PATCH approve không bắt tệp
 - 2026-11-26 19:15 (UTC+7) | Hgnv11 | feat/warranty-same-technician | Đăng ký thợ trên web ngang mobile: wizard gửi cấp tự khai skills[] và giấy tờ nghề theo nhóm (gắn sau khi lưu kỹ năng, chặn trùng cùng loại + số hiệu), bỏ ảnh chứng chỉ khỏi KYC, khóa bước 1 sau khi nộp KYC; màn trạng thái theo reviewStage (8 giai đoạn) và trang /tech/office-visit đặt lịch trụ sở (GET/POST technicians/me/office-visit); chỉ onboardingStatus approved mới là được duyệt (KYC verified chưa đủ); hồ sơ thợ có tab Giấy tờ, dòng kỹ năng chọn lại giấy tờ đã up (documents/reuse) và Gửi lại, ô Tay nghề chỉ đọc và không gửi level; chuông thợ định tuyến SKILL_*, KYC_IDENTITY_APPROVED, OFFICE_VISIT_*, PROFILE_REJECTED; nhãn kỹ năng Chờ duyệt/Đã duyệt/Bị từ chối. Chưa kiểm trên trình duyệt thật
@@ -662,8 +676,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
 - 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
 - 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
-- 2026-11-21 14:46 (UTC+7) | ToanAltF4 | fix/sm-part-stats-2111 | SM yêu cầu linh kiện: ô đếm trạng thái đổi theo dòng sau Chuẩn bị mã kho (BUG DETECTOR 212)
-- 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
-- 2026-11-21 04:13 (UTC+7) | ToanAltF4 | fix/web-retest-2111d | Console Huỷ đơn: lý do hệ thống ghi tiếng Anh (khách từ chối báo giá) hiện tiếng Việt
-- 2026-11-21 04:03 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Ví thợ và ví khách: báo rõ khi tên chủ tài khoản có số/ký hiệu thay vì lỗi lưu chung chung
-- 2026-11-21 04:02 (UTC+7) | ToanAltF4 | fix/web-retest-2111c | Lượt nhiều máy: tóm tắt hoá đơn cả lượt hiện đúng số tiền máy đã sửa (dòng hoá đơn từ API không có invoiceId)
