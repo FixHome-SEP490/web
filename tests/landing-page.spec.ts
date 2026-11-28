@@ -377,7 +377,12 @@ describe('Public landing page', () => {
     await flushPromises();
     expect(wrapper.find('a[href="/app/bookings/ai"]').exists()).toBe(true);
     expect(wrapper.find('a[href="/pricing-policy"]').exists()).toBe(true);
-    expect(wrapper.findAll('#questions details')).toHaveLength(4);
+    expect(wrapper.findAll('#questions details')).toHaveLength(6);
+    expect(wrapper.get('#questions').text()).toContain('Bạn có thắc mắc?');
+    expect(wrapper.get('#questions').text()).toContain('FixHome giải đáp.');
+    expect(wrapper.get('#questions').text()).toContain('Kỹ thuật viên được xác minh như thế nào?');
+    expect(wrapper.get('#questions').text()).toContain('Làm thế nào để yêu cầu bảo hành?');
+    expect(wrapper.get('#questions img').attributes('src')).toBe('/images/faq-devices-showcase.webp');
     const ids = wrapper.findAll('[id]').map((el) => el.attributes('id'));
     const order = ['gioi-thieu', 'services', 'ai', 'trust', 'mobile-app', 'questions'].map((id) => ids.indexOf(id));
     expect(order.every((index) => index >= 0)).toBe(true);
@@ -388,6 +393,31 @@ describe('Public landing page', () => {
     // Every header item stays on the landing (PO 21/10/2026); "Giới thiệu" is its first screen.
     expect(navTargets).toEqual(['/#gioi-thieu', '/#services', '/#ai', '/#trust']);
     layout.unmount();
+    wrapper.unmount();
+  });
+
+  it('toggles FAQ accordion items smoothly and navigates to the pricing policy page', async () => {
+    const context = await setup();
+    const wrapper = mount(LandingPage, context);
+    await flushPromises();
+
+    const items = wrapper.findAll('#questions details');
+    expect(items).toHaveLength(6);
+    expect(items[0]!.attributes('open')).toBeDefined();
+    expect(items[1]!.attributes('open')).toBeUndefined();
+
+    await items[1]!.get('summary').trigger('click');
+    expect(items[1]!.attributes('open')).toBeDefined();
+    expect(items[0]!.attributes('open')).toBeUndefined();
+
+    await items[1]!.get('summary').trigger('click');
+    expect(items[1]!.attributes('open')).toBeUndefined();
+
+    const pricingCta = wrapper.get('#questions a[href="/pricing-policy"]');
+    expect(pricingCta.text()).toContain('Xem chính sách giá');
+    await pricingCta.trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.path).toBe('/pricing-policy');
     wrapper.unmount();
   });
 
