@@ -391,15 +391,27 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('renders concise trust details without overstating technician identity checks', async () => {
+  it('renders trust benefits, official consultation image, and technician CTA without overstating verification checks', async () => {
     const context = await setup();
     const wrapper = mount(LandingTrust, context);
 
-    expect(wrapper.text()).toContain('Hồ sơ và kỹ năng được xem xét');
-    expect(wrapper.text()).toContain('Đánh giá sau đơn hoàn tất');
-    expect(wrapper.text()).toContain('Bảo hành theo thông tin đơn');
+    expect(wrapper.text()).toContain('Vì sao chọn FixHome?');
+    expect(wrapper.text()).toContain('An tâm từ lúc đặt lịch đến khi sửa xong.');
+    expect(wrapper.text()).toContain('Kỹ thuật viên được xác minh');
+    expect(wrapper.text()).toContain('Đánh giá từ khách hàng');
+    expect(wrapper.text()).toContain('Thông tin bảo hành rõ ràng');
+    expect(wrapper.text()).toContain('Bạn là kỹ thuật viên?');
     expect(wrapper.text()).not.toContain('video khuôn mặt');
-    expect(wrapper.findAll('img')).toHaveLength(0);
+
+    const img = wrapper.get('img');
+    expect(img.attributes('src')).toBe('/images/trust-technician-consult.webp');
+    expect(img.attributes('loading')).toBe('lazy');
+
+    const cta = wrapper.get('a[href="/for-technicians"]');
+    expect(cta.text()).toContain('Gia nhập FixHome');
+    await cta.trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.path).toBe('/for-technicians');
     wrapper.unmount();
   });
 
