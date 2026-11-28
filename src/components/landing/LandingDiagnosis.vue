@@ -77,7 +77,7 @@ const features = [
       </div>
 
       <!-- Center column: Real FixHome AI UI mockup grounded over a soft minimalist tabletop & plant -->
-      <div class="relative mx-auto flex w-full max-w-[390px] items-end justify-center py-2 sm:max-w-[430px] lg:max-w-[460px]">
+      <div class="ai-stage relative mx-auto flex w-full max-w-[360px] items-end justify-center sm:max-w-[420px] lg:max-w-[460px]">
         <img
           :src="'/images/ai-showcase-backdrop.webp'"
           width="880"
@@ -86,21 +86,23 @@ const features = [
           decoding="async"
           alt=""
           aria-hidden="true"
-          class="ai-backdrop pointer-events-none h-[330px] w-full object-cover object-bottom select-none sm:h-[380px] lg:h-[420px]"
+          class="ai-backdrop pointer-events-none h-full w-full object-cover object-bottom select-none"
         />
 
-        <div class="relative z-10 flex flex-col items-center pb-5 pl-14 sm:pb-6 sm:pl-20">
-          <img
-            :src="'/images/steps/step-3-ai-result.png'"
-            width="512"
-            height="1040"
-            loading="lazy"
-            decoding="async"
-            alt="Minh họa giao diện trợ lý AI FixHome đang phân tích thiết bị gia dụng trên điện thoại"
-            class="ai-phone-mockup h-auto max-h-[340px] w-auto object-contain select-none sm:max-h-[390px] lg:max-h-[420px]"
-          />
+        <div class="ai-phone-slot relative z-10 flex flex-col items-center">
+          <div class="ai-phone-tilt w-full">
+            <img
+              :src="'/images/steps/step-3-ai-result.png'"
+              width="512"
+              height="1040"
+              loading="eager"
+              decoding="async"
+              alt="Minh họa giao diện trợ lý AI FixHome đang phân tích thiết bị gia dụng trên điện thoại"
+              class="ai-phone-mockup block h-full w-full object-contain select-none"
+            />
+          </div>
           <div
-            class="pointer-events-none -mt-2 h-3.5 w-36 rounded-full bg-ink-900/20 blur-md"
+            class="ai-phone-shadow pointer-events-none -mt-2 h-3.5 w-[68%] rounded-full bg-ink-900/20 blur-md"
             aria-hidden="true"
           />
         </div>
@@ -147,20 +149,33 @@ const features = [
   text-wrap: balance;
 }
 
+.ai-stage {
+  aspect-ratio: 460 / 435;
+}
+
 .ai-backdrop {
   position: absolute;
   inset: auto 0 0;
+  height: 94%;
   -webkit-mask-image: radial-gradient(ellipse 64% 66% at 50% 56%, #000 30%, rgb(0 0 0 / 55%) 54%, transparent 72%);
   mask-image: radial-gradient(ellipse 64% 66% at 50% 56%, #000 30%, rgb(0 0 0 / 55%) 54%, transparent 72%);
 }
 
-.ai-phone-mockup {
+.ai-phone-slot {
+  width: 47%;
+  margin-left: 16%;
+  padding-bottom: 5.5%;
+}
+
+.ai-phone-tilt {
+  aspect-ratio: 512 / 1040;
   transform: rotate(2.5deg);
+  transform-origin: center 75%;
   filter: drop-shadow(0 18px 26px rgb(15 23 42 / 18%));
 }
 
 @media (min-width: 768px) {
-  .ai-phone-mockup {
+  .ai-phone-tilt {
     transform: rotate(4deg);
   }
 }

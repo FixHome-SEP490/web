@@ -79,13 +79,13 @@ const highlights = [
         </div>
 
         <ul
-          class="hero-highlights mt-7 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-[13px] font-medium text-white/95 sm:mt-8 md:flex-nowrap md:gap-x-0 md:text-[12.5px] lg:text-sm"
+          class="hero-highlights mt-7 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-[13px] font-medium text-white/95 sm:mt-8 lg:flex-nowrap lg:gap-x-0 lg:text-sm"
         >
           <li
             v-for="(item, index) in highlights"
             :key="item.label"
             class="inline-flex items-center gap-1.5 whitespace-nowrap lg:gap-2"
-            :class="index > 0 ? 'md:ml-3 md:border-l md:border-white/25 md:pl-3 lg:ml-5 lg:pl-5' : ''"
+            :class="index > 0 ? 'lg:ml-5 lg:border-l lg:border-white/25 lg:pl-5' : ''"
           >
             <component
               :is="item.icon"
