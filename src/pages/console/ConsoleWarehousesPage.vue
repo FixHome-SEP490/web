@@ -274,7 +274,12 @@ function movementKind(kind: string) { return MOVEMENT_KINDS[kind] ?? 'Điều ch
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Kho và tồn linh kiện" :count="loading ? null : warehouses.length" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Kho và tồn linh kiện"
+      artwork-src="/images/ui/console-warehouse.png"
+      :count="loading ? null : warehouses.length"
+    />
 
     <Transition name="fh-fade-slide">
       <p v-if="error" role="alert" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-800">{{ error }}</p>

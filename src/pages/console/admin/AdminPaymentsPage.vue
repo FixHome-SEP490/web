@@ -25,6 +25,8 @@ import {
 import { toast } from 'vue-sonner';
 import { FhButton, FhMoney, FhPagination } from '../../../components';
 import { CONSOLE_LOAD_ERROR } from '../../../components/console/console-ui';
+import ConsoleStatCard from '../../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../../components/console/ConsoleTitleArtwork.vue';
 import {
   adminPaymentsApi,
   type AdminPaymentRow,
@@ -234,9 +236,7 @@ onMounted(() => load(1));
     <!-- Header: Modern, Clean, Action Buttons -->
     <header class="animate-slide-up flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center gap-3.5">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100/80 text-brand-600 shadow-2xs">
-          <Wallet :size="24" :stroke-width="2" aria-hidden="true" />
-        </div>
+        <ConsoleTitleArtwork src="/images/ui/console-payments-pos.png" />
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-ink-900">Thanh toán</h1>
           <p class="text-xs text-ink-500 sm:text-sm">
@@ -282,73 +282,49 @@ onMounted(() => load(1));
       class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       data-testid="payments-summary"
     >
-      <!-- 1. Tổng giao dịch -->
-      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-brand-600">
-          <Wallet :size="20" :stroke-width="2" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tổng giao dịch</div>
-          <div class="font-num text-2xl font-bold tracking-tight text-ink-900">
-            {{ total.toLocaleString('vi-VN') }}
-          </div>
+      <ConsoleStatCard
+        featured
+        :loading="loading && total === 0 && !rows.length"
+        label="Tổng giao dịch"
+        :value="total.toLocaleString('vi-VN')"
+        :icon="Wallet"
+        tone="neutral"
+      >
+        <template #sub>
           <!-- Hidden text for spec test assertion compatibility: "2 lần thanh toán" & "400.000" -->
-          <div class="sr-only">
+          <span class="sr-only">
             <span>{{ total }}</span> lần thanh toán, tổng <FhMoney :amount="summary.verifiedAmount" />
-          </div>
-          <div class="text-[11px] font-medium text-ink-400">
-            Hệ thống toàn thời gian
-          </div>
-        </div>
-      </div>
+          </span>
+          <span>Hệ thống toàn thời gian</span>
+        </template>
+      </ConsoleStatCard>
 
-      <!-- 2. Đã thanh toán -->
-      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
-          <CheckCircle2 :size="20" :stroke-width="2" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đã thanh toán</div>
-          <div class="font-num text-2xl font-bold tracking-tight text-emerald-600">
-            {{ summary.verified.toLocaleString('vi-VN') }}
-          </div>
-          <div class="text-[11px] font-medium text-emerald-600">
-            {{ verifiedPercent }}% tổng giao dịch
-          </div>
-        </div>
-      </div>
+      <ConsoleStatCard
+        :loading="loading && total === 0 && !rows.length"
+        label="Đã thanh toán"
+        :value="summary.verified.toLocaleString('vi-VN')"
+        :sublabel="`${verifiedPercent}% tổng giao dịch`"
+        :icon="CheckCircle2"
+        tone="success"
+      />
 
-      <!-- 3. Đang chờ -->
-      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-100 bg-amber-50 text-amber-500">
-          <Clock :size="20" :stroke-width="2" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đang chờ</div>
-          <div class="font-num text-2xl font-bold tracking-tight text-amber-500">
-            {{ summary.pending.toLocaleString('vi-VN') }}
-          </div>
-          <div class="text-[11px] font-medium text-amber-600">
-            {{ pendingPercent }}% đang xử lý
-          </div>
-        </div>
-      </div>
+      <ConsoleStatCard
+        :loading="loading && total === 0 && !rows.length"
+        label="Đang chờ"
+        :value="summary.pending.toLocaleString('vi-VN')"
+        :sublabel="`${pendingPercent}% đang xử lý`"
+        :icon="Clock"
+        tone="warning"
+      />
 
-      <!-- 4. Thất bại -->
-      <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)]">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rose-100 bg-rose-50 text-rose-500">
-          <X :size="20" :stroke-width="2" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Thất bại</div>
-          <div class="font-num text-2xl font-bold tracking-tight text-rose-500">
-            {{ summary.failed.toLocaleString('vi-VN') }}
-          </div>
-          <div class="text-[11px] font-medium text-rose-600">
-            {{ failedPercent }}% cần kiểm tra
-          </div>
-        </div>
-      </div>
+      <ConsoleStatCard
+        :loading="loading && total === 0 && !rows.length"
+        label="Thất bại"
+        :value="summary.failed.toLocaleString('vi-VN')"
+        :sublabel="`${failedPercent}% cần kiểm tra`"
+        :icon="X"
+        tone="danger"
+      />
     </div>
 
     <!-- Overview 3-Box Section: Total Amount Trend + Status Donut + Recent Activities -->

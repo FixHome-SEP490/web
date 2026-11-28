@@ -29,6 +29,7 @@ import {
   Users,
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
+import ConsoleStatCard from '../console/ConsoleStatCard.vue';
 import VoucherGrantForm from './VoucherGrantForm.vue';
 import VoucherStatePanel from './VoucherStatePanel.vue';
 import VoucherDetailModal from './VoucherDetailModal.vue';
@@ -522,49 +523,38 @@ function tabKey(event: KeyboardEvent) {
     <template v-if="!showCreate">
       <!-- 4 Overview Statistic Cards (Image 1) -->
       <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Thống kê tổng quan">
-        <!-- Card 1: Tổng chiến dịch -->
-        <div class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-2xs">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-            <Gift :size="26" :stroke-width="1.75" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Tổng chiến dịch</div>
-            <div class="mt-1 font-num text-2xl font-bold text-ink-900">{{ totalCount }}</div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          featured
+          :loading="state === 'loading'"
+          label="Tổng chiến dịch"
+          :value="totalCount"
+          :icon="Gift"
+          tone="brand"
+        />
 
-        <!-- Card 2: Đang hoạt động -->
-        <div class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-2xs">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <Play :size="26" :stroke-width="1.75" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Đang hoạt động</div>
-            <div class="mt-1 font-num text-2xl font-bold text-ink-900">{{ activeCount }}</div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          :loading="state === 'loading'"
+          label="Đang hoạt động"
+          :value="activeCount"
+          :icon="Play"
+          tone="success"
+        />
 
-        <!-- Card 3: Bản nháp -->
-        <div class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-2xs">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-            <Pause :size="26" :stroke-width="1.75" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Bản nháp</div>
-            <div class="mt-1 font-num text-2xl font-bold text-ink-900">{{ draftCount }}</div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          :loading="state === 'loading'"
+          label="Bản nháp"
+          :value="draftCount"
+          :icon="Pause"
+          tone="warning"
+        />
 
-        <!-- Card 4: Đã kết thúc -->
-        <div class="flex items-center gap-4 rounded-2xl border border-ink-100 bg-white p-5 shadow-2xs">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-            <Calendar :size="26" :stroke-width="1.75" aria-hidden="true" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Đã kết thúc</div>
-            <div class="mt-1 font-num text-2xl font-bold text-ink-900">{{ endedCount }}</div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          :loading="state === 'loading'"
+          label="Đã kết thúc"
+          :value="endedCount"
+          :icon="Calendar"
+          tone="neutral"
+        />
       </section>
 
       <!-- Tabs: "Chiến dịch ưu đãi" & "Cấp cá nhân" (Image 1) -->

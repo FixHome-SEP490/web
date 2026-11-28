@@ -18,6 +18,8 @@ import {
   Calendar,
 } from 'lucide-vue-next';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import { ordersApi, type ServiceOrderItem } from '../../api/orders.api';
 import { dashboardApi, type OperationalDashboard } from '../../api/dashboard.api';
 import { usePagedList } from '../../composables/usePagedList';
@@ -30,9 +32,10 @@ import { categoryIcon } from '../../components/booking/service-icons';
 import { getServiceArtworkUrl } from '../../utils/service-presentation';
 
 const PAGE_SIZE = 20;
-const serviceOrderStates = ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED', 'CANCELLED'] as const;
+const serviceOrderStates = ['IN_PROGRESS', 'ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR', 'COMPLETED', 'CANCELLED'] as const;
 type StatusFilter = 'ALL' | (typeof serviceOrderStates)[number];
 const statusOptions: { value: (typeof serviceOrderStates)[number]; label: string }[] = [
+  { value: 'IN_PROGRESS', label: 'Đang thực hiện (tất cả)' },
   { value: 'ACCEPTED', label: 'Đã nhận đơn' },
   { value: 'EN_ROUTE', label: 'Đang di chuyển' },
   { value: 'UNDER_REPAIR', label: 'Đang sửa chữa' },
@@ -148,7 +151,8 @@ const {
   pageSize: PAGE_SIZE,
   fetch: (p, size) =>
     ordersApi.getConsoleOrdersPage(p, size, {
-      status: statusFilter.value === 'ALL' ? undefined : statusFilter.value,
+      status: statusFilter.value === 'ALL' || statusFilter.value === 'IN_PROGRESS' ? undefined : statusFilter.value,
+      statuses: statusFilter.value === 'IN_PROGRESS' ? ['ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'] : undefined,
       search: search.value,
     }),
 });
@@ -190,41 +194,53 @@ const totalOrdersCount = computed(() => {
   return total.value ?? 0;
 });
 
-// 4 KPI Cards configuration - fully synchronized with FixHome design tokens & icons
-const kpiCards = computed(() => [
+// 4 KPI Cards configuration - clean interactive filters synced with statusFilter
+const kpiCards = computed<{ key: 'total' | 'active' | 'completed' | 'cancelled'; label: string; value: number; icon: typeof FileText; tone: ConsoleStatTone }[]>(() => [
   {
     key: 'total',
     label: 'Tổng đơn',
     value: totalOrdersCount.value,
     icon: FileText,
-    iconBg: 'bg-blue-50 border-blue-200/80 text-blue-600',
-    waveColor: '#93c5fd',
+    tone: 'neutral',
   },
   {
     key: 'active',
     label: 'Đang thực hiện',
     value: activeCount.value,
     icon: CirclePlay,
-    iconBg: 'bg-emerald-50 border-emerald-200/80 text-emerald-600',
-    waveColor: '#86efac',
+    tone: 'brand',
   },
   {
     key: 'completed',
     label: 'Hoàn thành',
     value: completedCount.value,
     icon: CheckCircle2,
-    iconBg: 'bg-purple-50 border-purple-200/80 text-purple-600',
-    waveColor: '#d8b4fe',
+    tone: 'success',
   },
   {
     key: 'cancelled',
     label: 'Đã hủy',
     value: cancelledCount.value,
     icon: CircleX,
-    iconBg: 'bg-rose-50 border-rose-200/80 text-rose-600',
-    waveColor: '#fca5a5',
+    tone: 'danger',
   },
 ]);
+
+const isKpiActive = (key: 'total' | 'active' | 'completed' | 'cancelled') => {
+  if (key === 'total') return statusFilter.value === 'ALL';
+  if (key === 'active') return ['IN_PROGRESS', 'ACCEPTED', 'EN_ROUTE', 'UNDER_REPAIR'].includes(statusFilter.value);
+  if (key === 'completed') return statusFilter.value === 'COMPLETED';
+  return statusFilter.value === 'CANCELLED';
+};
+
+const selectKpiStatus = (key: 'total' | 'active' | 'completed' | 'cancelled') => {
+  if (key === 'total') {
+    statusFilter.value = 'ALL';
+    return;
+  }
+  const target: StatusFilter = key === 'active' ? 'IN_PROGRESS' : key === 'completed' ? 'COMPLETED' : 'CANCELLED';
+  statusFilter.value = isKpiActive(key) ? 'ALL' : target;
+};
 
 // Dynamic list of service options for the filter dropdown
 const serviceOptions = computed(() => {
@@ -545,66 +561,45 @@ function exportToCsv() {
   <div class="space-y-6 pb-12 font-sans">
     <!-- A. Header -->
     <header class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-      <div>
-        <div class="flex items-center gap-3">
-          <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-            Đơn sửa chữa
-          </h1>
-          <span
-            v-if="!loading && !loadError && totalOrdersCount != null"
-            class="inline-flex items-center justify-center rounded-full bg-slate-100 px-2.5 py-0.5 font-num text-xs font-semibold text-slate-700"
-          >
-            {{ totalOrdersCount }}
-          </span>
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-orders.png" />
+        <div>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
+              Đơn sửa chữa
+            </h1>
+            <span
+              v-if="!loading && !loadError && totalOrdersCount != null"
+              class="inline-flex items-center justify-center rounded-full bg-slate-100 px-2.5 py-0.5 font-num text-xs font-semibold text-slate-700"
+            >
+              {{ totalOrdersCount }}
+            </span>
+          </div>
+          <p class="mt-0.5 text-sm text-ink-500">
+            Quản lý và theo dõi các đơn sửa chữa trên hệ thống
+          </p>
         </div>
-        <p class="mt-1 text-sm text-ink-500">
-          Quản lý và theo dõi các đơn sửa chữa trên hệ thống
-        </p>
       </div>
     </header>
 
     <!-- B. Bốn thẻ thống kê (4 KPI Cards) -->
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê đơn sửa chữa">
-      <div
+      <ConsoleStatCard
         v-for="kpi in kpiCards"
         :key="kpi.key"
-        class="relative flex items-center gap-4 overflow-hidden rounded-2xl border border-ink-100/90 bg-white p-5 shadow-xs transition-shadow hover:shadow-sm"
-      >
-        <!-- Icon Container -->
-        <div
-          class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border"
-          :class="kpi.iconBg"
-        >
-          <component :is="kpi.icon" :size="24" :stroke-width="1.8" aria-hidden="true" />
-        </div>
-
-        <!-- Metric Details -->
-        <div class="min-w-0 flex-1">
-          <span class="block truncate text-xs font-medium text-ink-500">
-            {{ kpi.label }}
-          </span>
-          <span class="mt-0.5 block font-num text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
-            {{ kpi.value }}
-          </span>
-        </div>
-
-        <!-- Decorative subtle wave illustration in bottom right -->
-        <svg
-          class="pointer-events-none absolute -bottom-2 -right-2 h-16 w-28 opacity-30"
-          viewBox="0 0 100 60"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M0 45 C30 20, 60 55, 100 35 L100 60 L0 60 Z"
-            :fill="kpi.waveColor"
-          />
-        </svg>
-      </div>
+        interactive
+        :active="isKpiActive(kpi.key)"
+        :loading="opsQuery.loading.value && !ops"
+        :label="kpi.label"
+        :value="kpi.value"
+        :icon="kpi.icon"
+        :tone="kpi.tone"
+        @click="selectKpiStatus(kpi.key)"
+      />
     </section>
 
     <!-- C. Thanh tìm kiếm và bộ lọc (Search and Filter bar) -->
-    <section class="flex flex-wrap items-center gap-3">
+    <section class="relative z-20 flex flex-wrap items-center gap-3">
       <!-- 1. Search input -->
       <div class="relative min-w-[260px] flex-1 max-w-sm">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />

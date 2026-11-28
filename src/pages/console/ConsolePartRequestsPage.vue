@@ -26,12 +26,14 @@ import {
   Copy,
   X,
 } from 'lucide-vue-next';
-import { FhMoney, FhButton, FhConfirmDialog, FhSkeleton } from '../../components';
+import { FhMoney, FhButton, FhConfirmDialog } from '../../components';
 import ShippingShareBreakdown from '../../components/ShippingShareBreakdown.vue';
 import DeliveryOperationsPanel from '../../components/DeliveryOperationsPanel.vue';
 import DeliveryTermsPanel from '../../components/DeliveryTermsPanel.vue';
 import { isDeliveryPhysicalRequestId } from '../../api/w3-delivery-physical.api';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard, { type ConsoleStatTone } from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import FaultyPartInspectionModal from '../../components/console/FaultyPartInspectionModal.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
@@ -199,12 +201,23 @@ const showToast = (type: 'success' | 'error', text: string) => {
 };
 
 const serverStatusCounts = ref<Record<string, number> | null>(null);
+const cachedAllTotal = ref(0);
+
+const allStatusTotalCount = computed(() => {
+  const counts = serverStatusCounts.value;
+  if (counts) {
+    const sum = Object.values(counts).reduce((acc, n) => acc + Number(n || 0), 0);
+    if (sum > 0 || statusFilter.value !== 'ALL') return sum;
+  }
+  return cachedAllTotal.value || totalCount.value;
+});
 
 const stats = computed(() => {
   const reqs = requests.value;
   const counts = serverStatusCounts.value;
   const count = (status: string) => counts ? (counts[status] ?? 0) : reqs.filter((r) => displayPartRequestStatus(r).toLowerCase() === status).length;
   return [
+    { key: 'all', label: 'Tổng yêu cầu', value: allStatusTotalCount.value, statusValue: 'ALL' },
     { key: 'requested', label: 'Chờ chuẩn bị', value: count('requested'), statusValue: 'REQUESTED' },
     { key: 'ready', label: 'Sẵn sàng', value: count('ready'), statusValue: 'READY' },
     { key: 'delivering', label: 'Đang giao', value: count('delivering'), statusValue: 'DELIVERING' },
@@ -215,6 +228,7 @@ const stats = computed(() => {
 
 function statIcon(key: string) {
   switch (key) {
+    case 'all': return Boxes;
     case 'requested': return Package;
     case 'ready': return Truck;
     case 'delivering': return ArrowLeftRight;
@@ -224,21 +238,17 @@ function statIcon(key: string) {
   }
 }
 
-function statIconBg(key: string) {
+function statTone(key: string): ConsoleStatTone {
   switch (key) {
-    case 'requested': return 'bg-amber-50 text-amber-500 border border-amber-100/60';
-    case 'ready': return 'bg-sky-50 text-sky-500 border border-sky-100/60';
-    case 'delivering': return 'bg-purple-50 text-purple-500 border border-purple-100/60';
-    case 'received': return 'bg-emerald-50 text-emerald-500 border border-emerald-100/60';
-    case 'completed': return 'bg-blue-50 text-blue-600 border border-blue-100/60';
-    default: return 'bg-slate-50 text-slate-500 border border-slate-100/60';
+    case 'all': return 'brand';
+    case 'requested': return 'warning';
+    case 'ready': return 'info';
+    case 'delivering': return 'brand';
+    case 'received': return 'success';
+    case 'completed': return 'brand';
+    default: return 'neutral';
   }
 }
-
-const countFor = (status: string) => {
-  const counts = serverStatusCounts.value;
-  return counts ? (counts[status] ?? 0) : requests.value.filter((r) => displayPartRequestStatus(r).toLowerCase() === status).length;
-};
 
 const setStatusFilter = (val: string) => {
   statusFilter.value = val;
@@ -262,6 +272,7 @@ const loadData = async () => {
     if (version !== loadVersion) return;
     requests.value = res.data;
     totalCount.value = res.total;
+    if (statusFilter.value === 'ALL') cachedAllTotal.value = res.total;
     serverStatusCounts.value = res.statusCounts;
     await loadWarehouseAllocations(res.data, version);
     void loadVisibleCustody(res.data, version);
@@ -678,9 +689,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
     <!-- Header -->
     <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 shadow-xs">
-          <Boxes :size="22" aria-hidden="true" />
-        </div>
+        <ConsoleTitleArtwork src="/images/ui/console-part-requests.png" />
         <div class="min-w-0">
           <div class="flex items-center gap-2.5 flex-wrap">
             <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Yêu cầu linh kiện</h1>
@@ -701,76 +710,22 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
       </div>
     </header>
 
-    <!-- 5 Summary Status Cards -->
-    <section class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3" aria-label="Số yêu cầu theo trạng thái trên trang này" title="Tính trên trang đang xem">
-      <div
+    <!-- 6 Interactive Summary Status Cards (Tổng + 5 trạng thái) -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5" aria-label="Số yêu cầu theo trạng thái" title="Nhấn để lọc theo trạng thái">
+      <ConsoleStatCard
         v-for="stat in stats"
         :key="stat.key"
-        class="rounded-2xl border border-slate-100 bg-white p-3.5 sm:p-4 shadow-(--shadow-e1) flex items-center gap-3 transition-all hover:shadow-md cursor-pointer"
-        :class="statusFilter === stat.statusValue ? 'ring-2 ring-blue-500 bg-blue-50/20' : ''"
-        @click="setStatusFilter(statusFilter === stat.statusValue ? 'ALL' : stat.statusValue)"
-      >
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" :class="statIconBg(stat.key)">
-          <component :is="statIcon(stat.key)" :size="20" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="whitespace-nowrap text-xs text-slate-500 font-medium leading-tight">{{ stat.label }}</div>
-          <div class="mt-0.5 font-num text-xl sm:text-2xl font-bold text-slate-900">{{ stat.value }}</div>
-        </div>
-      </div>
+        interactive
+        compact
+        :active="statusFilter === stat.statusValue"
+        :loading="loading && serverStatusCounts === null && !requests.length"
+        :label="stat.label"
+        :value="stat.value"
+        :icon="statIcon(stat.key)"
+        :tone="statTone(stat.key)"
+        @click="setStatusFilter(stat.statusValue === 'ALL' || statusFilter === stat.statusValue ? 'ALL' : stat.statusValue)"
+      />
     </section>
-
-    <!-- Quick filter pills -->
-    <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs sm:text-sm">
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'ALL' ? 'bg-blue-100 text-blue-800 font-semibold ring-1 ring-blue-300' : 'bg-blue-50/70 text-blue-700 hover:bg-blue-100/70'"
-        @click="setStatusFilter('ALL')"
-      >
-        Tất cả ({{ totalCount }})
-      </button>
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'REQUESTED' ? 'bg-amber-100 text-amber-800 font-semibold ring-1 ring-amber-300' : 'bg-amber-50/70 text-amber-700 hover:bg-amber-100/70'"
-        @click="setStatusFilter('REQUESTED')"
-      >
-        Chờ chuẩn bị ({{ countFor('requested') }})
-      </button>
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'READY' ? 'bg-sky-100 text-sky-800 font-semibold ring-1 ring-sky-300' : 'bg-sky-50/70 text-sky-700 hover:bg-sky-100/70'"
-        @click="setStatusFilter('READY')"
-      >
-        Sẵn sàng ({{ countFor('ready') }})
-      </button>
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'DELIVERING' ? 'bg-purple-100 text-purple-800 font-semibold ring-1 ring-purple-300' : 'bg-purple-50/70 text-purple-700 hover:bg-purple-100/70'"
-        @click="setStatusFilter('DELIVERING')"
-      >
-        Đang giao ({{ countFor('delivering') }})
-      </button>
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'RECEIVED' ? 'bg-emerald-100 text-emerald-800 font-semibold ring-1 ring-emerald-300' : 'bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100/70'"
-        @click="setStatusFilter('RECEIVED')"
-      >
-        Đã bàn giao ({{ countFor('received') }})
-      </button>
-      <button
-        type="button"
-        class="rounded-xl px-3.5 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap"
-        :class="statusFilter === 'COMPLETED' ? 'bg-slate-200 text-slate-800 font-semibold ring-1 ring-slate-400' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
-        @click="setStatusFilter('COMPLETED')"
-      >
-        Hoàn tất ({{ countFor('completed') }})
-      </button>
-    </div>
 
     <!-- Search & Dropdown Filter Row -->
     <div class="rounded-2xl border border-slate-100 bg-white p-2.5 sm:p-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-wrap items-center gap-2.5">
@@ -910,12 +865,25 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
           </div>
 
           <!-- Skeleton loading -->
-          <div v-if="loading && !requests.length" class="space-y-3 p-4" aria-busy="true">
-            <FhSkeleton v-for="n in 5" :key="n" height="68px" rounded="lg" />
+          <div v-if="loading" class="divide-y divide-slate-100/80" aria-busy="true">
+            <div v-for="n in 5" :key="`pr-list-skel-${n}`" class="flex items-start gap-3 p-3.5 animate-pulse">
+              <div class="mt-0.5 h-9 w-9 shrink-0 rounded-xl bg-ink-200/75" />
+              <div class="min-w-0 flex-1 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="h-4 w-24 rounded bg-ink-200/75" />
+                  <div class="h-3 w-20 rounded bg-ink-200/60" />
+                </div>
+                <div class="h-3.5 w-3/4 rounded bg-ink-200/70" />
+                <div class="flex items-center justify-between gap-2">
+                  <div class="h-3 w-32 rounded bg-ink-200/60" />
+                  <div class="h-5 w-20 rounded-md bg-ink-200/75" />
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Empty list -->
-          <p v-else-if="!requests.length" class="px-4 py-12 text-center text-sm text-slate-500">Không có yêu cầu linh kiện nào phù hợp.</p>
+          <p v-else-if="!displayedRequests.length" class="px-4 py-12 text-center text-sm text-slate-500">Không có yêu cầu linh kiện nào phù hợp.</p>
 
           <!-- List items -->
           <ul v-else class="divide-y divide-slate-100/80" :aria-busy="loading">

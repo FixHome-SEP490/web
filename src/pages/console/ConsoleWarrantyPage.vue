@@ -19,13 +19,14 @@ import {
   RotateCcw,
   RotateCw,
   Search,
-  ShieldCheck,
   User,
   UserPlus,
   Wrench,
 } from 'lucide-vue-next';
 import { FhButton, FhSkeleton } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import WarrantyDecisionModal, { type WarrantyDecisionMode } from '../../components/console/WarrantyDecisionModal.vue';
@@ -336,8 +337,8 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
   <div class="w-full space-y-5 pb-12">
     <!-- Header Section (Matching Demo UI) -->
     <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <ShieldCheck :size="28" class="text-blue-600 shrink-0" aria-hidden="true" />
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-warranty.png" />
         <div>
           <!-- Title without count badge as requested -->
           <div class="flex items-center gap-2.5">
@@ -734,48 +735,38 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
 
     <!-- TAB 2: TỶ LỆ THEO KỸ THUẬT VIÊN -->
     <template v-else>
-      <!-- 4 Metric Cards (Matching Demo UI) -->
+      <!-- 3 Metric Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <!-- Card 1: Tổng kỹ thuật viên -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <Briefcase :size="20" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Tổng kỹ thuật viên</div>
-            <div class="mt-0.5 text-2xl font-bold font-num text-ink-900">{{ totalTechCount }}</div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          featured
+          :loading="statsLoading && !stats.length"
+          label="Tổng kỹ thuật viên"
+          :value="totalTechCount"
+          :icon="Briefcase"
+          tone="neutral"
+        />
 
-        <!-- Card 2: Có yêu cầu bảo hành -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <Wrench :size="20" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Có yêu cầu bảo hành</div>
-            <div class="mt-0.5 flex items-baseline gap-2">
-              <span class="text-2xl font-bold font-num text-ink-900">{{ techWithClaimsCount }}</span>
-              <span class="inline-flex items-center rounded-md bg-blue-100/70 px-1.5 py-0.5 text-xs font-semibold text-blue-700">
-                {{ techWithClaimsPct }}%
-              </span>
-            </div>
-          </div>
-        </div>
+        <ConsoleStatCard
+          :loading="statsLoading && !stats.length"
+          label="Có yêu cầu bảo hành"
+          :value="techWithClaimsCount"
+          :icon="Wrench"
+          tone="brand"
+        >
+          <template #badge>
+            <span class="inline-flex items-center rounded-[var(--radius-sm)] bg-ink-100 px-1.5 py-0.5 text-xs font-medium text-ink-700 font-num">
+              {{ techWithClaimsPct }}%
+            </span>
+          </template>
+        </ConsoleStatCard>
 
-        <!-- Card 3: Tỷ lệ bảo hành chung -->
-        <div class="flex items-center gap-3.5 rounded-2xl border border-ink-100 bg-white p-4 shadow-xs">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <CheckCircle2 :size="20" />
-          </div>
-          <div>
-            <div class="text-xs font-medium text-ink-500">Tỷ lệ bảo hành chung</div>
-            <div class="mt-0.5 flex items-baseline gap-2">
-              <span class="text-2xl font-bold font-num text-ink-900">{{ overallClaimRatePct }}%</span>
-            </div>
-          </div>
-        </div>
-
+        <ConsoleStatCard
+          :loading="statsLoading && !stats.length"
+          label="Tỷ lệ bảo hành chung"
+          :value="`${overallClaimRatePct}%`"
+          :icon="CheckCircle2"
+          tone="success"
+        />
       </div>
 
       <!-- Filter Toolbar -->

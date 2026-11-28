@@ -176,7 +176,12 @@ watch(page, (nextPage, previousPage) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Yêu cầu hỗ trợ" :count="loading || error ? null : total" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Yêu cầu hỗ trợ"
+      artwork-src="/images/ui/console-support-desk.png"
+      :count="loading || error ? null : total"
+    />
     <p v-if="isAdmin" class="animate-slide-up text-sm text-ink-600" role="status">Chỉ xem. Quản lý dịch vụ thực hiện các thao tác xử lý.</p>
     <p v-if="serviceOrderIdFilter" class="animate-slide-up text-sm text-ink-600" role="status">Đang xem yêu cầu hỗ trợ của một đơn. <router-link :to="`/console/orders/${encodeURIComponent(serviceOrderIdFilter)}`" class="font-medium text-brand-700 underline">Xem đơn sửa chữa</router-link> · <router-link to="/console/support" class="font-medium text-brand-700 underline">Xem tất cả yêu cầu</router-link></p>
 

@@ -2,7 +2,7 @@
 // Admin: customers' identity checks (PO 14/10/2026), the tab "Khách hàng" of
 // the review page. Waiting ones first by default; the server filters, searches
 // (name without accents, email, phone, CCCD) and pages.
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   Users,
   Clock,
@@ -37,15 +37,34 @@ import { useCanDecideReview } from '../../composables/useCanDecideReview';
 
 const canDecide = useCanDecideReview();
 
-const emit = defineEmits<{
-  (e: 'updated'): void;
-}>();
-
 type StatusFilter = CustomerVerificationRecordStatus | 'all';
 const STATUS_FILTERS: readonly StatusFilter[] = ['pending', 'verified', 'rejected', 'all'];
 const PAGE_SIZE = 10;
 
+const props = defineProps<{
+  statusFilter?: StatusFilter;
+}>();
+
+const emit = defineEmits<{
+  (e: 'updated'): void;
+  (e: 'update:statusFilter', value: StatusFilter): void;
+}>();
+
 const status = useQueryChoice<StatusFilter>('kyc', STATUS_FILTERS, 'pending');
+
+watch(
+  () => props.statusFilter,
+  (next) => {
+    if (next && next !== status.value) status.value = next;
+  },
+);
+watch(
+  status,
+  (next) => {
+    emit('update:statusFilter', next);
+  },
+  { immediate: true },
+);
 const { input: searchInput, search } = useQuerySearch('cq');
 
 // Date range filter
@@ -251,7 +270,7 @@ function getInitials(name?: string | null): string {
 <template>
   <div class="space-y-4 sm:space-y-5" data-testid="customer-verifications">
     <!-- Filter Bar -->
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="relative z-20 flex flex-wrap items-center gap-3">
       <!-- 1. Search input -->
       <div class="relative flex-1 min-w-[240px] max-w-md">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
@@ -303,7 +322,7 @@ function getInitials(name?: string | null): string {
         <!-- Date picker popover -->
         <div
           v-if="isDatePickerOpen"
-          class="absolute left-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-2 shadow-lg"
+          class="absolute left-0 top-full z-40 mt-1.5 w-60 rounded-xl border border-ink-200 bg-white p-2 shadow-lg"
           @click.stop
         >
           <div class="px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-ink-400">Khoảng thời gian</div>
@@ -350,7 +369,7 @@ function getInitials(name?: string | null): string {
     <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
 
     <template v-else>
-      <div class="overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-xs transition-opacity" :class="{ 'opacity-60': changingPage }">
+      <div class="relative z-10 overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-xs transition-opacity" :class="{ 'opacity-60': changingPage }">
         <div class="overflow-x-auto overscroll-x-contain">
           <table class="w-full text-left text-sm border-collapse">
             <thead>

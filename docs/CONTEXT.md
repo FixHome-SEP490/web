@@ -1,6 +1,6 @@
 # Context repo web — FixHome
 
-> Cập nhật lần cuối: 2026-11-27 18:25 (UTC+7) · Người cập nhật (git): Hgnv11 · Nhánh: dev
+> Cập nhật lần cuối: 2026-11-27 22:42 (UTC+7) · Người cập nhật (git): Lạc Vỹ · Nhánh: LacVy
 
 ## 0. Quy tắc cập nhật file này (bắt buộc)
 
@@ -635,6 +635,10 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - Tích hợp Web T4b + T3c trên nhánh `foxonworld/fixhome-platform-first-web-integration-20261029` giữ cả luồng gián đoạn/đặt lại điền sẵn T4b và nhóm linh kiện lịch sử chỉ đọc T3c; conflict chỉ ở `docs/CONTEXT.md`. Focused và full gate đã chạy; chưa push, chưa release, signed-in E2E, Browser và Backend DEV CHƯA KIỂM CHỨNG. Chi tiết `docs/PLATFORM-FIRST-WEB-INTEGRATION-REVIEW.md`.
 
 ## 9. Nhật ký cập nhật context
+
+- 2026-11-27 22:42 (UTC+7) | Lạc Vỹ | LacVy | Đồng bộ ConsoleStatCard trên Console Admin/SM (thêm active filter ở Đơn sửa chữa, Yêu cầu linh kiện, Hoàn trả linh kiện, Duyệt danh tính), thống nhất skeleton loading, thêm hiệu ứng đếm số và gộp 3 ConsoleStatCard sau conflict ở Bảo hành
+- 2026-11-27 22:23 (UTC+7) | Lạc Vỹ | LacVy | Sửa lớp z-index popover chọn ngày bị bảng đè ở Duyệt danh tính/Đơn sửa chữa, bỏ thanh lọc trùng ở Yêu cầu/Hoàn trả linh kiện, giữ tổng đếm allStatusTotalCount khi lọc và thêm skeleton bảng/drawer ở Duyệt hồ sơ
+- 2026-11-27 22:19 (UTC+7) | Lạc Vỹ | LacVy | Thêm bộ 12 ảnh 3D badge nền trong suốt (Wave 1) qua ConsoleTitleArtwork không viền ở đầu tiêu đề các trang Console Admin/SM (Chi hộ và rút tiền chưa tạo ảnh riêng do tạm hết quota model ảnh)
 - 2026-11-27 18:25 (UTC+7) | Hgnv11 | dev | Chi tiết bảo hành web: liệt kê mọi bảo hành của đơn, thẻ đề xuất 2 cột, stepper tiến trình.
 - 2026-11-27 17:25 (UTC+7) | Hgnv11 | dev | Giao diện bảo hành của quản lý dịch vụ làm lại: bước tiếp theo, thẻ đề xuất/quyết định/kết quả, lịch sử từ giờ thật, gỡ phân công lại và số liệu tự bịa.
 - 2026-11-27 01:41 (UTC+7) | Hgnv11 | dev | Trang lượt sửa của khách bỏ máy đã đặt lại (cờ rebooked của checkout, cần backend mới) khỏi bảng chọn đặt lịch máy dừng và khỏi nút đặt lại máy không sửa được, thay bằng nút Đã đặt lịch mới · Xem tới lượt/đơn mới (rebookedTo); CHƯA KIỂM CHỨNG trên trình duyệt
@@ -672,6 +676,3 @@ Role trong web là enum viết hoa `UserRole`; `auth.store` đổi role viết t
 - 2026-11-21 16:13 (UTC+7) | Hgnv11 | dev | Duyệt hồ sơ: danh sách Kỹ năng và cấp độ cuộn riêng (cao tối đa 20rem), không kéo dài cả cửa sổ chi tiết
 - 2026-11-21 15:35 (UTC+7) | Hgnv11 | dev | Lịch hẹn trụ sở có nút Xem (chi tiết lịch); Duyệt hồ sơ chỉ đọc buổi gặp, ghi nhận đã gặp/vắng/cho đặt lại chỉ ở Lịch hẹn trụ sở; thông báo OFFICE_VISIT_* của thợ trên web mở /tech/profile
 - 2026-11-21 15:10 (UTC+7) | Hgnv11 | dev | Quản lý dịch vụ có trang Lịch hẹn trụ sở (/console/office-visits: đã gặp, vắng, cho đặt lại), nhận thông báo OFFICE_VISIT_BOOKED; admin có nút Mở lại hồ sơ ở trang Duyệt hồ sơ
-- 2026-11-21 14:46 (UTC+7) | ToanAltF4 | fix/sm-part-stats-2111 | SM yêu cầu linh kiện: ô đếm trạng thái đổi theo dòng sau Chuẩn bị mã kho (BUG DETECTOR 212)
-- 2026-11-21 12:46 (UTC+7) | ToanAltF4 | fix/web-voucher-dialogs-2111 | BUG 207-210: lớp voucher đóng sẵn, nút voucher không còn ghi Máy chủ chưa sẵn sàng khi chưa chọn, trạng thái yêu cầu linh kiện cập nhật ngay sau mã kho/bàn giao, hộp xác nhận có role dialog
-- 2026-11-21 04:13 (UTC+7) | ToanAltF4 | fix/web-retest-2111d | Console Huỷ đơn: lý do hệ thống ghi tiếng Anh (khách từ chối báo giá) hiện tiếng Việt

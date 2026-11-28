@@ -23,6 +23,8 @@ import {
 } from 'lucide-vue-next';
 import FhButton from '../../components/FhButton.vue';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
+import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleTable, { type ConsoleColumn } from '../../components/console/ConsoleTable.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
@@ -283,7 +285,19 @@ const confirmAction = async () => {
 };
 
 // Filter shortcuts from stat cards
-const setStatusFilter = (st: OfficeVisitStatus | '') => {
+const missedCardTarget = ref<'missed' | 'needSupport'>('missed');
+const setStatusFilter = (st: OfficeVisitStatus | '', cardTarget: 'missed' | 'needSupport' = 'missed') => {
+  if (st === 'missed') {
+    if (statusFilter.value === 'missed' && missedCardTarget.value === cardTarget) {
+      statusFilter.value = '';
+      missedCardTarget.value = 'missed';
+    } else {
+      missedCardTarget.value = cardTarget;
+      statusFilter.value = 'missed';
+    }
+    return;
+  }
+  missedCardTarget.value = 'missed';
   statusFilter.value = statusFilter.value === st ? '' : st;
 };
 
@@ -298,10 +312,8 @@ onMounted(async () => {
   <div class="space-y-6">
     <!-- Header Section -->
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-start gap-3.5">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-100/90 bg-blue-50 text-blue-600 shadow-xs">
-          <Calendar :size="22" class="stroke-[2]" aria-hidden="true" />
-        </div>
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-office-visits.png" />
         <div class="min-w-0">
           <h1 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">Lịch hẹn trụ sở</h1>
           <p class="mt-0.5 text-xs text-ink-500 sm:text-sm text-pretty">
@@ -312,82 +324,54 @@ onMounted(async () => {
     </div>
 
     <!-- 4 Stat Cards -->
-    <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-      <!-- Tổng lịch -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border bg-white p-4 text-left transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        :class="statusFilter === '' ? 'border-brand-200 bg-brand-50/20 shadow-xs ring-1 ring-brand-200' : 'border-ink-100 hover:border-ink-200 hover:shadow-xs'"
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === ''"
+        :loading="loading && !allVisits.length"
+        label="Tổng lịch"
+        :value="stats.total"
+        :icon="Calendar"
+        tone="brand"
         title="Bấm để lọc tất cả lịch hẹn"
         @click="setStatusFilter('')"
-      >
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-100/80 bg-blue-50 text-blue-600">
-          <Calendar :size="20" class="stroke-[2]" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Tổng lịch</div>
-          <div class="mt-0.5 font-num text-2xl font-bold text-ink-900">
-            {{ loading && !allVisits.length ? '—' : stats.total }}
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- Đã có mặt -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border bg-white p-4 text-left transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        :class="statusFilter === 'attended' ? 'border-emerald-300 bg-emerald-50/30 shadow-xs ring-1 ring-emerald-300' : 'border-ink-100 hover:border-ink-200 hover:shadow-xs'"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'attended'"
+        :loading="loading && !allVisits.length"
+        label="Đã có mặt"
+        :value="stats.attended"
+        :icon="CheckCircle2"
+        tone="success"
         title="Bấm để lọc lịch đã có mặt"
         @click="setStatusFilter('attended')"
-      >
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100/80 bg-emerald-50 text-emerald-600">
-          <CheckCircle2 :size="20" class="stroke-[2]" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Đã có mặt</div>
-          <div class="mt-0.5 font-num text-2xl font-bold text-ink-900">
-            {{ loading && !allVisits.length ? '—' : stats.attended }}
-          </div>
-        </div>
-      </button>
+      />
 
-      <!-- Vắng -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border bg-white p-4 text-left transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        :class="statusFilter === 'missed' ? 'border-amber-300 bg-amber-50/30 shadow-xs ring-1 ring-amber-300' : 'border-ink-100 hover:border-ink-200 hover:shadow-xs'"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'missed' && missedCardTarget === 'missed'"
+        :loading="loading && !allVisits.length"
+        label="Vắng"
+        :value="stats.missed"
+        :icon="UserX"
+        tone="warning"
         title="Bấm để lọc lịch vắng mặt"
-        @click="setStatusFilter('missed')"
-      >
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-100/80 bg-amber-50 text-amber-600">
-          <UserX :size="20" class="stroke-[2]" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Vắng</div>
-          <div class="mt-0.5 font-num text-2xl font-bold text-ink-900">
-            {{ loading && !allVisits.length ? '—' : stats.missed }}
-          </div>
-        </div>
-      </button>
+        @click="setStatusFilter('missed', 'missed')"
+      />
 
-      <!-- Cần hỗ trợ lại -->
-      <button
-        type="button"
-        class="flex items-center gap-3.5 rounded-2xl border bg-white p-4 text-left transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-        :class="statusFilter === 'missed' ? 'border-indigo-300 bg-indigo-50/30 shadow-xs ring-1 ring-indigo-300' : 'border-ink-100 hover:border-ink-200 hover:shadow-xs'"
+      <ConsoleStatCard
+        interactive
+        :active="statusFilter === 'missed' && missedCardTarget === 'needSupport'"
+        :loading="loading && !allVisits.length"
+        label="Cần hỗ trợ lại"
+        :value="stats.needSupport"
+        :icon="RotateCcw"
+        tone="neutral"
         title="Kỹ thuật viên vắng lịch cần quản lý hỗ trợ cho phép đặt lại"
-        @click="setStatusFilter('missed')"
-      >
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-100/80 bg-indigo-50 text-indigo-600">
-          <RotateCcw :size="20" class="stroke-[2]" aria-hidden="true" />
-        </div>
-        <div class="min-w-0">
-          <div class="text-xs font-medium text-ink-500">Cần hỗ trợ lại</div>
-          <div class="mt-0.5 font-num text-2xl font-bold text-ink-900">
-            {{ loading && !allVisits.length ? '—' : stats.needSupport }}
-          </div>
-        </div>
-      </button>
+        @click="setStatusFilter('missed', 'needSupport')"
+      />
     </div>
 
     <!-- Filter & Search Bar -->
@@ -401,6 +385,7 @@ onMounted(async () => {
               id="filter-status"
               v-model="statusFilter"
               class="h-10 w-full appearance-none rounded-xl border border-ink-200 bg-white px-3.5 pr-8 text-sm text-ink-800 transition-colors focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              @change="missedCardTarget = 'missed'"
             >
               <option value="">Tất cả trạng thái</option>
               <option value="scheduled">Chờ xác nhận</option>
