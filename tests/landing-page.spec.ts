@@ -53,6 +53,11 @@ async function setup(path = '/') {
         component: { template: '<div />' },
         meta: { requiresAuth: true, roles: ['CUSTOMER'] },
       },
+      {
+        path: '/app/bookings/ai',
+        component: { template: '<div />' },
+        meta: { requiresAuth: true, roles: ['CUSTOMER'] },
+      },
       ...[
         '/login',
         '/app',
@@ -165,22 +170,32 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('preserves the booking destination for a guest CTA', async () => {
+  it('preserves the booking and AI destinations for a guest CTA', async () => {
     const context = await setup();
     const wrapper = mount(LandingHero, context);
     await wrapper.get('button').trigger('click');
     await flushPromises();
     expect(context.router.currentRoute.value.path).toBe('/login');
     expect(context.router.currentRoute.value.query.redirect).toBe('/app/bookings/new');
+
+    await wrapper.get('a[href="/app/bookings/ai"]').trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.path).toBe('/login');
+    expect(context.router.currentRoute.value.query.redirect).toBe('/app/bookings/ai');
     wrapper.unmount();
   });
 
-  it('identifies the generated hero image as an illustration, not a FixHome employee', async () => {
+  it('renders the official hero background image with high fetch priority and core value propositions', async () => {
     const wrapper = mount(LandingHero, await setup());
-    const alt = wrapper.get('img').attributes('alt') ?? '';
-    expect(alt).toMatch(/^Minh họa kỹ thuật viên/);
-    expect(alt).toContain('kiểm tra máy lạnh tại nhà');
-    expect(alt).not.toContain('FixHome');
+    const img = wrapper.get('img');
+    expect(img.attributes('src')).toBe('/images/hero-technician-bg.webp');
+    expect(img.attributes('fetchpriority')).toBe('high');
+    expect(wrapper.text()).toContain('Sửa thiết bị gia dụng tại nhà');
+    expect(wrapper.text()).toContain('Nhà cần sửa.');
+    expect(wrapper.text()).toContain('Có FixHome bên bạn.');
+    expect(wrapper.text()).toContain('Thợ đã xác minh');
+    expect(wrapper.text()).toContain('Chi phí minh bạch');
+    expect(wrapper.text()).toContain('Đặt lịch thuận tiện');
     wrapper.unmount();
   });
 
@@ -295,27 +310,35 @@ describe('Public landing page', () => {
     wrapper.unmount();
   });
 
-  it('explains the four AI guidance stages and keeps human assessment authoritative', async () => {
+  it('presents the three-column AI assistant overview, mockup, features and advisory note', async () => {
     const context = await setup();
     const wrapper = mount(LandingDiagnosis, context);
 
+    expect(wrapper.text()).toContain('Trợ lý hỗ trợ thông minh');
     expect(wrapper.text()).toContain('Chưa rõ hỏng ở đâu?');
-    expect(wrapper.text()).toContain('Để AI gợi ý bước đầu');
-    expect(wrapper.findAll('img')).toHaveLength(0);
-    expect(wrapper.findAll('ol > li')).toHaveLength(4);
+    expect(wrapper.text()).toContain('Để FixHome gợi ý cho bạn.');
+    expect(wrapper.text()).toContain(
+      'Mô tả dấu hiệu, gửi ảnh thiết bị và nhận gợi ý về nguyên nhân, hướng xử lý và dịch vụ phù hợp.',
+    );
 
-    // Verify 4 stages exist
-    expect(wrapper.text()).toContain('Mô tả sự cố');
-    expect(wrapper.text()).toContain('Trao đổi với trợ lý AI');
-    expect(wrapper.text()).toContain('Nhận gợi ý ban đầu');
-    expect(wrapper.text()).toContain('Tự chọn dịch vụ và tiếp tục đặt lịch');
-    expect(wrapper.text()).toContain('AI chỉ đưa ra gợi ý ban đầu');
+    const img = wrapper.get('img[src="/images/steps/step-3-ai-result.png"]');
+    expect(img.attributes('alt')).toContain('trợ lý AI FixHome');
+    expect(wrapper.findAll('ol > li')).toHaveLength(3);
+
+    expect(wrapper.text()).toContain('Nhận diện sự cố');
+    expect(wrapper.text()).toContain('Gợi ý giải pháp phù hợp');
+    expect(wrapper.text()).toContain('Đặt dịch vụ');
+    expect(wrapper.text()).toContain(
+      'Gợi ý từ AI chỉ mang tính tham khảo, không thay thế việc kiểm tra thực tế của kỹ thuật viên.',
+    );
     expect(wrapper.text()).not.toContain('Độ chính xác cao');
-    expect(wrapper.text()).toContain('Kỹ thuật viên kiểm tra thực tế');
-    expect(wrapper.text()).toContain('bạn duyệt báo giá trước khi sửa');
 
-    // Verify CTA
-    expect(wrapper.text()).toContain('Phân tích sự cố bằng AI');
+    const cta = wrapper.get('button');
+    expect(cta.text()).toContain('Phân tích sự cố ngay');
+    await cta.trigger('click');
+    await flushPromises();
+    expect(context.router.currentRoute.value.path).toBe('/login');
+    expect(context.router.currentRoute.value.query.redirect).toBe('/app/bookings/ai');
     wrapper.unmount();
   });
 
