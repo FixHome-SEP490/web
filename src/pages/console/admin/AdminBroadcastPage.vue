@@ -84,9 +84,13 @@ async function send() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Gửi thông báo toàn hệ thống" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Gửi thông báo toàn hệ thống"
+      artwork-src="/images/ui/console-broadcast.png"
+    />
     <p v-if="result" :role="result.tone === 'error' ? 'alert' : 'status'" data-testid="broadcast-result" class="rounded-[var(--radius-sm)] border px-4 py-3 text-sm" :class="result.tone === 'error' ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'">{{ result.text }}</p>
-    <form class="space-y-4 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)" @submit.prevent="confirming = true">
+    <form class="animate-slide-up-delay-1 space-y-4 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-4 shadow-(--shadow-e1)" @submit.prevent="confirming = true">
       <label :class="consoleLabel">Gửi tới
         <select v-model="audience" :class="[consoleField, 'w-full']" data-testid="broadcast-audience">
           <option v-for="a in AUDIENCES" :key="a.value" :value="a.value">{{ a.label }}</option>

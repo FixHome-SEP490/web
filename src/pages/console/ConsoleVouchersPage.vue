@@ -160,7 +160,7 @@ function setCampaignStatus(id: string, active: boolean) {
 
 <template>
   <div lang="vi" class="space-y-6" data-testid="console-vouchers-page">
-    <div class="animate-slide-up">
+    <div>
       <ConsoleVoucherWorkspace
         :key="adminId ?? 'guest'"
         :state="state"

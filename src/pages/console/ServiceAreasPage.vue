@@ -233,7 +233,12 @@ const handleConfirm = async () => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Khu vực phục vụ" :count="loading || loadError ? null : filteredAreas.length">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Khu vực phục vụ"
+      artwork-src="/images/ui/console-service-areas.png"
+      :count="loading || loadError ? null : filteredAreas.length"
+    >
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openAddArea">
           <Plus :size="16" aria-hidden="true" /> Thêm khu vực

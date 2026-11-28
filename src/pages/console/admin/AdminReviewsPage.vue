@@ -86,7 +86,11 @@ onMounted(() => load(1));
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Đánh giá của khách" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Đánh giá của khách"
+      artwork-src="/images/ui/console-reviews-stars.png"
+    />
 
     <form class="animate-slide-up-delay-1 rounded-[var(--radius-md)] border border-ink-200/90 bg-white p-3 shadow-(--shadow-e1) flex flex-wrap items-center gap-2.5" data-testid="reviews-filters" @submit.prevent="load(1)">
       <div class="relative w-full min-w-0 sm:w-72">

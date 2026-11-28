@@ -375,7 +375,12 @@ async function handleCreateTechnician() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Người dùng" :count="loading || loadError ? null : total">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Người dùng"
+      artwork-src="/images/ui/console-users.png"
+      :count="loading || loadError ? null : total"
+    >
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openCreateTechModal">
           <Plus :size="16" aria-hidden="true" /> Tạo tài khoản thợ

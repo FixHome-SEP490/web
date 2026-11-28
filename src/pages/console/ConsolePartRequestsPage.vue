@@ -687,7 +687,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
 <template>
   <div class="space-y-4 sm:space-y-5">
     <!-- Header -->
-    <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+    <header class="animate-slide-up flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
       <div class="flex items-center gap-3.5 min-w-0">
         <ConsoleTitleArtwork src="/images/ui/console-part-requests.png" />
         <div class="min-w-0">
@@ -711,7 +711,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
     </header>
 
     <!-- 6 Interactive Summary Status Cards (Tổng + 5 trạng thái) -->
-    <section class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5" aria-label="Số yêu cầu theo trạng thái" title="Nhấn để lọc theo trạng thái">
+    <section class="animate-slide-up-delay-1 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5" aria-label="Số yêu cầu theo trạng thái" title="Nhấn để lọc theo trạng thái">
       <ConsoleStatCard
         v-for="stat in stats"
         :key="stat.key"
@@ -728,7 +728,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
     </section>
 
     <!-- Search & Dropdown Filter Row -->
-    <div class="rounded-2xl border border-slate-100 bg-white p-2.5 sm:p-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-wrap items-center gap-2.5">
+    <div class="animate-slide-up-delay-2 relative z-20 rounded-2xl border border-slate-100 bg-white p-2.5 sm:p-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex flex-wrap items-center gap-2.5">
       <!-- Search input -->
       <div class="relative flex-1 min-w-[200px] sm:min-w-[260px]">
         <Search :size="16" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -846,7 +846,7 @@ function getIssuedQty(req: PartRequest, item: PartRequestItem) {
     </Transition>
 
     <!-- Main Content: Left List & Right Detail Pane -->
-    <div class="space-y-5">
+    <div class="animate-slide-up-delay-3 relative z-10 space-y-5">
       <ConsoleLoadError v-if="loadError" @retry="loadData" />
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">

@@ -560,7 +560,7 @@ function exportToCsv() {
 <template>
   <div class="space-y-6 pb-12 font-sans">
     <!-- A. Header -->
-    <header class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+    <header class="animate-slide-up flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
       <div class="flex items-center gap-3.5">
         <ConsoleTitleArtwork src="/images/ui/console-orders.png" />
         <div>
@@ -583,7 +583,7 @@ function exportToCsv() {
     </header>
 
     <!-- B. Bốn thẻ thống kê (4 KPI Cards) -->
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê đơn sửa chữa">
+    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê đơn sửa chữa">
       <ConsoleStatCard
         v-for="kpi in kpiCards"
         :key="kpi.key"
@@ -599,7 +599,7 @@ function exportToCsv() {
     </section>
 
     <!-- C. Thanh tìm kiếm và bộ lọc (Search and Filter bar) -->
-    <section class="relative z-20 flex flex-wrap items-center gap-3">
+    <section class="animate-slide-up-delay-2 relative z-20 flex flex-wrap items-center gap-3">
       <!-- 1. Search input -->
       <div class="relative min-w-[260px] flex-1 max-w-sm">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
@@ -752,7 +752,7 @@ function exportToCsv() {
     <!-- D. Bảng danh sách đơn (Table) -->
     <div
       v-else
-      class="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-xs transition-opacity duration-150"
+      class="animate-slide-up-delay-3 relative z-10 overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-xs transition-opacity duration-150"
       :class="{ 'opacity-60': changingPage }"
     >
       <div class="overflow-x-auto">

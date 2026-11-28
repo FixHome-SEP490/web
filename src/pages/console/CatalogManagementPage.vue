@@ -345,7 +345,11 @@ const handleConfirm = async () => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Dịch vụ và bảng giá">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Dịch vụ và bảng giá"
+      artwork-src="/images/ui/console-catalog-services.png"
+    >
       <template #actions>
         <FhButton v-if="activeTab === 'categories'" variant="primary" size="sm" @click="openAddCategory">
           <Plus :size="16" aria-hidden="true" /> Thêm danh mục

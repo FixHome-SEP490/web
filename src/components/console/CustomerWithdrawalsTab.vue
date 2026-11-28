@@ -120,7 +120,7 @@ const contactOf = (row: CustomerStaffWithdrawal) =>
   <div class="space-y-4" data-testid="customer-withdrawals">
     <section
       v-if="overview"
-      class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
       aria-label="Tổng quan chi tiền cho khách hàng"
       data-testid="cw-overview"
     >
@@ -154,14 +154,14 @@ const contactOf = (row: CustomerStaffWithdrawal) =>
         tone="danger"
       />
     </section>
-    <div v-else-if="overviewLoading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden="true">
+    <div v-else-if="overviewLoading" class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden="true">
       <ConsoleStatCard featured loading label="Tổng số yêu cầu" sublabel="Yêu cầu trên hệ thống" :icon="Coins" />
       <ConsoleStatCard loading label="Đã chuyển cho khách hàng" :icon="CheckCircle2" />
       <ConsoleStatCard loading label="Đang chuyển" :icon="Clock" />
       <ConsoleStatCard loading label="Chuyển thất bại" :icon="X" />
     </div>
 
-    <div class="flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
+    <div class="animate-slide-up-delay-2 relative z-20 flex flex-wrap items-center gap-2.5 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:p-4">
       <ConsoleSearch v-model="searchInput" placeholder="Tìm tên, email, số điện thoại" label="Tìm lệnh rút của khách hàng" :maxlength="100" />
       <select v-model="status" :class="consoleField" aria-label="Trạng thái rút tiền của khách hàng" data-testid="cw-status">
         <option value="ALL">Tất cả trạng thái</option>
@@ -178,7 +178,7 @@ const contactOf = (row: CustomerStaffWithdrawal) =>
         :rows="items"
         :loading="loading"
         :row-test-id="(row) => `cw-row-${row.id}`"
-        class="transition-opacity"
+        class="animate-slide-up-delay-3 relative z-10 transition-opacity"
         :class="{ 'opacity-60': changingPage }"
         empty-text="Chưa có lệnh rút tiền nào của khách hàng."
       >

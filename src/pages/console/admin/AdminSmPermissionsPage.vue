@@ -121,7 +121,7 @@ onMounted(load);
 <template>
   <div class="space-y-5">
     <ConsolePageHeader class="animate-slide-up" title="Phân quyền quản lý dịch vụ" :count="loading || error ? null : grantedCount" />
-    <div class="flex flex-wrap items-end gap-3">
+    <div class="animate-slide-up-delay-1 flex flex-wrap items-end gap-3">
       <label class="flex min-w-0 flex-1 flex-col gap-1 text-sm text-ink-700 sm:max-w-md">
         Áp dụng cho
         <select
@@ -153,7 +153,7 @@ onMounted(load);
     <p v-if="message" :role="message.tone === 'error' ? 'alert' : 'status'" class="rounded-[var(--radius-sm)] border px-4 py-3 text-sm" :class="message.tone === 'error' ? 'border-danger-200 bg-danger-50 text-danger-800' : 'border-success-200 bg-success-50 text-success-800'">{{ message.text }}</p>
     <ConsoleLoadError v-if="error" :message="error" @retry="load" />
     <p v-else-if="loading" class="text-sm text-ink-500" role="status">Đang tải…</p>
-    <section v-for="g in groups" v-else :key="g.group" class="rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)">
+    <section v-for="g in groups" v-else :key="g.group" class="animate-slide-up-delay-2 rounded-[var(--radius-md)] border border-ink-200/90 bg-white shadow-(--shadow-e1)">
       <h2 class="border-b border-ink-100 px-4 py-3 text-sm font-semibold text-ink-900">{{ g.group }}</h2>
       <ul class="divide-y divide-ink-100">
         <li v-for="row in g.items" :key="row.code" class="flex items-center justify-between gap-3 px-4 py-3">

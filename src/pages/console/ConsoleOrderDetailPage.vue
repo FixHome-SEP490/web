@@ -407,7 +407,7 @@ function scrollToAudit() {
     <!-- Order Detail View -->
     <template v-else-if="order">
       <!-- Section A: Header đơn hàng -->
-      <header class="space-y-2.5">
+      <header class="animate-slide-up space-y-2.5">
         <!-- Back Link -->
         <button
           type="button"
@@ -503,7 +503,7 @@ function scrollToAudit() {
       </header>
 
       <!-- Section B: Top Row - 3 CARDS IN 3 COLUMNS (Khách hàng, Kỹ thuật viên, Lịch hẹn) -->
-      <section aria-label="Thông tin đối tác và lịch hẹn" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <section aria-label="Thông tin đối tác và lịch hẹn" class="animate-slide-up-delay-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <!-- Card 1: Khách hàng -->
         <div class="rounded-2xl border border-ink-100 bg-white p-5 shadow-xs transition-shadow hover:shadow-sm">
           <div class="flex items-center gap-2 text-ink-900 font-semibold text-sm mb-3.5">

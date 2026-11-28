@@ -336,7 +336,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
 <template>
   <div class="w-full space-y-5 pb-12">
     <!-- Header Section (Matching Demo UI) -->
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="animate-slide-up flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center gap-3.5">
         <ConsoleTitleArtwork src="/images/ui/console-warranty.png" />
         <div>
@@ -370,7 +370,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
     </div>
 
     <!-- 2 Tabs Navigation: Hàng đợi & Tỷ lệ theo kỹ thuật viên -->
-    <div class="border-b border-ink-200/80">
+    <div class="animate-slide-up-delay-1 border-b border-ink-200/80">
       <div class="flex gap-8 overflow-x-auto scrollbar-none" role="tablist" aria-label="Phân loại bảo hành">
         <button
           type="button"
@@ -413,7 +413,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
     <!-- TAB 1: HÀNG ĐỢI -->
     <template v-if="tab === 'queue'">
       <!-- Toolbar: Filters, Search & Refresh Button -->
-      <div class="rounded-2xl border border-ink-100 bg-white p-3.5 shadow-xs space-y-2.5">
+      <div class="animate-slide-up-delay-1 relative z-20 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-xs space-y-2.5">
         <div class="flex flex-wrap items-center gap-3">
           <!-- Filter 1: Status Dropdown -->
           <div class="relative shrink-0 min-w-[170px]">
@@ -483,7 +483,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
       </div>
 
       <!-- Main Table Container -->
-      <div class="rounded-2xl border border-ink-100 bg-white shadow-xs overflow-hidden">
+      <div class="animate-slide-up-delay-2 relative z-10 rounded-2xl border border-ink-100 bg-white shadow-xs overflow-hidden">
         <ConsoleLoadError v-if="error" :message="error" class="p-6" @retry="loadQueue()" />
         <template v-else>
           <div class="overflow-x-auto overscroll-x-contain">
@@ -736,7 +736,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
     <!-- TAB 2: TỶ LỆ THEO KỸ THUẬT VIÊN -->
     <template v-else>
       <!-- 3 Metric Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="animate-slide-up-delay-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <ConsoleStatCard
           featured
           :loading="statsLoading && !stats.length"
@@ -770,7 +770,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
       </div>
 
       <!-- Filter Toolbar -->
-      <div class="rounded-2xl border border-ink-100 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div class="animate-slide-up-delay-2 relative z-20 rounded-2xl border border-ink-100 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-3 flex-1">
           <!-- Window Days Selector -->
           <div class="relative shrink-0 min-w-[130px]">
@@ -912,7 +912,7 @@ useLiveOrderRefresh(['warranty', 'part'], () => { if (tab.value === 'queue') voi
       </div>
 
       <!-- Main Table -->
-      <div class="rounded-2xl border border-ink-100 bg-white shadow-xs overflow-hidden">
+      <div class="animate-slide-up-delay-3 relative z-10 rounded-2xl border border-ink-100 bg-white shadow-xs overflow-hidden">
         <ConsoleLoadError v-if="statsError" :message="statsError" class="p-6" @retry="loadStats()" />
         <template v-else>
           <div class="w-full overflow-x-auto">

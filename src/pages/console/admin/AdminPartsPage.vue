@@ -268,7 +268,12 @@ async function submitForm() {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Danh mục linh kiện" :count="loading || loadError ? null : total">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Danh mục linh kiện"
+      artwork-src="/images/ui/console-parts-catalog.png"
+      :count="loading || loadError ? null : total"
+    >
       <template #actions>
         <FhButton variant="primary" size="sm" @click="openCreate">
           <Plus :size="16" aria-hidden="true" /> Thêm linh kiện

@@ -548,7 +548,7 @@ const confirmReject = async () => {
 <template>
   <div class="space-y-5">
     <!-- Header: Tiêu đề và mô tả nghiệp vụ chuẩn FixHome -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="animate-slide-up flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3.5">
         <ConsoleTitleArtwork src="/images/ui/console-profile-review.png" />
         <div>
@@ -567,7 +567,7 @@ const confirmReject = async () => {
     </div>
 
     <!-- 4 Thẻ thống kê: đồng bộ Console -->
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <ConsoleStatCard
         interactive
         :active="activeCardFilter === 'ALL' && stageFilter === 'ALL' && appointmentFilter === 'ALL'"
@@ -622,7 +622,7 @@ const confirmReject = async () => {
     </div>
 
     <!-- Thanh tìm kiếm và bộ lọc: cùng 1 hàng, cân đối, bố trí hiện đại -->
-    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
+    <div class="animate-slide-up-delay-2 relative z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
       <div class="flex flex-1 flex-wrap items-center gap-2.5">
         <!-- Ô tìm kiếm -->
         <div class="relative min-w-[260px] flex-1 max-w-md">
@@ -704,7 +704,7 @@ const confirmReject = async () => {
     </Transition>
 
     <!-- Danh sách hồ sơ -->
-    <div>
+    <div class="animate-slide-up-delay-3 relative z-10">
       <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
 
       <div v-else class="overflow-hidden rounded-2xl border border-ink-100 bg-white shadow-2xs">

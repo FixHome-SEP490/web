@@ -377,7 +377,7 @@ onMounted(load);
         <span class="font-medium text-ink-700">Chi tiết yêu cầu bảo hành</span>
       </nav>
 
-      <div class="rounded-xl border border-ink-100 bg-white p-5 shadow-xs sm:p-6">
+      <div class="animate-slide-up rounded-xl border border-ink-100 bg-white p-5 shadow-xs sm:p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="flex min-w-0 items-start gap-4">
             <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-100/80 bg-blue-50/60 p-1 shadow-2xs sm:h-14 sm:w-14">
@@ -525,7 +525,7 @@ onMounted(load);
         </div>
       </div>
 
-      <div v-show="activeTab === 'general'" class="space-y-6">
+      <div v-show="activeTab === 'general'" class="animate-slide-up-delay-1 space-y-6">
         <!-- Yêu cầu của khách: so sánh với đề xuất ngay bên cạnh -->
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div class="rounded-xl border border-ink-100 bg-white p-5 shadow-xs sm:p-6">
