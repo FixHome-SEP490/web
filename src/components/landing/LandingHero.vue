@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { CalendarCheck, CalendarDays, Home, ReceiptText, ShieldCheck, Sparkles } from 'lucide-vue-next';
+import { CalendarCheck, CalendarDays, ReceiptText, ShieldCheck, Sparkles } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 
 const router = useRouter();
@@ -41,10 +41,17 @@ const highlights = [
       <div class="hero-copy w-full min-w-0 md:max-w-[400px] lg:max-w-[540px] xl:max-w-[600px]">
         <p class="inline-flex items-center gap-3 text-sm font-medium text-white/95 sm:text-[15px]">
           <span
-            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/35 bg-white/10"
+            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white p-1.5 shadow-sm"
             aria-hidden="true"
           >
-            <Home :size="17" :stroke-width="1.75" class="text-white" />
+            <img
+              :src="'/images/fixhome-logo-mark.webp'"
+              alt=""
+              width="24"
+              height="24"
+              decoding="async"
+              class="h-full w-full object-contain select-none"
+            />
           </span>
           <span>Sửa thiết bị gia dụng tại nhà</span>
         </p>
