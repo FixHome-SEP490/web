@@ -274,7 +274,12 @@ const statusClass = (status: ConfigEffectStatus) => ({
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Cấu hình hệ thống" :count="loading || error ? null : configRows.length">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Cấu hình hệ thống"
+      artwork-src="/images/ui/console-system-config.png"
+      :count="loading || error ? null : configRows.length"
+    >
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem :disabled="loading" @click="loadConfigs">Làm mới</ConsoleMenuItem>

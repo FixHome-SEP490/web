@@ -311,7 +311,7 @@ onMounted(async () => {
 <template>
   <div class="space-y-6">
     <!-- Header Section -->
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div class="animate-slide-up flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3.5">
         <ConsoleTitleArtwork src="/images/ui/console-office-visits.png" />
         <div class="min-w-0">
@@ -324,7 +324,7 @@ onMounted(async () => {
     </div>
 
     <!-- 4 Stat Cards -->
-    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="animate-slide-up-delay-1 grid grid-cols-2 gap-4 lg:grid-cols-4">
       <ConsoleStatCard
         interactive
         :active="statusFilter === ''"
@@ -375,7 +375,7 @@ onMounted(async () => {
     </div>
 
     <!-- Filter & Search Bar -->
-    <div class="rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+    <div class="animate-slide-up-delay-2 relative z-20 rounded-2xl border border-ink-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
         <!-- Trạng thái -->
         <div>
@@ -495,7 +495,7 @@ onMounted(async () => {
     </Transition>
 
     <!-- Table Section -->
-    <div class="animate-slide-up-delay-2">
+    <div class="animate-slide-up-delay-3 relative z-10">
       <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
       <ConsoleTable
         v-else

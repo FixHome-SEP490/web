@@ -87,7 +87,12 @@ async function handleGrantBoost(row: CancellationRow) {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Huỷ đơn" :count="loading || loadError ? null : total" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Huỷ đơn"
+      artwork-src="/images/ui/console-cancellations.png"
+      :count="loading || loadError ? null : total"
+    />
 
     <Transition name="fh-fade-slide">
       <p v-if="boostError" class="rounded-[var(--radius-sm)] border border-danger-200 bg-danger-50 px-4 py-2.5 text-sm text-danger-800" role="alert">{{ boostError }}</p>

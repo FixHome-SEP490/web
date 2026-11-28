@@ -136,7 +136,7 @@ onMounted(() => {
     </nav>
 
     <!-- Page Header -->
-    <header class="flex flex-wrap items-center justify-between gap-4">
+    <header class="animate-slide-up flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold tracking-tight text-ink-900">Chi tiết hoàn trả linh kiện</h1>
         <p class="mt-1 text-sm text-ink-500">Quản lý và đối soát linh kiện theo đơn sửa chữa.</p>
@@ -194,7 +194,7 @@ onMounted(() => {
     <!-- Main Content -->
     <template v-else-if="orderSummary">
       <!-- 3 Top Info Cards -->
-      <section class="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch" aria-label="Thông tin tổng quan đơn">
+      <section class="animate-slide-up-delay-1 grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch" aria-label="Thông tin tổng quan đơn">
         <!-- Card 1: Đơn sửa chữa -->
         <div class="rounded-xl border border-ink-200/90 bg-white p-5 shadow-(--shadow-e1) flex flex-col justify-between">
           <div class="flex items-start gap-3.5">

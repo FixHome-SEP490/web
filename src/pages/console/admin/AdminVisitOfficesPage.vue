@@ -22,6 +22,7 @@ import VisitOfficeDrawer from '../../../components/console/VisitOfficeDrawer.vue
 import FhConfirmDialog from '../../../components/FhConfirmDialog.vue';
 import ConsoleLoadError from '../../../components/console/ConsoleLoadError.vue';
 import ConsoleStatCard from '../../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../../components/console/ConsoleTitleArtwork.vue';
 import { CONSOLE_LOAD_ERROR } from '../../../components/console/console-ui';
 import { userFacingError } from '../../../utils/user-facing-error';
 import {
@@ -284,11 +285,9 @@ watch(successMessage, (msg) => {
 <template>
   <div class="space-y-6">
     <!-- Header section matching Image 3 -->
-    <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-start gap-3.5">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-xs">
-          <Building2 :size="24" :stroke-width="2" />
-        </div>
+    <header class="animate-slide-up flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3.5">
+        <ConsoleTitleArtwork src="/images/ui/console-visit-office.png" />
         <div>
           <div class="flex items-center gap-2.5">
             <h1 class="text-xl font-bold tracking-tight text-ink-900 sm:text-2xl">
@@ -320,7 +319,7 @@ watch(successMessage, (msg) => {
     </header>
 
     <!-- 4 Stats Cards -->
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <ConsoleStatCard
         interactive
         :active="statusFilter === 'all'"
@@ -397,7 +396,7 @@ watch(successMessage, (msg) => {
     </Transition>
 
     <!-- Search & Filter bar matching Image 3 -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div class="animate-slide-up-delay-2 relative z-20 flex flex-col gap-3 sm:flex-row sm:items-center">
       <!-- Search input -->
       <div class="relative flex-1">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -463,7 +462,7 @@ watch(successMessage, (msg) => {
     </div>
 
     <!-- Main List Section -->
-    <div>
+    <div class="animate-slide-up-delay-3 relative z-10">
       <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
 
       <div v-else class="overflow-hidden rounded-2xl border border-ink-200/90 bg-white shadow-xs">

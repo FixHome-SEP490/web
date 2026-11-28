@@ -161,7 +161,7 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
 <template>
   <div class="mx-auto max-w-7xl space-y-6 pb-12 font-sans">
     <!-- Header -->
-    <header class="flex flex-col-reverse justify-between gap-4 sm:flex-row sm:items-center">
+    <header class="animate-slide-up flex flex-col-reverse justify-between gap-4 sm:flex-row sm:items-center">
       <div class="space-y-1">
         <h1 class="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">
           Tổng quan
@@ -216,7 +216,7 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
     <template v-else-if="ops">
       <!-- B. Bốn thẻ thống kê (4 KPI Cards) -->
       <section
-        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="Thống kê tổng quan đơn hàng"
       >
         <ConsoleStatCard
@@ -231,7 +231,7 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
       </section>
 
       <!-- Middle Section: C. Biến động đơn dịch vụ & D. Tình trạng đơn hàng -->
-      <section class="grid grid-cols-1 gap-5 lg:grid-cols-12" aria-label="Biểu đồ phân tích đơn hàng">
+      <section class="animate-slide-up-delay-2 grid grid-cols-1 gap-5 lg:grid-cols-12" aria-label="Biểu đồ phân tích đơn hàng">
         <!-- C. Biểu đồ đường biến động đơn dịch vụ (7 cols) -->
         <AdminOrderTrendChart
           :orders="allOrders"
@@ -249,7 +249,7 @@ function formatAppointmentTime(row: ServiceOrderItem): string {
 
       <!-- E. Bảng đơn hàng gần đây -->
       <section
-        class="overflow-hidden rounded-2xl border border-ink-200/90 bg-white shadow-(--shadow-e1) transition-shadow hover:shadow-(--shadow-e2)"
+        class="animate-slide-up-delay-3 overflow-hidden rounded-2xl border border-ink-200/90 bg-white shadow-(--shadow-e1) transition-shadow hover:shadow-(--shadow-e2)"
         aria-label="Đơn hàng gần đây"
       >
         <!-- Card Header -->

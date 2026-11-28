@@ -129,11 +129,12 @@ watch(
       return;
     }
 
-    const duration = 420;
-    const startTime = performance.now();
+    const duration = 950;
+    let startTime: number | null = null;
     const step = (now: number) => {
+      if (startTime === null) startTime = now;
       const progress = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - (1 - progress) ** 3;
+      const eased = 1 - (1 - progress) ** 2;
       animatedNumber.value = from + (to - from) * eased;
       if (progress < 1) {
         rafId = requestAnimationFrame(step);

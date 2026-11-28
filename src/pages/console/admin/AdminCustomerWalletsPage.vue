@@ -119,7 +119,11 @@ onMounted(() => load(1));
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Ví khách hàng">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Ví khách hàng"
+      artwork-src="/images/ui/console-customer-wallets.png"
+    >
       <template #badges>
         <span class="whitespace-nowrap rounded-full border border-ink-200 bg-white px-3 py-0.5 text-xs font-medium text-ink-600 shadow-2xs" title="Tổng số dư khách đang có trong ví FixHome">
           Đang giữ <strong class="text-ink-900" data-testid="wallets-total"><FhMoney :amount="totalBalance" /></strong>

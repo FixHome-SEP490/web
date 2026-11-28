@@ -461,7 +461,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
 <template>
   <div class="space-y-6">
     <!-- Header banner & icon -->
-    <header class="flex items-center gap-3.5">
+    <header class="animate-slide-up flex items-center gap-3.5">
       <ConsoleTitleArtwork src="/images/ui/console-part-returns.png" />
       <div>
         <h1 class="text-2xl font-bold tracking-tight text-ink-900">Hoàn trả linh kiện</h1>
@@ -490,7 +490,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
     </Transition>
 
     <!-- 4 Interactive Stat Cards (Real system numbers) -->
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê hoàn trả linh kiện">
+    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Thống kê hoàn trả linh kiện">
       <ConsoleStatCard
         interactive
         :active="activeTab === 'all'"
@@ -537,7 +537,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       class="space-y-4"
     >
       <!-- Search, Time Filter & Refresh Bar -->
-      <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
+      <div class="animate-slide-up-delay-2 relative z-20 flex flex-wrap items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-2xs">
         <div class="relative flex-1 min-w-[240px]">
           <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
@@ -580,7 +580,7 @@ defineExpose({ reload: loadReturns, reloadLegacy: loadLegacyReview });
       </div>
 
       <!-- 2 Columns Layout: Orders Table (Left) + Quick View Panel (Right) -->
-      <div v-else class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+      <div v-else class="animate-slide-up-delay-3 relative z-10 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <!-- Left Orders Table (8 Columns) -->
         <div class="xl:col-span-8 rounded-xl border border-ink-200/90 bg-white overflow-hidden shadow-(--shadow-e1)">
           <div class="border-b border-ink-100 bg-ink-50/70 px-5 py-3.5 flex items-center justify-between">

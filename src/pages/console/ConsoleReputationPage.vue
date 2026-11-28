@@ -260,6 +260,7 @@ onMounted(load);
     <ConsolePageHeader
       class="animate-slide-up"
       title="Điểm uy tín"
+      artwork-src="/images/ui/console-reputation-gauge.png"
       :count="loading || loadError ? null : (systemTotal ?? total)"
     >
       <template #meta>

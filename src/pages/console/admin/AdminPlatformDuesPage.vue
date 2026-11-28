@@ -95,7 +95,12 @@ const formatDate = (value: string | null) => {
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Công nợ nền tảng" :count="loading || error ? null : total">
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Công nợ nền tảng"
+      artwork-src="/images/ui/console-platform-dues.png"
+      :count="loading || error ? null : total"
+    >
       <template #actions>
         <ConsoleMoreMenu>
           <ConsoleMenuItem :disabled="loading" @click="loadDues">Làm mới</ConsoleMenuItem>

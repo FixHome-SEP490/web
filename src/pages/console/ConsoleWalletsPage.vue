@@ -24,6 +24,7 @@ import {
 import { FhButton, FhSkeleton } from '../../components';
 import ConsoleLoadError from '../../components/console/ConsoleLoadError.vue';
 import ConsoleStatCard from '../../components/console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../../components/console/ConsoleTitleArtwork.vue';
 import ConsoleMoreMenu from '../../components/console/ConsoleMoreMenu.vue';
 import ConsoleMenuItem from '../../components/console/ConsoleMenuItem.vue';
 import ConsoleTabs from '../../components/console/ConsoleTabs.vue';
@@ -398,9 +399,7 @@ onMounted(() => {
     <!-- Header: Modern, Clean with Wallet Icon and Action Menu -->
     <header class="animate-slide-up flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center gap-3.5">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-100/80 text-brand-600 shadow-2xs">
-          <Wallet :size="24" :stroke-width="2" aria-hidden="true" />
-        </div>
+        <ConsoleTitleArtwork src="/images/ui/console-wallets-payout.png" />
         <div>
           <h1 class="text-2xl font-bold tracking-tight text-ink-900">Chi hộ và rút tiền</h1>
           <p class="text-xs text-ink-500 sm:text-sm">

@@ -270,7 +270,7 @@ function getInitials(name?: string | null): string {
 <template>
   <div class="space-y-4 sm:space-y-5" data-testid="customer-verifications">
     <!-- Filter Bar -->
-    <div class="relative z-20 flex flex-wrap items-center gap-3">
+    <div class="animate-slide-up-delay-2 relative z-20 flex flex-wrap items-center gap-3">
       <!-- 1. Search input -->
       <div class="relative flex-1 min-w-[240px] max-w-md">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" aria-hidden="true" />
@@ -369,7 +369,7 @@ function getInitials(name?: string | null): string {
     <ConsoleLoadError v-if="loadError" :message="loadError" @retry="load" />
 
     <template v-else>
-      <div class="relative z-10 overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-xs transition-opacity" :class="{ 'opacity-60': changingPage }">
+      <div class="animate-slide-up-delay-3 relative z-10 overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-xs transition-opacity" :class="{ 'opacity-60': changingPage }">
         <div class="overflow-x-auto overscroll-x-contain">
           <table class="w-full text-left text-sm border-collapse">
             <thead>

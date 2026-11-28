@@ -60,7 +60,11 @@ onMounted(load);
 
 <template>
   <div class="space-y-5">
-    <ConsolePageHeader class="animate-slide-up" title="Chất lượng trợ lý AI" />
+    <ConsolePageHeader
+      class="animate-slide-up"
+      title="Chất lượng trợ lý AI"
+      artwork-src="/images/ui/console-ai-quality.png"
+    />
 
     <div class="animate-slide-up-delay-1 flex flex-wrap items-center gap-2.5 rounded-[var(--radius-md)] border border-ink-200 bg-white p-3 shadow-(--shadow-e1)">
       <select v-model.number="days" aria-label="Khoảng thời gian" data-testid="ai-quality-period" :class="consoleField" @change="load">

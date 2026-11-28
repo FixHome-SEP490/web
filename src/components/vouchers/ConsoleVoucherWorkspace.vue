@@ -30,6 +30,7 @@ import {
 } from 'lucide-vue-next';
 import FhButton from '../FhButton.vue';
 import ConsoleStatCard from '../console/ConsoleStatCard.vue';
+import ConsoleTitleArtwork from '../console/ConsoleTitleArtwork.vue';
 import VoucherGrantForm from './VoucherGrantForm.vue';
 import VoucherStatePanel from './VoucherStatePanel.vue';
 import VoucherDetailModal from './VoucherDetailModal.vue';
@@ -462,7 +463,7 @@ function tabKey(event: KeyboardEvent) {
 <template>
   <div class="voucher-admin min-w-0 space-y-6" data-testid="console-voucher-workspace">
     <!-- Header: Dynamic based on view mode -->
-    <header class="flex flex-wrap items-start justify-between gap-4">
+    <header class="animate-slide-up flex flex-wrap items-start justify-between gap-4">
       <div class="min-w-0">
         <!-- Back link when in create/edit mode (Image 2) -->
         <button
@@ -475,10 +476,8 @@ function tabKey(event: KeyboardEvent) {
           <span>Quay lại danh sách</span>
         </button>
 
-        <div class="flex items-start gap-3">
-          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
-            <Ticket :size="24" :stroke-width="1.75" aria-hidden="true" />
-          </div>
+        <div class="flex items-center gap-3.5">
+          <ConsoleTitleArtwork src="/images/ui/console-vouchers.png" />
           <div class="min-w-0">
             <h1 class="text-2xl font-bold tracking-tight text-ink-900">
               {{ showCreate ? (editingCampaignId ? 'Chỉnh sửa bản nháp' : 'Tạo chiến dịch ưu đãi') : 'Quản lý ưu đãi' }}
@@ -522,7 +521,7 @@ function tabKey(event: KeyboardEvent) {
     <!-- View Mode 1: LIST / MANAGEMENT VIEW (Image 1) -->
     <template v-if="!showCreate">
       <!-- 4 Overview Statistic Cards (Image 1) -->
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Thống kê tổng quan">
+      <section class="animate-slide-up-delay-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Thống kê tổng quan">
         <ConsoleStatCard
           featured
           :loading="state === 'loading'"
@@ -558,7 +557,7 @@ function tabKey(event: KeyboardEvent) {
       </section>
 
       <!-- Tabs: "Chiến dịch ưu đãi" & "Cấp cá nhân" (Image 1) -->
-      <div role="tablist" aria-label="Quản lý ưu đãi" class="flex gap-2 border-b border-ink-200 pb-2" @keydown="tabKey">
+      <div role="tablist" aria-label="Quản lý ưu đãi" class="animate-slide-up-delay-1 flex gap-2 border-b border-ink-200 pb-2" @keydown="tabKey">
         <button
           v-for="tab in (['campaigns', 'compensation'] as const)"
           :key="tab"
@@ -585,7 +584,7 @@ function tabKey(event: KeyboardEvent) {
         role="tabpanel"
         :aria-labelledby="`admin-voucher-tab-${activeTab}`"
         tabindex="0"
-        class="min-w-0 space-y-4"
+        class="animate-slide-up-delay-2 min-w-0 space-y-4"
       >
         <template v-if="activeTab === 'campaigns'">
           <!-- Search & Filter Bar (Image 1) -->

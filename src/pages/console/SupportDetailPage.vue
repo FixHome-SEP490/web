@@ -560,7 +560,7 @@ watch(caseId, (id) => {
       </nav>
 
       <!-- Section A: Header Card -->
-      <div class="rounded-2xl border border-slate-100 bg-white p-6 shadow-xs">
+      <div class="animate-slide-up rounded-2xl border border-slate-100 bg-white p-6 shadow-xs">
         <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div class="flex min-w-0 flex-1 items-start gap-4">
             <!-- Icon container -->

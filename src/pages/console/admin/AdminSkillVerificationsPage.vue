@@ -309,7 +309,7 @@ const confirmReject = async () => {
 <template>
   <div class="space-y-6">
     <!-- Header section matching Image 2 -->
-    <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <header class="animate-slide-up flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-3.5">
         <ConsoleTitleArtwork src="/images/ui/console-skill-badge.png" />
         <div>
@@ -332,7 +332,7 @@ const confirmReject = async () => {
     </header>
 
     <!-- 4 Stats Cards -->
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section class="animate-slide-up-delay-1 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <ConsoleStatCard
         interactive
         :active="statusFilter === 'ALL'"
@@ -412,7 +412,7 @@ const confirmReject = async () => {
     </Transition>
 
     <!-- Search & Filter bar matching Image 2 -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div class="animate-slide-up-delay-2 relative z-20 flex flex-col gap-3 sm:flex-row sm:items-center">
       <!-- Search input -->
       <div class="relative flex-1">
         <Search :size="16" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
@@ -479,7 +479,7 @@ const confirmReject = async () => {
     </div>
 
     <!-- Main List Section -->
-    <div>
+    <div class="animate-slide-up-delay-3 relative z-10">
       <ConsoleLoadError v-if="loadError" :message="loadError" @retry="loadAll" />
 
       <div v-else class="overflow-hidden rounded-2xl border border-ink-200/90 bg-white shadow-xs">
